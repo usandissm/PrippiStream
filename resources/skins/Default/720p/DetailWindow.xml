@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  StreamingUnity Detail Window  1280x720 v1
+  Opens over home on ENTER; shows fanart/trailer, full scrollable plot, PLAY + MY LIST.
+  IDs: fanart=201  videowindow=202  title=204  meta1=205  meta2=206
+       meta3=207  tagline=208  plot-textbox=209  PLAY=210  LIST=211  CLOSE=212
+-->
+<window type="dialog">
+    <allowmouse>true</allowmouse>
+    <defaultcontrol>210</defaultcontrol>
+    <animation type="WindowOpen" reversible="false">
+        <effect type="fade" start="0" end="100" time="200" tween="sine"/>
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="fade" start="100" end="0" time="140" tween="sine"/>
+    </animation>
+
+    <controls>
+
+        <!-- ── Base black ── -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1280</width><height>720</height>
+            <texture colordiffuse="FF0D0D0D">white.png</texture>
+        </control>
+
+        <!-- ── Video window: shows active player output (trailer) ── -->
+        <control type="videowindow" id="202">
+            <left>0</left><top>0</top>
+            <width>1280</width><height>720</height>
+        </control>
+
+        <!-- ── Fanart (background when no / before trailer) ── -->
+        <control type="image" id="201">
+            <left>0</left><top>0</top>
+            <width>1280</width><height>720</height>
+            <texture>-</texture>
+            <aspectratio>scale</aspectratio>
+        </control>
+
+        <!-- ── Global dim so text/UI are readable over video/fanart ── -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1280</width><height>720</height>
+            <texture colordiffuse="A8000000">white.png</texture>
+        </control>
+
+        <!-- ── Extra darkening on left column (text area) ── -->
+        <control type="image">
+            <left>0</left><top>52</top>
+            <width>720</width><height>668</height>
+            <texture colordiffuse="50000000">white.png</texture>
+        </control>
+
+        <!-- ── Top bar ── -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1280</width><height>52</height>
+            <texture colordiffuse="D0000000">white.png</texture>
+        </control>
+
+        <!-- ── Bottom bar (buttons area) ── -->
+        <control type="image">
+            <left>0</left><top>600</top>
+            <width>1280</width><height>120</height>
+            <texture colordiffuse="D00D0D0D">white.png</texture>
+        </control>
+
+        <!-- Red accent line on top bar -->
+        <control type="image">
+            <left>0</left><top>50</top>
+            <width>1280</width><height>2</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+
+        <!-- Brand -->
+        <control type="label">
+            <left>28</left><top>14</top>
+            <width>300</width><height>24</height>
+            <font>font14</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+        </control>
+
+        <!-- CLOSE button (top right) -->
+        <control type="button" id="212">
+            <left>1160</left><top>12</top>
+            <width>100</width><height>28</height>
+            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+            <label>[B]CHIUDI[/B]</label>
+            <font>font10</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <ondown>210</ondown>
+            <onleft>210</onleft>
+            <animation effect="zoom" start="100" end="110" center="auto" time="120" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="110" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+        <!-- ── Title ── -->
+        <control type="label" id="204">
+            <left>32</left><top>64</top>
+            <width>920</width><height>52</height>
+            <font>font14</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>left</align>
+            <aligny>center</aligny>
+        </control>
+
+        <!-- ── Meta 1: year · type · lang · rating ── -->
+        <control type="label" id="205">
+            <left>32</left><top>120</top>
+            <width>920</width><height>24</height>
+            <font>font12</font>
+            <textcolor>FF22C55E</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>left</align>
+        </control>
+
+        <!-- ── Meta 2: genre · runtime · country ── -->
+        <control type="label" id="206">
+            <left>32</left><top>148</top>
+            <width>1216</width><height>20</height>
+            <font>font12</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>left</align>
+        </control>
+
+        <!-- ── Meta 3: director · cast ── -->
+        <control type="label" id="207">
+            <left>32</left><top>172</top>
+            <width>1216</width><height>20</height>
+            <font>font12</font>
+            <textcolor>FF888888</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>left</align>
+        </control>
+
+        <!-- ── Tagline ── -->
+        <control type="label" id="208">
+            <left>32</left><top>196</top>
+            <width>920</width><height>22</height>
+            <font>font12</font>
+            <textcolor>FFE2E2E2</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>left</align>
+        </control>
+
+        <!-- Divider above plot -->
+        <control type="image">
+            <left>32</left><top>222</top>
+            <width>1216</width><height>1</height>
+            <texture colordiffuse="30FFFFFF">white.png</texture>
+        </control>
+
+        <!-- ── Plot textbox (scrollable with UP/DOWN when focused) ── -->
+        <control type="textbox" id="209">
+            <left>32</left><top>226</top>
+            <width>1216</width><height>368</height>
+            <font>font12</font>
+            <textcolor>FFCCCCCC</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <scroll>true</scroll>
+            <autoscroll>false</autoscroll>
+            <onleft>210</onleft>
+            <onright>211</onright>
+            <ondown>210</ondown>
+        </control>
+
+        <!-- ── PLAY button ── -->
+        <control type="button" id="210">
+            <left>32</left><top>612</top>
+            <width>160</width><height>46</height>
+            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="50E50914">white.png</texturenofocus>
+            <label>[B]PLAY[/B]</label>
+            <font>font12</font>
+            <textcolor>FFDDDDDD</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onup>209</onup>
+            <onleft>212</onleft>
+            <onright>211</onright>
+            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+        <!-- ── MY LIST button ── -->
+        <control type="button" id="211">
+            <left>210</left><top>612</top>
+            <width>160</width><height>46</height>
+            <texturefocus colordiffuse="C0FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+            <label>[B]+ MY LIST[/B]</label>
+            <font>font12</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <focusedcolor>FF0D0D0D</focusedcolor>
+            <align>center</align>
+            <onup>209</onup>
+            <onleft>210</onleft>
+            <onright>212</onright>
+            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+    </controls>
+</window>
