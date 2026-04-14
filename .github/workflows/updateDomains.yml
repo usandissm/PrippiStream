@@ -1,0 +1,36 @@
+name: Update channel domains
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 17 * * *'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Update domains
+        run: python tools/updateDomains.py
+
+      - name: Rigenerai zip e addons.xml
+        run: |
+          python tools/make_addon_zip.py
+          python tools/make_addons_xml.py
+
+      - name: Commit & Push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add channels.json docs/
+          git diff --staged --quiet || git commit -m "Aggiornamento automatico domini"
+          git push
