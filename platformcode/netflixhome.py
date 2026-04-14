@@ -1166,8 +1166,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
             year   = str(it_obj.infoLabels.get('year') or '')
 
             def _make_url(video_id):
-                return ('plugin://plugin.video.youtube/play/?video_id=%s'
-                        '&subtitle=it&language=it,en' % video_id)
+                return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
             vid = _youtube_search_trailer(title, year)
             with lock:
@@ -1581,8 +1580,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         """On-demand trailer search for items not pre-fetched. Runs in background thread."""
         try:
             def _make_url(video_id):
-                return ('plugin://plugin.video.youtube/play/?video_id=%s'
-                        '&subtitle=it&language=it,en' % video_id)
+                return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
             vid = _youtube_search_trailer(title, year)
             if vid:
