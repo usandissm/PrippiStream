@@ -5,6 +5,7 @@
       <info compressed="false">https://usandissm.github.io/PrippiStream/addons.xml</info>
       <checksum>https://usandissm.github.io/PrippiStream/addons.xml.md5</checksum>
       <datadir zip="true">https://usandissm.github.io/PrippiStream/</datadir>
+      <minversion>0.0.0</minversion>
     </dir>
   </extension>
   <extension point="xbmc.addon.metadata">
