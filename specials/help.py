@@ -3,7 +3,7 @@ from channelselector import get_thumb
 from core.item import Item
 from platformcode import config, logger
 
-guideUrl = "https://github.com/stream4me/addon/wiki/Guida-alle-funzioni-di-S4Me"
+guideUrl = "https://github.com/usandissm/PrippiStream"
 
 def mainlist(item):
     logger.debug()

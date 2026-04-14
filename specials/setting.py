@@ -834,7 +834,7 @@ def report_menu(item):
                     title=config.get_localized_string(60308),
                     thumbnail=thumb_next, folder=False))
         itemlist.append(Item(channel=item.channel, action="call_browser",
-                             title="su Github (raccomandato)", url='https://github.com/stream4me/addon/issues',
+                             title="su Github (raccomandato)", url='https://github.com/usandissm/PrippiStream/issues',
                              thumbnail=thumb_next,
                              folder=False))
 

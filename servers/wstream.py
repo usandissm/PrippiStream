@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Stream4Me
+# PrippiStream
 # by DrZ3r0 - Fix Alhaziel
 
 import json

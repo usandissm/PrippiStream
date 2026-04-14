@@ -264,7 +264,7 @@ def registerOrLogin():
                 platformtools.dialog_ok('AltadefinizioneCommunity', 'Impossibile registrarsi automaticamente')
                 return False
         else:
-            platformtools.dialog_ok('AltadefinizioneCommunity', 'Hai modificato la mail quindi S4Me non sarà in grado di effettuare la verifica in autonomia, apri la casella ' + reg['email']
+            platformtools.dialog_ok('AltadefinizioneCommunity', 'Hai modificato la mail quindi PrippiStream non sarà in grado di effettuare la verifica in autonomia, apri la casella ' + reg['email']
                                     + ' e clicca sul link. Premi ok quando fatto')
         logger.debug('Registrazione completata')
     else:

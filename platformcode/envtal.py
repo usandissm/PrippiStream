@@ -342,7 +342,7 @@ def list_env(environment={}):
         environment = get_environment()
 
     logger.info(sep)
-    logger.info('S4Me environment variables: ' + environment['addon_version'] + ' Debug: ' + environment['debug'])
+    logger.info('PrippiStream environment variables: ' + environment['addon_version'] + ' Debug: ' + environment['debug'])
     logger.info(sep)
 
     logger.info(environment['os_name'] + ' ' + environment['prod_model'] + ' ' +
@@ -493,7 +493,7 @@ def paint_env(item, environment={}):
     Links with the utility that allows the [COLOR yellow] to send the Kodi Log [/ COLOR] through a Pastebin service
     """
 
-    itemlist.append(Item(channel=item.channel, title="S4Me environment variables: %s Debug: %s" % (environment['addon_version'], environment['debug']),
+    itemlist.append(Item(channel=item.channel, title="PrippiStream environment variables: %s Debug: %s" % (environment['addon_version'], environment['debug']),
                          action="", plot=cabecera, thumbnail=thumb, folder=False))
 
     itemlist.append(Item(channel=item.channel, title=environment['os_name'] + ' ' + environment['prod_model'] + ' ' + environment['os_release'] + ' ' + environment['machine'] + ' ' + environment['architecture'] + ' ' + environment['language'],

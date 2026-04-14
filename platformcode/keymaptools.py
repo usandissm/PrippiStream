@@ -75,7 +75,7 @@ def set_key():
         from core import filetools
         from platformcode import platformtools
         import xbmc
-        file_xml = "special://profile/keymaps/s4me.xml"
+        file_xml = "special://profile/keymaps/prippistream.xml"
         data = '<keymap><global><keyboard><key id="%s">' % new_key + 'runplugin(plugin://plugin.video.prippistream/?ew0KICAgICJhY3Rpb24iOiAia2V5bWFwIiwNCiAgICAib3BlbiI6IHRydWUNCn0=)</key></keyboard></global></keymap>'
         filetools.write(xbmc.translatePath(file_xml), data)
         # platformtools.dialog_notification(config.get_localized_string(70700),config.get_localized_string(70702),4)
@@ -90,7 +90,7 @@ def delete_key():
     from platformcode import platformtools
     import xbmc
 
-    filetools.remove(xbmc.translatePath( "special://profile/keymaps/s4me.xml"))
+    filetools.remove(xbmc.translatePath( "special://profile/keymaps/prippistream.xml"))
     # platformtools.dialog_notification(config.get_localized_string(70701),config.get_localized_string(70702),4)
 
     config.set_setting("shortcut_key", '')

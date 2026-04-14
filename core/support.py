@@ -514,7 +514,7 @@ def html_uniform(data):
 
 
 def scrape(func):
-    """https://github.com/stream4me/addon/wiki/decoratori#scrape"""
+    """https://github.com/usandissm/PrippiStream/wiki/decoratori#scrape"""
 
     def wrapper(*args):
         itemlist = []
@@ -812,7 +812,7 @@ def menuItem(itemlist, filename, title='', action='', url='', contentType='undef
 
 
 def menu(func):
-    """https://github.com/stream4me/addon/wiki/decoratori#menu"""
+    """https://github.com/usandissm/PrippiStream/wiki/decoratori#menu"""
 
     def wrapper(*args):
         args = func(*args)

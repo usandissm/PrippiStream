@@ -1,10 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
 # use export PYTHONPATH=addon source code
 # and inside .kodi to run tests locally
-# you can pass specific channel name using S4ME_TST_CH environment var
+# you can pass specific channel name using PRIPPISTREAM_TST_CH environment var
 
 # export PYTHONPATH=/home/user/.kodi/addons/plugin.video.prippistream
-# export S4ME_TST_CH=channel
+# export PRIPPISTREAM_TST_CH=channel
 # python tests/test_generic.py
 import html
 import os
@@ -15,7 +15,7 @@ import unittest
 import datetime
 import xbmc
 
-if 'S4ME_TST_CH' not in os.environ:
+if 'PRIPPISTREAM_TST_CH' not in os.environ:
     from sakee import addoninfo
     # custom paths
     def add_on_info(*args, **kwargs):
@@ -152,7 +152,7 @@ def wait():
 
 servers = []
 channels = []
-channel_list = channelselector.filterchannels("all") if 'S4ME_TST_CH' not in os.environ else [Item(channel=os.environ['S4ME_TST_CH'], action="mainlist")]
+channel_list = channelselector.filterchannels("all") if 'PRIPPISTREAM_TST_CH' not in os.environ else [Item(channel=os.environ['PRIPPISTREAM_TST_CH'], action="mainlist")]
 logger.DEBUG_ENABLED = True
 logger.info([c.channel for c in channel_list])
 results = []
@@ -395,6 +395,6 @@ class GenericServerTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(testRunner=HtmlTestRunner.HTMLTestRunner(report_name='report', add_timestamp=False, combine_reports=True,
-                 report_title='S4Me Test Suite', template=os.path.join(config.get_runtime_path(), 'tests', 'template.html')), exit=False)
+                 report_title='PrippiStream Test Suite', template=os.path.join(config.get_runtime_path(), 'tests', 'template.html')), exit=False)
     import webbrowser
     webbrowser.open(os.path.join(outDir, 'report.html'))

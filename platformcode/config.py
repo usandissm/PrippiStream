@@ -7,7 +7,7 @@ import sys, os, xbmc, xbmcaddon
 PY3 = False
 if sys.version_info[0] >= 3: PY3 = True; unicode = str; unichr = chr; long = int
 
-PLUGIN_NAME = "s4me"
+PLUGIN_NAME = "prippistream"
 
 __settings__ = xbmcaddon.Addon(id="plugin.video." + PLUGIN_NAME)
 __language__ = __settings__.getLocalizedString

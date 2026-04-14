@@ -16,7 +16,7 @@ def getmainlist(view="thumb_"):
         from core.filetools import isdir
         kodpath = os.path.abspath(os.path.join(config.get_data_path(), "../plugin.video.kod"))
         if isdir(kodpath):
-            itemlist.append(Item(title="Migrazione KoD -> S4Me", action="migrate"))
+            itemlist.append(Item(title="Migrazione KoD -> PrippiStream", action="migrate"))
     except:
         pass
 

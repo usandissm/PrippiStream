@@ -17,7 +17,7 @@
 # I commenti sono più un promemoria... che una vera e propria spiegazione!
 # Niente di più.
 # Ulteriori informazioni sono reperibili nel wiki:
-# https://github.com/stream4me/addon/wiki/decoratori
+# https://github.com/usandissm/PrippiStream/wiki/decoratori
  
 """
     Questi sono commenti per i beta-tester.

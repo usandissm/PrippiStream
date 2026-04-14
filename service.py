@@ -104,7 +104,7 @@ def update(path, p_dialog, i, t, serie, overwrite):
 
         else:
             logger.debug("Channel %s not active is not updated" % serie.channel)
-    # Synchronize the episodes seen from the Kodi video library with that of S4Me
+    # Synchronize the episodes seen from the Kodi video library with that of PrippiStream
     try:
         if config.is_xbmc():                # If it's Kodi, we do it
             from platformcode import xbmc_videolibrary
@@ -465,7 +465,7 @@ class AddonMonitor(xbmc.Monitor):
 
 
 if __name__ == "__main__":
-    logger.info('Starting S4Me service')
+    logger.info('Starting PrippiStream service')
 
     # Test if all the required directories are created
     config.verify_directories_created()
@@ -474,7 +474,7 @@ if __name__ == "__main__":
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
     # port old db to new
-    old_db_name = filetools.join(config.get_data_path(), "s4me_db.sqlite")
+    old_db_name = filetools.join(config.get_data_path(), "prippistream_db.sqlite")
     if filetools.isfile(old_db_name):
         try:
             import sqlite3
@@ -557,11 +557,11 @@ if __name__ == "__main__":
             break
 
         if monitor.waitForAbort(1): # every second
-            logger.debug('S4Me service EXIT')
+            logger.debug('PrippiStream service EXIT')
             # db need to be closed when not used, it will cause freezes
             join_threads()
             logger.debug('Close Threads')
             db.close()
             logger.debug('Close DB')
             break
-    logger.debug('S4Me service STOPPED')
+    logger.debug('PrippiStream service STOPPED')

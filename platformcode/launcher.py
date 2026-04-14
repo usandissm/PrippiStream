@@ -162,14 +162,14 @@ def run(item=None):
             import os
 
             sel = platformtools.dialog_select("Sono stati rilevati dati di KoD, che vuoi fare?", [
-                "Migra (sovrascriverà impostazioni e videoteca di S4Me",
+                "Migra (sovrascriverà impostazioni e videoteca di PrippiStream",
                 "Elimina (rimuove le ultime tracce di KoD, inizierai da capo)"
             ])
             kodpath = os.path.abspath(os.path.join(config.get_data_path(), "../plugin.video.kod"))
             s4mepath = os.path.abspath(os.path.join(config.get_data_path(), "../plugin.video.prippistream"))
 
             if sel == 0:
-                progress = platformtools.dialog_progress('Migrazione KoD -> S4Me','')
+                progress = platformtools.dialog_progress('Migrazione KoD -> PrippiStream','')
                 # chiudo db.sqlite
                 from core import db
                 db.close()

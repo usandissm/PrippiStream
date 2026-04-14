@@ -1087,7 +1087,7 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         # we get the selected video
         mediaurl, view, mpd, hls = get_video_seleccionado(item, seleccion, video_urls, autoplay)
         if not mediaurl: return
-        # to better disguise S4Me as a browser
+        # to better disguise PrippiStream as a browser
         headers = httptools.default_headers
         headers['Referer'] = item.referer if item.server == 'directo' else item.url
         # Kodi does not seems to allow this, leaving there as may work in the future

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------
-# S4Me favorites
+# PrippiStream favorites
 # ==============
 # - List of links saved as favorites, only in Alpha, not Kodi.
 # - Links are organized in (virtual) folders that can be defined by the user.
@@ -71,7 +71,7 @@ def text_clean(txt, disallowed_chars = '[^a-zA-Z0-9\-_()\[\]. ]+', blank_char = 
 
 
 
-# Class to load and save in the S4Me Favorites file
+# Class to load and save in the PrippiStream Favorites file
 class KodfavouritesData(object):
 
     def __init__(self, filename = None):
@@ -120,7 +120,7 @@ class KodfavouritesData(object):
         jsondata['user_favorites'] = self.user_favorites
         jsondata['info_lista'] = self.info_lista
         if not filetools.write(self.user_favorites_file, jsontools.dump(jsondata)):
-            platformtools.dialog_ok('S4Me', config.get_localized_string(70614) + '\n' + os.path.basename(self.user_favorites_file))
+            platformtools.dialog_ok('PrippiStream', config.get_localized_string(70614) + '\n' + os.path.basename(self.user_favorites_file))
 
 
 # ============================
@@ -442,7 +442,7 @@ def editar_enlace_thumbnail(item):
     # except:
     #     pass
 
-    resource_path = 'https://api.github.com/repos/Stream4me/media/git/trees/b36040432b9be120f04e986277fd34f09dcdb4db'
+    resource_path = 'https://api.github.com/repos/usandissm/PrippiStream/git/trees/HEAD'
     for f in sorted(requests.get(resource_path).json().get('tree', []), key=lambda p: p.get('path')):
         nombre = f['path'].replace('thumb_', '').replace('.png', '')
         it_thumb = xbmcgui.ListItem(nombre)
@@ -497,7 +497,7 @@ def editar_enlace_lista(item):
             opciones.append(it.lista)
 
     if len(opciones) == 0:
-        platformtools.dialog_ok('S4Me', 'There are no other lists where to move the link.\nYou can create them from the Manage link lists menu')
+        platformtools.dialog_ok('PrippiStream', 'There are no other lists where to move the link.\nYou can create them from the Manage link lists menu')
         return False
 
     ret = platformtools.dialog_select('Select destination list', opciones)
@@ -639,7 +639,7 @@ def activar_lista(item):
 
     fullfilename = os.path.join(config.get_data_path(), item.lista)
     if not os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70630) + '\n' + item.lista)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70630) + '\n' + item.lista)
         return False
 
     config.set_setting('lista_activa', item.lista)
@@ -657,7 +657,7 @@ def renombrar_lista(item):
 
     fullfilename_current = os.path.join(config.get_data_path(), item.lista)
     if not os.path.exists(fullfilename_current):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70630) + '\n' + fullfilename_current)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70630) + '\n' + fullfilename_current)
         return False
 
     nombre = get_name_from_filename(item.lista)
@@ -671,12 +671,12 @@ def renombrar_lista(item):
 
     # Check that the new name does not exist
     if os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70613) + '\n' + fullfilename)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70613) + '\n' + fullfilename)
         return False
 
     # Rename the file
     if not filetools.rename(fullfilename_current, filename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70631) + '\n' + fullfilename)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70631) + '\n' + fullfilename)
         return False
 
     # Update settings if it is the active list
@@ -693,11 +693,11 @@ def eliminar_lista(item):
 
     fullfilename = os.path.join(config.get_data_path(), item.lista)
     if not os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70630) + '\n' + item.lista)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70630) + '\n' + item.lista)
         return False
 
     if item.lista == get_lista_activa():
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70632) + '\n' + item.lista)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70632) + '\n' + item.lista)
         return False
 
     if not platformtools.dialog_yesno(config.get_localized_string(70606), config.get_localized_string(70633) + ' %s ?' % item.lista): return False
@@ -712,7 +712,7 @@ def informacion_lista(item):
 
     fullfilename = os.path.join(config.get_data_path(), item.lista)
     if not os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70630) + '\n' + item.lista)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70630) + '\n' + item.lista)
         return False
 
     alfav = KodfavouritesData(item.lista)
@@ -739,7 +739,7 @@ def compartir_lista(item):
 
     fullfilename = os.path.join(config.get_data_path(), item.lista)
     if not os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70630) + '\n' + fullfilename)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70630) + '\n' + fullfilename)
         return False
 
     try:
@@ -767,13 +767,13 @@ def compartir_lista(item):
 
         if not 'File was uploaded successfuly' in data:
             logger.debug(data)
-            platformtools.dialog_ok('S4Me', config.get_localized_string(70647))
+            platformtools.dialog_ok('PrippiStream', config.get_localized_string(70647))
             return False
 
         codigo = scrapertools.find_single_match(data, 'href="index\.php\?file_id=([^"]+)')
 
     except:
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70647) + '\n' + item.lista)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70647) + '\n' + item.lista)
         return False
 
     # Point code in log file and inside the list
@@ -784,7 +784,7 @@ def compartir_lista(item):
     alfav.info_lista['tinyupload_code'] = codigo
     alfav.save()
 
-    platformtools.dialog_ok('S4Me', config.get_localized_string(70650) + '\n' + codigo)
+    platformtools.dialog_ok('PrippiStream', config.get_localized_string(70650) + '\n' + codigo)
     return True
 
 
@@ -836,7 +836,7 @@ def crear_lista(item):
 
     # Check that the file does not already exist
     if os.path.exists(fullfilename):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70613) + '\n' + fullfilename)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70613) + '\n' + fullfilename)
         return False
 
     # Cause it to be saved with empty folders by default
@@ -858,7 +858,7 @@ def descargar_lista(item, url):
             down_url, url_name = scrapertools.find_single_match(data, ' href="(download\.php[^"]*)"><b>([^<]*)')
             url_json = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + down_url
         except:
-            platformtools.dialog_ok('S4Me', config.get_localized_string(70655) + '\n' + url)
+            platformtools.dialog_ok('PrippiStream', config.get_localized_string(70655) + '\n' + url)
             return False
 
     elif 'zippyshare.com/' in url:
@@ -866,7 +866,7 @@ def descargar_lista(item, url):
         video_urls, puedes, motivo = servertools.resolve_video_urls_for_playing('zippyshare', url)
 
         if not puedes:
-            platformtools.dialog_ok('S4Me', config.get_localized_string(70655) + '\n' + motivo)
+            platformtools.dialog_ok('PrippiStream', config.get_localized_string(70655) + '\n' + motivo)
             return False
         url_json = video_urls[0][1] # https://www58.zippyshare.com/d/qPzzQ0UM/25460/addonfavorites-testeanding.json
         url_name = url_json[url_json.rfind('/')+1:]
@@ -887,7 +887,7 @@ def descargar_lista(item, url):
     jsondata = jsontools.load(data)
     if 'user_favorites' not in jsondata or 'info_lista' not in jsondata:
         logger.debug(data)
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70656))
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70656))
         return False
 
     jsondata['info_lista']['downloaded_date'] = fechahora_actual()
@@ -906,12 +906,12 @@ def descargar_lista(item, url):
 
     # If the new name already exists ask for confirmation to overwrite
     if os.path.exists(fullfilename):
-        if not platformtools.dialog_yesno('S4Me', config.get_localized_string(70613), config.get_localized_string(70658), filename):
+        if not platformtools.dialog_yesno('PrippiStream', config.get_localized_string(70613), config.get_localized_string(70658), filename):
             return False
 
     if not filetools.write(fullfilename, data):
-        platformtools.dialog_ok('S4Me', config.get_localized_string(70659) + '\n' + filename)
+        platformtools.dialog_ok('PrippiStream', config.get_localized_string(70659) + '\n' + filename)
 
-    platformtools.dialog_ok('S4Me', config.get_localized_string(70660) + '\n' + filename)
+    platformtools.dialog_ok('PrippiStream', config.get_localized_string(70660) + '\n' + filename)
     platformtools.itemlist_refresh()
     return True

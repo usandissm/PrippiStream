@@ -35,7 +35,7 @@ def check_condition():
             item_is_coming_from_addon = pattern.search(filePath)
 
     if item_is_coming_from_addon:
-        logger.debug("item IS already managed by S4Me")
+        logger.debug("item IS already managed by PrippiStream")
 
     return mediatype
 
@@ -51,7 +51,7 @@ def get_menu_items():
 def execute():
     """
     Gather the selected ListItem's attributes in order to compute the `Item` parameters
-    and perform the S4Me's globalsearch.
+    and perform the PrippiStream's globalsearch.
     Globalsearch will be executed specifing the content-type of the selected ListItem
 
     NOTE: this method needs the DBTYPE and TMDB_ID specified as ListItem's properties
@@ -61,7 +61,7 @@ def execute():
     # In future, they could be used to filter the search outcome
 
     # ADDON: maybe can we know if the current windows is related to a specific addon?
-    # we could skip the ContextMenu if we already are in S4Me's window
+    # we could skip the ContextMenu if we already are in PrippiStream's window
 
     tmdbid = xbmc.getInfoLabel('ListItem.Property(tmdb_id)')
     mediatype = xbmc.getInfoLabel('ListItem.DBTYPE')

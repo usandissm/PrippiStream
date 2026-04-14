@@ -28,7 +28,7 @@ def export_videolibrary(item):
     zip_file_folder = platformtools.dialog_browse(3, config.get_localized_string(80002))
     if zip_file_folder == "":
         return
-    zip_file = unicode(xbmc.translatePath(zip_file_folder + "S4Me_video_library-" + str(datetime.date.today()) + ".zip"))
+    zip_file = unicode(xbmc.translatePath(zip_file_folder + "PrippiStream_video_library-" + str(datetime.date.today()) + ".zip"))
 
     p_dialog = platformtools.dialog_progress_bg(config.get_localized_string(20000), config.get_localized_string(80003))
     # p_dialog.update(0)
