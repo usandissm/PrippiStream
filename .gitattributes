@@ -1,0 +1,3 @@
+docs/addons.xml -text
+docs/addons.xml.md5 -text
+docs/**/*.zip binary
