@@ -979,7 +979,7 @@ def _get_data(url):
             logger.error('[NetflixHome] no data-page in html (len=%d) for %s' % (len(raw_html), url))
             return {}
 
-        logger.error('[NetflixHome] json_str len=%d for %s' % (len(json_str), url))
+        logger.info('[NetflixHome] json_str len=%d for %s' % (len(json_str), url))
         decoded   = _html.unescape(json_str)
         cleaned   = _strip_html_fields(decoded)
         try:
@@ -989,7 +989,7 @@ def _get_data(url):
             return {}
 
         if isinstance(result, dict) and result:
-            logger.error('[NetflixHome] OK for %s sliders=%d' % (
+            logger.info('[NetflixHome] OK for %s sliders=%d' % (
                 url, len(result.get('props', {}).get('sliders', []))))
             return result
     except Exception as exc:
@@ -1155,7 +1155,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
     if not seen:
         return
 
-    logger.error('[NetflixHome trailers] fetching %d new ids (3 workers)' % len(seen))
+    logger.info('[NetflixHome trailers] fetching %d new ids (3 workers)' % len(seen))
     results = {}   # tmdb_id -> url str
     lock    = threading.Lock()
 
@@ -1184,7 +1184,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
         _trailer_cache[tid] = val
 
     found = sum(1 for v in results.values() if v)
-    logger.error('[NetflixHome trailers] done: %d/%d got trailer (cache size: %d)'
+    logger.info('[NetflixHome trailers] done: %d/%d got trailer (cache size: %d)'
                  % (found, len(seen), len(_trailer_cache)))
 
     for _, items in rows_snapshot:
@@ -1255,7 +1255,7 @@ def _fetch_enrich_items(ctype):
             if valid:
                 with lock:
                     all_items.extend(valid)
-            logger.error('[NetflixHome enrich] %s/%s: %d items fetched'
+            logger.info('[NetflixHome enrich] %s/%s: %d items fetched'
                          % (channel_name, categoria, len(valid)))
         except Exception as exc:
             logger.error('[NetflixHome enrich] %s/%s failed: %s'
@@ -1277,7 +1277,7 @@ def _fetch_enrich_items(ctype):
         except Exception as exc:
             logger.error('[NetflixHome enrich] tmdb: %s' % str(exc))
     _enrich_cache[ctype] = {'items': all_items, 'ts': now}
-    logger.error('[NetflixHome enrich] %s pool ready: %d raw items' % (ctype, len(all_items)))
+    logger.info('[NetflixHome enrich] %s pool ready: %d raw items' % (ctype, len(all_items)))
     return all_items
 
 
@@ -1285,14 +1285,14 @@ def _fetch_rows():
     from time import time
     global _cache
     if _cache['data'] is not None and (time() - _cache['ts']) < _CACHE_TTL:
-        logger.error('[NetflixHome] cache hit, %d rows' % len(_cache['data']))
+        logger.info('[NetflixHome] cache hit, %d rows' % len(_cache['data']))
         return _cache['data']
 
     rows = []
     try:
         import channels.streamingcommunity as sc
         host = sc.host
-        logger.error('[NetflixHome] host=%s' % host)
+        logger.info('[NetflixHome] host=%s' % host)
 
         # Fetch ALL sliders from main pages (different suffixes avoid dedup collision).
         pages = [
