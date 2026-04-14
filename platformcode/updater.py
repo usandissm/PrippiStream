@@ -50,6 +50,9 @@ def loadCommits(page=1):
 
 # ret -> aggiornato, necessita reload service
 def check(background=False):
+    # Gli aggiornamenti vengono gestiti dal repository Kodi (GitHub Pages).
+    # L'updater interno è permanentemente disabilitato per evitare conflitti.
+    return False, False
     if not config.get_setting('addon_update_enabled'):
         return False, False
     logger.info('Cerco aggiornamenti..')
