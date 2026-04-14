@@ -5,7 +5,7 @@
         <setting label="70786" type="lsep"/>
         <setting id="autostart" type="bool" label="70706" default="false"/>
         <setting label="70579" type="lsep"/>
-        <setting id="addon_update_enabled" type="bool" label="70581" default="true"/>
+        <setting id="addon_update_enabled" type="bool" label="70581" default="false"/>
         <setting id="addon_update_message" type="bool" label="70582" visible="eq(-1,true)" default="true"/>
         <setting id="addon_update_timer" type="slider" option="int" range="1,1,24" label="707416" visible="eq(-2,true)" default="1"/>
         <setting label="70787" type="lsep"/>
