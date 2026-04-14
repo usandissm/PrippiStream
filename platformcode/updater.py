@@ -228,7 +228,7 @@ def updateFromZip(message=config.get_localized_string(80050)):
     remotefilename = 'https://github.com/' + user + "/" + repo + "/archive/" + branch + ".zip"
     localfilename = filetools.join(xbmc.translatePath("special://home/addons/"), "plugin.video.prippistream.update.zip")
     destpathname = xbmc.translatePath("special://home/addons/")
-    extractedDir = filetools.join(destpathname, "addon-" + branch)
+    extractedDir = filetools.join(destpathname, repo + "-" + branch)
 
     logger.info("remotefilename=%s" % remotefilename)
     logger.info("localfilename=%s" % localfilename)
