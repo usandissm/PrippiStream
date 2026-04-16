@@ -76,6 +76,23 @@
             <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
+        <!-- Search button (id=109) — opens NetflixSearch overlay -->
+        <control type="button" id="109">
+            <left>348</left><top>18</top>
+            <width>360</width><height>42</height>
+            <texturefocus colordiffuse="38FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
+            <label>[COLOR FF888888]Ricerca...</label>
+            <font>font12</font>
+            <textcolor>FF888888</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>left</align>
+            <aligny>center</aligny>
+            <textoffsetx>15</textoffsetx>
+            <onright>108</onright>
+            <ondown>2000</ondown>
+        </control>
+
         <!-- Close button -->
         <control type="button" id="108">
             <left>1785</left><top>18</top>
