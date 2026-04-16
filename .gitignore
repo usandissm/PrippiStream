@@ -11,3 +11,11 @@ bin/
 lib/abi
 tests/home/
 reports/
+# one-shot dev/debug scripts
+_fix_wraplist_bars.py
+_patch_upnext.py
+tools/inspect_kodi_db.py
+tools/inspect_kodi_db2.py
+# build artifacts / distribution ZIPs (generated on demand, not tracked)
+build/
+*.zip

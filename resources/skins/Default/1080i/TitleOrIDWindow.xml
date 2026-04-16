@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<window>
+    <allowoverlays>false</allowoverlays>
+    <animation type="WindowOpen" reversible="false">
+        <effect type="fade" start="0" end="100" time="300" />
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="fade" start="100" end="0" time="300" />
+    </animation>
+    <controls>
+        <control type="button" id="104">
+            <description>CLOSE</description>
+            <top>0</top>
+            <left>0</left>
+            <height>100%</height>
+            <width>100%</width>
+            <texturefocus colordiffuse="80232323">white.png</texturefocus>
+            <texturenofocus colordiffuse="80232323">white.png</texturenofocus>
+        </control>
+        <control type="textbox" id="100">
+            <description>Not Found</description>
+            <top>225</top>
+            <left>60</left>
+            <height>60</height>
+            <width>1800</width>
+            <font>font13</font>
+            <textcolor>CCFFFFFF</textcolor>
+            <aligny>center</aligny>
+            <align>center</align>
+            <label/>
+        </control>
+        <control type="group">
+            <top>390</top>
+            <left>600</left>
+            <height>300</height>
+            <width>720</width>
+            <control type="image">
+                <description>Background</description>
+                <height>100%</height>
+                <width>100%</width>
+                <texture colordiffuse="FF232323">white.png</texture>
+            </control>
+            <control type="textbox">
+                <description>Modify</description>
+                <top>30</top>
+                <left>60</left>
+                <height>60</height>
+                <width>150</width>
+                <font>font13</font>
+                <textcolor>FFFFFFFF</textcolor>
+                <label>$ADDON[plugin.video.prippistream 70714]</label>
+                <aligny>center</aligny>
+                <align>left</align>
+                <label/>
+            </control>
+            <control type="image">
+                <description>Separator</description>
+                <top>120</top>
+                <left>0</left>
+                <height>2</height>
+                <width>720</width>
+                <texture colordiffuse="FFFFFFFF">white.png</texture>
+            </control>
+            <control type="button" id="103">
+                <description>CLOSE</description>
+                <top>30</top>
+                <right>30</right>
+                <height>60</height>
+                <width>60</width>
+                <texturefocus colordiffuse="FFFFFFFF">close.png</texturefocus>
+                <texturenofocus colordiffuse="88FFFFFF">close.png</texturenofocus>
+                <ondown>101</ondown>
+            </control>
+            <control type="grouplist">
+                <top>180</top>
+                <left>60</left>
+                <height>60</height>
+                <width>600</width>
+                <orientation>horizontal</orientation>
+                <itemgap>60</itemgap>
+                <onup>103</onup>
+                <control type="button" id="101">
+                    <description>Title</description>
+                    <height>60</height>
+                    <width>270</width>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <aligny>center</aligny>
+                    <align>center</align>
+                    <texturefocus border="10" colordiffuse="22FFFFFF">white.png</texturefocus>
+                    <texturenofocus border="10"></texturenofocus>
+                </control>
+                <control type="button" id="102">
+                    <description>ID</description>
+                    <height>60</height>
+                    <width>270</width>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <aligny>center</aligny>
+                    <align>center</align>
+                    <texturefocus border="10" colordiffuse="22FFFFFF">white.png</texturefocus>
+                    <texturenofocus border="10"></texturenofocus>
+                </control>
+            </control>
+        </control>
+    </controls>
+</window>

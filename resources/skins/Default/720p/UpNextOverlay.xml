@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Up Next Overlay  --  1280x720
+  Shows on top of the fullscreen video player (top-right corner card).
+  IDs: 9901=Guarda subito  9902=Annulla  9903=Episode label  9904=Timer text  9905=Progress bar
+-->
+<window>
+    <allowmouse>true</allowmouse>
+    <defaultcontrol>9901</defaultcontrol>
+    <onload>Dialog.Close(fullscreeninfo,true)</onload>
+    <onload>Dialog.Close(videoosd,true)</onload>
+    <animation type="WindowOpen" reversible="false">
+        <effect type="fade"  start="0"   end="100" time="350" tween="sine"/>
+        <effect type="slide" start="70,0" end="0,0" time="350" tween="sine"/>
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="fade"  start="100" end="0"   time="220" tween="sine"/>
+        <effect type="slide" start="0,0" end="70,0" time="220" tween="sine"/>
+    </animation>
+
+    <controls>
+
+        <!-- Card drop shadow -->
+        <control type="image">
+            <left>852</left><top>8</top>
+            <width>420</width><height>174</height>
+            <texture colordiffuse="99000000">white.png</texture>
+        </control>
+
+        <!-- Card background -->
+        <control type="image">
+            <left>856</left><top>10</top>
+            <width>412</width><height>170</height>
+            <texture colordiffuse="F0111111">white.png</texture>
+        </control>
+
+        <!-- Red left accent bar -->
+        <control type="image">
+            <left>856</left><top>10</top>
+            <width>4</width><height>170</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+
+        <!-- Header: "PROSSIMA PUNTATA" -->
+        <control type="label">
+            <left>870</left><top>18</top>
+            <width>386</width><height>18</height>
+            <font>font10</font>
+            <textcolor>FF9A9A9A</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label>[B]&#x23ED;  PROSSIMA PUNTATA[/B]</label>
+        </control>
+
+        <!-- Episode title (id=9903, set from Python) -->
+        <control type="label" id="9903">
+            <left>870</left><top>40</top>
+            <width>386</width><height>36</height>
+            <font>font12</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label></label>
+        </control>
+
+        <!-- Countdown text (id=9904, updated from Python) -->
+        <control type="label" id="9904">
+            <left>870</left><top>80</top>
+            <width>386</width><height>18</height>
+            <font>font10</font>
+            <textcolor>FF7A7A7A</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label></label>
+        </control>
+
+        <!-- Progress bar (id=9905, setPercent from Python) -->
+        <control type="progress" id="9905">
+            <left>870</left><top>102</top>
+            <width>386</width><height>3</height>
+            <texturebg   colordiffuse="33FFFFFF">white.png</texturebg>
+            <texturemid  colordiffuse="FFE50914">white.png</texturemid>
+            <textureend  colordiffuse="00000000">white.png</textureend>
+            <textureoverlay>-</textureoverlay>
+        </control>
+
+        <!-- "Guarda subito" button (id=9901) -->
+        <control type="button" id="9901">
+            <left>870</left><top>114</top>
+            <width>188</width><height>38</height>
+            <texturefocus   colordiffuse="FFE50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="25FFFFFF">white.png</texturenofocus>
+            <label>[B]&#x25B6;  Guarda subito[/B]</label>
+            <font>font10</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <aligny>center</aligny>
+            <onright>9902</onright>
+            <onleft>9902</onleft>
+            <onup>9901</onup>
+            <ondown>9901</ondown>
+            <animation effect="zoom" start="100" end="106" center="auto" time="100" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="106" end="100" center="auto" time="80"  tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+        <!-- "Annulla" button (id=9902) -->
+        <control type="button" id="9902">
+            <left>1066</left><top>114</top>
+            <width>188</width><height>38</height>
+            <texturefocus   colordiffuse="44FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="00000000">white.png</texturenofocus>
+            <label>Annulla</label>
+            <font>font10</font>
+            <textcolor>FF8A8A8A</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <aligny>center</aligny>
+            <onleft>9901</onleft>
+            <onright>9901</onright>
+            <onup>9902</onup>
+            <ondown>9902</ondown>
+        </control>
+
+    </controls>
+</window>

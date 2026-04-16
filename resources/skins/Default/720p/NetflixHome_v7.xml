@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   StreamingUnity Home 1280x720 v7
   TV-first adaptation of streamingunity.biz for Kodi.
@@ -73,7 +73,7 @@
             <font>font14</font>
             <textcolor>FFFFFFFF</textcolor>
             <shadowcolor>FF000000</shadowcolor>
-            <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
         <!-- Close button -->
@@ -212,7 +212,7 @@
                 <font>font14</font>
                 <textcolor>FFFFFFFF</textcolor>
                 <align>center</align>
-                <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
             </control>
             <control type="label">
                 <left>426</left><top>338</top>

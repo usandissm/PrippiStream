@@ -80,7 +80,7 @@
             <font>font14</font>
             <textcolor>FFFFFFFF</textcolor>
             <shadowcolor>FF000000</shadowcolor>
-            <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
         <!-- CLOSE button (top right) -->
@@ -195,20 +195,39 @@
             <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
         </control>
 
-        <!-- ── MY LIST button ── -->
+        <!-- ── AUDIO / SUB button (replaces MY LIST) ── -->
         <control type="button" id="211">
             <left>210</left><top>612</top>
-            <width>160</width><height>46</height>
+            <width>190</width><height>46</height>
             <texturefocus colordiffuse="C0FFFFFF">white.png</texturefocus>
             <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B]+ MY LIST[/B]</label>
+            <label>[B]AUDIO / SUB[/B]</label>
             <font>font12</font>
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FF0D0D0D</focusedcolor>
             <align>center</align>
             <onup>209</onup>
             <onleft>210</onleft>
+            <onright>213</onright>
+            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+        <!-- ── REMOVE FROM CW button (visible only for CW items, property set by Python) ── -->
+        <control type="button" id="213">
+            <left>418</left><top>612</top>
+            <width>200</width><height>46</height>
+            <texturefocus colordiffuse="C0FF3333">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FF3333">white.png</texturenofocus>
+            <label>[B]TOGLI DAI RECENTI[/B]</label>
+            <font>font12</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onup>209</onup>
+            <onleft>211</onleft>
             <onright>212</onright>
+            <visible>!String.IsEmpty(Window.Property(show_remove_cw))</visible>
             <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
             <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
         </control>

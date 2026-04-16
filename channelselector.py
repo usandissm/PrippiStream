@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 
 import glob, os
 
@@ -22,7 +22,7 @@ def getmainlist(view="thumb_"):
 
     # Netflix-style StreamingCommunity home
     itemlist.append(Item(
-        title='[B]▶ StreamingCommunity — Vista Netflix[/B]',
+        title='[B]▶ PrippiStream — Vista Netflix[/B]',
         channel='channelselector',
         action='open_netflix_home',
         thumbnail=get_thumb("streamingcommunity.png", view),

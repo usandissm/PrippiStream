@@ -15,14 +15,14 @@
 
     <controls>
 
-        <!-- ── Base background ── -->
+        <!-- __ Base background __ -->
         <control type="image">
             <left>0</left><top>0</top>
             <width>1280</width><height>720</height>
             <texture colordiffuse="FF0D0D0D">white.png</texture>
         </control>
 
-        <!-- ── Hero fanart ── -->
+        <!-- __ Hero fanart __ -->
         <control type="image" id="100">
             <left>0</left><top>0</top>
             <width>1280</width><height>279</height>
@@ -53,7 +53,7 @@
             <texture colordiffuse="FF0D0D0D">white.png</texture>
         </control>
 
-        <!-- ── Top bar ── -->
+        <!-- __ Top bar __ -->
         <control type="image">
             <left>0</left><top>0</top>
             <width>1280</width><height>50</height>
@@ -67,7 +67,7 @@
             <font>font14</font>
             <textcolor>FFFFFFFF</textcolor>
             <shadowcolor>FF000000</shadowcolor>
-            <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
         <!-- EXIT button -->
@@ -85,7 +85,7 @@
             <animation effect="zoom" start="110" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
         </control>
 
-        <!-- ── Hero content ── -->
+        <!-- __ Hero content __ -->
 
         <!-- Row category label (updated by netflixhome.py when focus changes) -->
         <control type="label" id="102">
@@ -109,7 +109,7 @@
             <align>left</align>
         </control>
 
-        <!-- Meta (year ● lang) -->
+        <!-- Meta (year ? lang) -->
         <control type="label" id="104">
             <left>32</left><top>128</top>
             <width>680</width><height>18</height>
@@ -132,14 +132,14 @@
             <align>left</align>
         </control>
 
-        <!-- ── Hero/rows divider ── -->
+        <!-- __ Hero/rows divider __ -->
         <control type="image">
             <left>0</left><top>279</top>
             <width>1280</width><height>3</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
 
-        <!-- ── Loading overlay (id=200, hidden after load) ── -->
+        <!-- __ Loading overlay (id=200, hidden after load) __ -->
         <control type="group" id="200">
             <left>0</left><top>0</top>
             <width>1280</width><height>720</height>
@@ -164,7 +164,7 @@
                 <font>font14</font>
                 <textcolor>FFFFFFFF</textcolor>
                 <align>center</align>
-                <label>[B]STREAMING[COLOR FFE50914]UNITY[/COLOR][/B]</label>
+                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
             </control>
             <control type="label">
                 <left>440</left><top>328</top>
@@ -188,7 +188,7 @@
             </control>
         </control>
 
-        <!-- ── Rows grouplist (vertical scroll) ── -->
+        <!-- __ Rows grouplist (vertical scroll) __ -->
         <control type="grouplist" id="9000">
             <left>0</left><top>282</top>
             <width>1280</width><height>438</height>
@@ -196,7 +196,7 @@
             <defaultcontrol>2000</defaultcontrol>
             <scrolltime tween="cubic" easing="out">220</scrolltime>
 
-            <!-- ─────────────────────── ROW 00 ─────────────────────── -->
+            <!-- _______________________ ROW 00 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -209,11 +209,9 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2000">
+                <control type="list" id="2000">
                     <left>0</left><top>28</top>
-                    <width>1280</width><height>300</height>
-                    <viewtype>wrap</viewtype>
-                    <orientation>horizontal</orientation>
+                    <width>1280</width><height>300</height><orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
                 <itemlayout height="300" width="185">
                     <control type="image">
@@ -236,54 +234,82 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
-                    <control type="image">
+                    <!-- Entire focused content hidden for empty slots (no thumbnail) -->
+                    <control type="group">
                         <left>0</left><top>0</top>
                         <width>185</width><height>300</height>
-                        <texture colordiffuse="66000000">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <!-- dark bg behind label so text is always readable -->
-                    <control type="image">
-                        <left>1</left><top>226</top>
-                        <width>183</width><height>71</height>
-                        <texture colordiffuse="D8101010">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>3</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>3</left><top>2</top>
-                        <width>179</width><height>220</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
-                    </control>
-                    <control type="label">
-                        <left>3</left><top>229</top>
-                        <width>179</width><height>70</height>
-                        <font>font12</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <shadowcolor>FF000000</shadowcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <aligny>top</aligny>
+                        <visible>!String.IsEmpty(ListItem.Property(thumbnail))</visible>
+                        <control type="image">
+                            <left>0</left><top>0</top>
+                            <width>185</width><height>300</height>
+                            <texture colordiffuse="66000000">white.png</texture>
+                            <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                            <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                        </control>
+                        <control type="image">
+                            <left>1</left><top>0</top>
+                            <width>183</width><height>226</height>
+                            <texture colordiffuse="F0FFFFFF">white.png</texture>
+                            <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                            <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        </control>
+                        <!-- dark bg behind label so text is always readable -->
+                        <control type="image">
+                            <left>1</left><top>226</top>
+                            <width>183</width><height>71</height>
+                            <texture colordiffuse="D8101010">white.png</texture>
+                            <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                            <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                        </control>
+                        <control type="image">
+                            <left>1</left><top>0</top>
+                            <width>183</width><height>3</height>
+                            <texture colordiffuse="FFE50914">white.png</texture>
+                            <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                            <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        </control>
+                        <control type="image">
+                            <left>3</left><top>2</top>
+                            <width>179</width><height>220</height>
+                            <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                            <aspectratio>stretch</aspectratio>
+                            <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                            <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        </control>
+                        <control type="label">
+                            <left>3</left><top>229</top>
+                            <width>179</width><height>70</height>
+                            <font>font12</font>
+                            <textcolor>FFFFFFFF</textcolor>
+                            <shadowcolor>FF000000</shadowcolor>
+                            <label>$INFO[ListItem.Label]</label>
+                            <align>center</align>
+                            <aligny>top</aligny>
+                        </control>
+                        <!-- CW progress bar focused – image-based 10-step -->
+                        <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                        <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                     </control>
                 </focusedlayout>
                 </control>
@@ -350,7 +376,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 01 ─────────────────────── -->
+            <!-- _______________________ ROW 01 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -390,6 +416,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -439,6 +476,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4010">
@@ -504,7 +552,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 02 ─────────────────────── -->
+            <!-- _______________________ ROW 02 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -544,6 +592,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -593,6 +652,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4020">
@@ -658,7 +728,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 03 ─────────────────────── -->
+            <!-- _______________________ ROW 03 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -698,6 +768,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -747,6 +828,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4030">
@@ -812,7 +904,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 04 ─────────────────────── -->
+            <!-- _______________________ ROW 04 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -852,6 +944,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -901,6 +1004,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4040">
@@ -966,7 +1080,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 05 ─────────────────────── -->
+            <!-- _______________________ ROW 05 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1006,6 +1120,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1055,6 +1180,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4050">
@@ -1120,7 +1256,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 06 ─────────────────────── -->
+            <!-- _______________________ ROW 06 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1160,6 +1296,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1209,6 +1356,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4060">
@@ -1274,7 +1432,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 07 ─────────────────────── -->
+            <!-- _______________________ ROW 07 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1314,6 +1472,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1363,6 +1532,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4070">
@@ -1428,7 +1608,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 08 ─────────────────────── -->
+            <!-- _______________________ ROW 08 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1468,6 +1648,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1517,6 +1708,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4080">
@@ -1582,7 +1784,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 09 ─────────────────────── -->
+            <!-- _______________________ ROW 09 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1622,6 +1824,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1671,6 +1884,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4090">
@@ -1736,7 +1960,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 10 ─────────────────────── -->
+            <!-- _______________________ ROW 10 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1776,6 +2000,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1825,6 +2060,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4100">
@@ -1890,7 +2136,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 11 ─────────────────────── -->
+            <!-- _______________________ ROW 11 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -1930,6 +2176,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -1979,6 +2236,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4110">
@@ -2044,7 +2312,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 12 ─────────────────────── -->
+            <!-- _______________________ ROW 12 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2084,6 +2352,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2133,6 +2412,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4120">
@@ -2198,7 +2488,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 13 ─────────────────────── -->
+            <!-- _______________________ ROW 13 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2238,6 +2528,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2287,6 +2588,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4130">
@@ -2352,7 +2664,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 14 ─────────────────────── -->
+            <!-- _______________________ ROW 14 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2392,6 +2704,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2441,6 +2764,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4140">
@@ -2506,7 +2840,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 15 ─────────────────────── -->
+            <!-- _______________________ ROW 15 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2546,6 +2880,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2595,6 +2940,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4150">
@@ -2660,7 +3016,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 16 ─────────────────────── -->
+            <!-- _______________________ ROW 16 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2700,6 +3056,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2749,6 +3116,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4160">
@@ -2814,7 +3192,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 17 ─────────────────────── -->
+            <!-- _______________________ ROW 17 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -2854,6 +3232,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -2903,6 +3292,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4170">
@@ -2968,7 +3368,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 18 ─────────────────────── -->
+            <!-- _______________________ ROW 18 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -3008,6 +3408,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -3057,6 +3468,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4180">
@@ -3122,7 +3544,7 @@
                     <label></label>
                 </control>
             </control>
-            <!-- ─────────────────────── ROW 19 ─────────────────────── -->
+            <!-- _______________________ ROW 19 _______________________ -->
             <control type="group">
                 <left>0</left><top>0</top>
                 <width>1280</width><height>348</height>
@@ -3162,6 +3584,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar – image-based 10-step (10% each, max = poster width) -->
+                    <control type="image"><left>5</left><top>219</top><width>175</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>35</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>53</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>70</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>88</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>105</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>123</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>140</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>5</left><top>219</top><width>158</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </itemlayout>
                 <focusedlayout height="300" width="185">
                     <control type="image">
@@ -3211,6 +3644,17 @@
                         <align>center</align>
                         <aligny>top</aligny>
                     </control>
+                    <!-- CW progress bar focused – image-based 10-step -->
+                    <control type="image"><left>3</left><top>219</top><width>179</width><height>5</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>18</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>36</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>54</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>72</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>90</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>107</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>125</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>143</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>3</left><top>219</top><width>161</width><height>5</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
                 </focusedlayout>
                 </control>
                 <control type="button" id="4190">

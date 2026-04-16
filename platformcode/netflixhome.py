@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # ------------------------------------------------------------
 # Netflix-style Home Window for StreamingCommunity + multi-source
 # v4 — lazy-load extra rows from other VOD channels.
@@ -12,7 +12,7 @@ import xbmcaddon
 import xbmcgui
 
 from core.item import Item
-from platformcode import config, logger
+from platformcode import config, logger, watch_history
 
 PY3 = sys.version_info[0] >= 3
 
@@ -73,6 +73,16 @@ _enrich_cache = {}
 # Never expires — trailer links are stable YouTube IDs.
 _trailer_cache = {}
 
+# SC rows cache: populated on first home load, reused on subsequent opens without refetch.
+_sc_rows_cache = None
+
+# Label for the Continue Watching row (must match what _refresh_cw_row checks).
+_CW_ROW_LABEL = u'\u25b6  Continua a guardare'
+
+# CW lookup tables — populated by _build_cw_items(), used by _apply_cw_to_item().
+_cw_lookup_by_tmdb  = {}   # tmdb_id (str) -> CW Item
+_cw_lookup_by_title = {}   # normalized show name -> CW Item
+
 BG_FANART          = 100
 HERO_CATEG         = 102
 HERO_TITLE         = 103
@@ -96,6 +106,7 @@ ROW_STEP           = 10
 SC_MAX_ROWS        = 20
 MAX_ROWS           = 50
 ARROW_PAGE_SIZE    = 1
+UPNEXT_COUNTDOWN   = 60   # seconds before episode end: show Up Next overlay
 
 # ── Detail window control IDs ──────────────────────────────────
 DW_BG_FANART   = 201
@@ -106,9 +117,11 @@ DW_META2       = 206
 DW_META3       = 207
 DW_TAGLINE     = 208
 DW_PLOT        = 209
-DW_BTN_PLAY    = 210
-DW_BTN_LIST    = 211
-DW_BTN_CLOSE   = 212
+DW_BTN_PLAY      = 210
+DW_BTN_AUDIO_SUB = 211   # formerly LIST — now opens audio/subtitle picker
+DW_BTN_CLOSE     = 212
+DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
+DW_BTN_LIST      = 211   # alias kept for any remaining references
 
 ACTION_EXIT         = 10
 ACTION_BACK         = 92
@@ -119,6 +132,75 @@ ACTION_DOWN         = 4
 ACTION_WHEEL_UP     = 104
 ACTION_WHEEL_DOWN   = 105
 ACTION_MOUSE_MOVE   = 107
+
+
+# ── Continue Watching helpers ────────────────────────────────
+
+def _cw_key(item):
+    """Return a stable string key that uniquely identifies this content in the CW db.
+    TV series (contentType=='episode') share a single series-level key so that all
+    episodes of the same show are tracked under one CW entry.
+    """
+    tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+    ct   = getattr(item, 'contentType', '') or ''
+    if ct == 'episode':
+        base = tmdb or re.sub(r'[^a-z0-9]', '',
+                               (item.show or item.contentSerieName or '').lower())
+        return 'tv_%s' % base
+    else:
+        base = tmdb or re.sub(r'[^a-z0-9]', '',
+                               (item.fulltitle or item.show or '').lower())
+        return 'movie_%s' % base
+
+
+def _build_cw_items():
+    """Build Items from the Continue Watching DB.
+    Entries >= 97% watched are treated as completed and auto-removed.
+    Also rebuilds the module-level CW lookup tables used by _apply_cw_to_item().
+    """
+    global _cw_lookup_by_tmdb, _cw_lookup_by_title
+    _cw_lookup_by_tmdb  = {}
+    _cw_lookup_by_title = {}
+
+    entries = watch_history.get_all()
+    if not entries:
+        return []
+    items = []
+    completed_keys = []
+    for e in entries:
+        try:
+            cw_time  = float(e.get('time_watched', 0))
+            cw_total = float(e.get('total_time', 0))
+            if cw_total > 0 and (cw_time / cw_total) >= 0.97:
+                completed_keys.append(e['key'])
+                logger.info('[CW] auto-removing completed: %s' % e.get('title', e['key']))
+                continue
+            it = Item().fromurl(e['item_url'])
+            it.cw_time_watched = cw_time
+            it.cw_total_time   = cw_total
+            it._cw_show_url    = e.get('show_url', '') or ''
+            items.append(it)
+        except Exception as exc:
+            logger.error('[CW] build item: %s' % str(exc))
+    for key in completed_keys:
+        try:
+            watch_history.remove(key)
+        except Exception as exc:
+            logger.error('[CW] remove completed: %s' % str(exc))
+
+    # Build lookup tables for cross-row sync
+    for it in items:
+        tmdb = str(it.infoLabels.get('tmdb_id') or '').strip()
+        if tmdb and tmdb not in _cw_lookup_by_tmdb:
+            _cw_lookup_by_tmdb[tmdb] = it
+        show_name = (getattr(it, 'show', '') or
+                     getattr(it, 'contentSerieName', '') or
+                     getattr(it, 'fulltitle', '') or '')
+        norm = _normalize_title(show_name)
+        if norm and norm not in _cw_lookup_by_title:
+            _cw_lookup_by_title[norm] = it
+
+    return items
 
 
 class NetflixHomeWindow(xbmcgui.WindowXML):
@@ -137,6 +219,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # Cleared while a modal dialog is open — background thread must NOT modify the UI
         self._bg_ui_pause = threading.Event()
         self._bg_ui_pause.set()   # initially NOT paused
+        # Set by background threads to request a CW row refresh on the GUI thread.
+        # Checked (and drained) in onFocus, which always runs on the GUI thread.
+        self._cw_refresh_pending = False
 
     def onInit(self):
         try:
@@ -150,15 +235,35 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         t.start()
 
     def _bg_load(self):
-        """Run in background thread: fetch SC rows, then update UI."""
+        """Run in background thread: fetch SC rows, prepend CW row, then update UI."""
+        global _sc_rows_cache
         try:
-            self.rows_data = _fetch_rows()
+            sc_rows = _fetch_rows()
+            _sc_rows_cache = sc_rows  # keep a copy for fast refresh
         except Exception as exc:
             logger.error('[NetflixHome] fetch error: %s' % str(exc))
-            self.rows_data = []
+            sc_rows = _sc_rows_cache or []
 
         if not self._alive:
             return
+
+        # CW row is ALWAYS rows_data[0] (even when empty) so that SC rows i>=1
+        # always map to the same control IDs (2010, 2020, ...) regardless of CW state.
+        cw_items = _build_cw_items()
+        self.rows_data = [(_CW_ROW_LABEL, cw_items)] + list(sc_rows)
+
+        # Fire-and-forget: nuke stale vixcloud bookmarks from prior sessions
+        # so Kodi never shows a "Resume from" dialog for our managed content.
+        _t_nuke = threading.Thread(target=_nuke_all_vixcloud_bookmarks)
+        _t_nuke.daemon = True
+        _t_nuke.start()
+
+        # Sync CW progress to matching items in all SC rows
+        if cw_items:
+            for row_label, row_items in self.rows_data:
+                if row_label != _CW_ROW_LABEL:
+                    for it in row_items:
+                        _apply_cw_to_item(it)
 
         try:
             self.getControl(LOADING_LBL).setVisible(False)
@@ -166,14 +271,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             pass
 
         self._num_rows = min(len(self.rows_data), MAX_ROWS)
-        logger.debug('[NetflixHome] rows loaded: %d' % self._num_rows)
+        logger.debug('[NetflixHome] rows loaded: %d (CW: %d)' % (self._num_rows, len(cw_items)))
 
         if self._num_rows > 0 and self._alive:
             xbmc.sleep(80)
             for i in range(min(4, self._num_rows)):
                 self._populate_single_row(i)
-            self._update_hero(0)
-            self.setFocusId(ROW_WRAPLIST_BASE)
+            first_row_fid = ROW_WRAPLIST_BASE if cw_items else ROW_WRAPLIST_BASE + ROW_STEP
+            self._update_hero(0 if cw_items else 1)
+            self.setFocusId(first_row_fid)
 
         # Kick off background enrichment of SC rows with extra-source items (non-blocking)
         if self._alive:
@@ -247,6 +353,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 if not new_items:
                     continue
 
+                # Apply CW data to enrichment items before adding to rows
+                for it in new_items:
+                    _apply_cw_to_item(it)
+
                 with self._rows_lock:
                     if not self._alive:
                         return
@@ -292,15 +402,27 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
         lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
         cat_name, items = self.rows_data[i]
+        # Row 0 is always the CW row (control 2000). Hide it when empty.
+        if i == 0 and not items:
+            try:
+                self.getControl(wl_id).setVisible(False)
+                self.getControl(lbl_id).setVisible(False)
+            except Exception:
+                pass
+            self._populated.add(i)
+            return
         try:
             wl = self.getControl(wl_id)
             wl.reset()
+            wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
             self._populated.add(i)
         except Exception as exc:
             logger.error('[NetflixHome] populate row %d wraplist: %s' % (i, str(exc)))
         try:
-            self.getControl(lbl_id).setLabel('[B]%s[/B]' % cat_name.upper())
+            lbl = self.getControl(lbl_id)
+            lbl.setVisible(True)
+            lbl.setLabel('[B]%s[/B]' % cat_name.upper())
         except Exception as exc:
             logger.error('[NetflixHome] populate row %d label: %s' % (i, str(exc)))
 
@@ -312,7 +434,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             return
         if pos is None:
             try:
-                pos = self.getControl(ROW_WRAPLIST_BASE + row_idx * ROW_STEP).getSelectedPosition()
+                pos = int(self.getControl(ROW_WRAPLIST_BASE + row_idx * ROW_STEP).getSelectedPosition() or 0)
                 if pos < 0 or pos >= len(items):
                     pos = 0
             except Exception:
@@ -370,7 +492,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             pass
 
     def onFocus(self, control_id):
-        """Fires when a control gains focus."""
+        """Fires when a control gains focus — always on the Kodi GUI thread."""
+        # Drain any pending CW refresh requested by a background thread.
+        # Must run here (GUI thread) because wl.reset()/addItems() require it.
+        if self._cw_refresh_pending:
+            self._cw_refresh_pending = False
+            self._refresh_cw_row()
+
         i = self._row_from_fid(control_id)
         if i >= 0:
             # Keyboard navigation to a different row: hide old hover frame
@@ -383,7 +511,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # Snapshot wraplist position when mouse enters this row overlay
             if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
                 try:
-                    sel = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition()
+                    sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                     self._hover_base[i] = max(0, sel)
                 except Exception:
                     self._hover_base[i] = 0
@@ -412,6 +540,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # Mouse wheel → navigate between rows
         if aid == ACTION_WHEEL_UP:
             new_row = max(0, self._last_focused_row - 1)
+            # Skip row 0 (CW) if it is empty
+            if new_row == 0 and self.rows_data and not self.rows_data[0][1]:
+                new_row = 0 if self._last_focused_row == 0 else self._last_focused_row
             self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
             self._last_focused_row = new_row
             self._update_hero(new_row)
@@ -430,6 +561,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if i >= 0:
                 if i > 0:
                     new_row = i - 1
+                    # Skip row 0 (CW) if it is empty
+                    cw_empty = self.rows_data and not self.rows_data[0][1]
+                    if new_row == 0 and cw_empty:
+                        self.setFocusId(CLOSE_BTN)
+                        return
                     for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
                         self._populate_single_row(j)
                     self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
@@ -479,9 +615,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                             n_items = len(self.rows_data[i][1]) if i < len(self.rows_data) else 0
                             if n_items > 0:
                                 base    = self._hover_base.get(i, 0)
-                                new_idx = (base + slot) % n_items
-                                cur_sel = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition()
-                                self._hover_item[i] = new_idx
+                                raw_idx = base + slot
+                                if raw_idx >= n_items:
+                                    # Ghost slot — hide hover box and do nothing else
+                                    self._hide_hover_box(i)
+                                    self._hover_box_row = -1
+                                    self._hover_item[i] = -1
+                                    return
+                                else:
+                                    new_idx = raw_idx % n_items
+                                    self._hover_item[i] = new_idx
+                                cur_sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                                 # Move hover-frame to the correct card slot (y=42 = label_h)
                                 if self._hover_box_row >= 0 and self._hover_box_row != i:
                                     self._hide_hover_box(self._hover_box_row)
@@ -526,12 +670,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         pos = self._hover_item.get(i)
         if pos is None:
             try:
-                pos = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition()
+                pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                 if pos < 0 or pos >= len(items):
                     pos = 0
             except Exception:
                 pos = 0
-        elif pos >= len(items):
+        elif pos < 0 or pos >= len(items):
             pos = 0
         return items[pos]
 
@@ -547,7 +691,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 try:
                     item_idx = self._hover_item.get(i)
                     if item_idx is None:
-                        item_idx = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition()
+                        item_idx = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                     items = self.rows_data[i][1]
                     if 0 <= item_idx < len(items):
                         self._open_detail(items[item_idx])
@@ -563,7 +707,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
                 try:
                     wl      = self.getControl(wl_id)
-                    pos     = wl.getSelectedPosition()
+                    pos     = int(wl.getSelectedPosition() or 0)
                     n_items = len(self.rows_data[i][1]) if i < len(self.rows_data) else 0
                     if n_items > 0:
                         if control_id == la_id:
@@ -580,7 +724,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
             if control_id == wl_id:
                 try:
-                    pos = self.getControl(wl_id).getSelectedPosition()
+                    pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
                     if 0 <= pos < len(self.rows_data[i][1]):
                         self._open_detail(self.rows_data[i][1][pos])
                 except Exception as exc:
@@ -589,10 +733,24 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
     def _launch(self, item):
         if item.action == 'findvideos':
+            # Pre-clear any Kodi bookmark for this episode BEFORE RunPlugin.
+            # Kodi reads the videoDB bookmark at play start to decide whether to show
+            # "Resume from X?" — if we delete it before Kodi queries, no dialog appears.
+            # Run in a daemon BG thread so it doesn't block the GUI thread; the DB op
+            # completes in ms, long before Kodi's C++ player resolves the stream URL.
+            _purl = ''
+            try:
+                _purl = (watch_history.get(_cw_key(item)) or {}).get('played_url', '')
+            except Exception:
+                pass
+            if _purl:
+                _t_pre = threading.Thread(target=_clear_kodi_resume, args=(_purl,))
+                _t_pre.daemon = True
+                _t_pre.start()
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
             # After RunPlugin the video player may hide this dialog.
             # A background thread waits for playback to end then restores it.
-            t = threading.Thread(target=self._wait_and_restore)
+            t = threading.Thread(target=self._wait_and_restore, args=(item,))
             t.daemon = True
             t.start()
         else:
@@ -609,7 +767,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         saved_pos = 0
         try:
             wl = self.getControl(ROW_WRAPLIST_BASE + saved_row * ROW_STEP)
-            saved_pos = wl.getSelectedPosition()
+            saved_pos = int(wl.getSelectedPosition() or 0)
         except Exception:
             pass
 
@@ -636,6 +794,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             pass
         if result == 'play':
             self._launch(item)
+        elif result == 'removed_cw':
+            # Item was removed from CW — refresh the CW row immediately
+            self._refresh_cw_row()
         elif result == 'list':
             try:
                 title = item.fulltitle or item.show or item.contentSerieName or ''
@@ -658,6 +819,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             row   = self._last_focused_row
             wl_id = ROW_WRAPLIST_BASE + row * ROW_STEP
             try:
+                # Always park focus on CLOSE_BTN first, then move to the wraplist.
+                # This guarantees a REAL focus change so Kodi fires onFocus(wl_id)
+                # even when wl_id was already the focused control before playback
+                # (a no-op setFocusId never fires onFocus, so _cw_refresh_pending
+                # would stay stuck and _refresh_cw_row would never run).
+                self.setFocusId(CLOSE_BTN)
+                xbmc.sleep(50)
                 self.getControl(wl_id).selectItem(self._last_focused_pos)
                 xbmc.sleep(50)
                 self.setFocusId(wl_id)
@@ -669,11 +837,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _restore_home: %s' % str(exc))
 
-    def _wait_and_restore(self):
-        """Wait for playback to start then finish, then bring the dialog back."""
+    def _wait_and_restore(self, item=None, next_ep_ctx=None):
+        """Wait for playback to start/end, track progress for CW, then restore home."""
         player  = xbmc.Player()
         monitor = xbmc.Monitor()
-        # Wait up to 20 s for playback to actually start
+
+        # ── Wait up to 20 s for playback to actually start ──
         for _ in range(40):
             if not self._alive or monitor.abortRequested():
                 return
@@ -682,16 +851,407 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             xbmc.sleep(500)
         else:
             return  # playback never started
-        # Wait for playback to end
+
+        # ── Capture the actual played URL (vixcloud/CDN) for clean CW removal later ──
+        _played_url = ''
+        try:
+            _played_url = player.getPlayingFile() or ''
+        except Exception:
+            pass
+
+        # ── Seek to saved resume position if available ──
+        cw_key = _cw_key(item) if item is not None else None
+        if cw_key:
+            entry = watch_history.get(cw_key)
+            if entry:
+                resume_t = float(entry.get('time_watched', 0))
+                if resume_t > 10:
+                    xbmc.sleep(2000)   # wait for buffer/demux
+                    try:
+                        player.seekTime(resume_t)
+                        logger.info('[CW] resumed "%s" at %.0fs' %
+                                    (entry.get('title', ''), resume_t))
+                    except Exception as exc:
+                        logger.error('[CW] seekTime: %s' % str(exc))
+
+        # ── Reconstruct next_ep_ctx for episodes resumed from CW ──
+        # _rebuild_ctx_from_cw makes 2 HTTP calls; runs here in the background thread
+        # well before UPNEXT_COUNTDOWN is reached, so no user-visible delay.
+        if next_ep_ctx is None and item is not None:
+            next_ep_ctx = _rebuild_ctx_from_cw(item)
+
+        # ── Apply saved audio / subtitle preference ──
+        _apply_audio_sub_pref(player, item)
+
+        # ── Track progress while playing ──
+        actual_time            = 0.0
+        total_time             = 0.0
+        last_save              = -30.0
+        _upnext_triggered      = False
+        _upnext_user_cancelled = False
+        _overlay               = None    # UpNextOverlayWindow instance
+        _overlay_np_item       = None    # next episode item
+        _overlay_np_ctx        = None    # next episode context
+        _overlay_secs_left     = 0       # Python countdown (seconds)
+        _overlay_total_secs    = 1       # initial value (avoid div-by-zero)
+
         while player.isPlaying() and self._alive and not monitor.abortRequested():
+            try:
+                actual_time = player.getTime()
+                total_time  = player.getTotalTime()
+            except Exception:
+                pass
+
+            # ── CW save ──
+            if cw_key and total_time > 60 and actual_time > 60:
+                if actual_time - last_save >= 30:
+                    last_save = actual_time
+                    if actual_time >= total_time * 0.97:
+                        # Episode completed — advance TV series to next episode,
+                        # or remove the CW entry if this was the last episode.
+                        ct = getattr(item, 'contentType', '') or ''
+                        if ct == 'episode' and next_ep_ctx is not None:
+                            # Use already-computed next ep if overlay built it,
+                            # otherwise build it now.
+                            if _overlay_np_item is not None and _overlay_np_ctx is not None:
+                                _advance_item = _overlay_np_item
+                                _advance_ctx  = _overlay_np_ctx
+                            else:
+                                _advance_item, _advance_ctx = _build_next_ep(next_ep_ctx)
+                            if _advance_item is not None:
+                                # Save the series key pointing at the next episode (position 0)
+                                _advance_item._cw_show_url = getattr(item, '_cw_show_url', '')
+                                _save_cw(_advance_item, cw_key, 0, 0)
+                                logger.info('[CW] advanced series to S%02dE%02d' % (
+                                    getattr(_advance_item, 'contentSeason', 0),
+                                    getattr(_advance_item, 'contentEpisodeNumber', 0)))
+                            else:
+                                # Last episode of last season — series is done
+                                watch_history.remove(cw_key)
+                                logger.info('[CW] series fully watched, removed key %s' % cw_key)
+                            cw_key = None
+                        else:
+                            # Movie or episode with no next-ep context
+                            watch_history.remove(cw_key)
+                            cw_key = None
+                    else:
+                        _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
+
+            # ── Trigger Up Next overlay ──
+            if (not _upnext_triggered
+                    and next_ep_ctx is not None
+                    and actual_time > 60):
+                remaining = (total_time - actual_time) if total_time > 60 else float('inf')
+                if 0 < remaining <= UPNEXT_COUNTDOWN:
+                    _upnext_triggered = True
+                    np_item, np_ctx = _build_next_ep(next_ep_ctx)
+                    if np_item is not None:
+                        _overlay_np_item    = np_item
+                        _overlay_np_ctx     = np_ctx
+                        _overlay_secs_left  = max(10, int(remaining))
+                        _overlay_total_secs = _overlay_secs_left
+                        s_n  = getattr(np_item, '_upnext_season',  0)
+                        e_n  = getattr(np_item, '_upnext_episode', 0)
+                        e_nm = (getattr(np_item, '_upnext_name', '') or '').strip()
+                        ep_lbl = u'[B]S%02dE%02d[/B]' % (s_n, e_n)
+                        if e_nm:
+                            ep_lbl += u'  \u2014  ' + e_nm
+                        try:
+                            _overlay = UpNextOverlayWindow(
+                                'UpNextOverlay.xml', config.get_runtime_path(),
+                                ep_label=ep_lbl)
+                            _overlay.show()
+                        except Exception as exc:
+                            logger.error('[UpNext] overlay show: %s' % str(exc))
+                            _overlay = None
+
+            # ── Update / check overlay ──
+            if _overlay is not None:
+                if _overlay.is_done():
+                    # User clicked a button
+                    result = _overlay._result
+                    try:
+                        _overlay.close()
+                    except Exception:
+                        pass
+                    _overlay = None
+                    if result == 'play':
+                        if cw_key and total_time > 60:
+                            watch_history.remove(cw_key)
+                            cw_key = None
+                        try:
+                            if player.isPlaying():
+                                player.stop()
+                                xbmc.sleep(600)
+                        except Exception:
+                            pass
+                        xbmc.executebuiltin(
+                            'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                            % _overlay_np_item.tourl())
+                        t_nx = threading.Thread(
+                            target=self._wait_and_restore,
+                            args=(_overlay_np_item,),
+                            kwargs={'next_ep_ctx': _overlay_np_ctx})
+                        t_nx.daemon = True
+                        t_nx.start()
+                        return
+                    else:
+                        _upnext_user_cancelled = True
+                        _overlay_np_item = _overlay_np_ctx = None
+                else:
+                    # Still showing — update countdown
+                    pct = max(0, min(100, int(
+                        (_overlay_total_secs - _overlay_secs_left) * 100
+                        / _overlay_total_secs)))
+                    _overlay.update(_overlay_secs_left, pct)
+                    _overlay_secs_left -= 1
+                    if _overlay_secs_left < 0:
+                        # Countdown expired → auto-play
+                        try:
+                            _overlay.close()
+                        except Exception:
+                            pass
+                        _overlay = None
+                        if cw_key and total_time > 60:
+                            watch_history.remove(cw_key)
+                            cw_key = None
+                        try:
+                            if player.isPlaying():
+                                player.stop()
+                                xbmc.sleep(600)
+                        except Exception:
+                            pass
+                        xbmc.executebuiltin(
+                            'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                            % _overlay_np_item.tourl())
+                        t_nx = threading.Thread(
+                            target=self._wait_and_restore,
+                            args=(_overlay_np_item,),
+                            kwargs={'next_ep_ctx': _overlay_np_ctx})
+                        t_nx.daemon = True
+                        t_nx.start()
+                        return
+
             xbmc.sleep(1000)
+
+        # ── Video ended (while loop exited) ──
+
+        # Determine if the episode finished naturally or was manually stopped.
+        # Any stop before 97% of the total duration is treated as a manual stop:
+        # no Up Next popup, no auto-play — just save CW and restore home.
+        _finished_naturally = total_time > 60 and actual_time >= total_time * 0.97
+
+        # Close overlay if still visible
+        if _overlay is not None:
+            try:
+                _overlay.close()
+            except Exception:
+                pass
+            _overlay = None
+            # Only auto-play if the episode actually ended (not manually stopped)
+            if _finished_naturally and _overlay_np_item is not None and not _upnext_user_cancelled:
+                if cw_key and total_time > 60:
+                    watch_history.remove(cw_key)
+                    cw_key = None
+                if not self._alive or monitor.abortRequested():
+                    return
+                xbmc.sleep(800)
+                xbmc.executebuiltin(
+                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                    % _overlay_np_item.tourl())
+                t_nx = threading.Thread(
+                    target=self._wait_and_restore,
+                    args=(_overlay_np_item,),
+                    kwargs={'next_ep_ctx': _overlay_np_ctx})
+                t_nx.daemon = True
+                t_nx.start()
+                return
+
+        # ── Final CW save ──
+        if cw_key and total_time > 60:
+            if _finished_naturally:
+                watch_history.remove(cw_key)
+            elif actual_time > 60:
+                _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
+
         if not self._alive or monitor.abortRequested():
             return
-        xbmc.sleep(800)  # let Kodi settle after player closes
+
+        xbmc.sleep(800)
+
+        # ── Fallback: overlay never shown (e.g. total_time was unreliable) ──
+        # Only fires when the episode ended naturally AND ≥80% was watched.
+        # Never fires on manual stop.
+        _watched_enough = (
+            total_time <= 60                          # total_time unknown → trust actual_time
+            or actual_time >= total_time * 0.80       # watched ≥80 %
+        )
+        if (_finished_naturally
+                and next_ep_ctx is not None
+                and not _upnext_triggered
+                and not _upnext_user_cancelled
+                and actual_time >= UPNEXT_COUNTDOWN
+                and _watched_enough):
+            np_item, np_ctx = _build_next_ep(next_ep_ctx)
+            if np_item is not None:
+                s_n  = getattr(np_item, '_upnext_season',  0)
+                e_n  = getattr(np_item, '_upnext_episode', 0)
+                e_nm = (getattr(np_item, '_upnext_name', '') or '').strip()
+                ep_lbl = u'[B]S%02dE%02d[/B]' % (s_n, e_n)
+                if e_nm:
+                    ep_lbl += u'  \u2014  ' + e_nm
+                win_fb = None
+                try:
+                    win_fb = UpNextOverlayWindow(
+                        'UpNextOverlay.xml', config.get_runtime_path(),
+                        ep_label=ep_lbl)
+                    fb_secs = 10
+                    win_fb.show()
+                    while fb_secs >= 0 and not win_fb.is_done():
+                        mins = fb_secs // 60
+                        secs = fb_secs % 60
+                        pct = int((10 - fb_secs) * 100 / 10)
+                        win_fb.update(fb_secs, pct)
+                        xbmc.sleep(1000)
+                        fb_secs -= 1
+                    if not win_fb.is_done():
+                        win_fb._result = 'play'
+                    result = win_fb._result
+                    win_fb.close()
+                    win_fb = None
+                except Exception as exc:
+                    logger.error('[UpNext] fallback overlay: %s' % str(exc))
+                    result = 'play'  # default to play on error
+                if result == 'play':
+                    xbmc.executebuiltin(
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                        % np_item.tourl())
+                    t_nx = threading.Thread(
+                        target=self._wait_and_restore,
+                        args=(np_item,),
+                        kwargs={'next_ep_ctx': np_ctx})
+                    t_nx.daemon = True
+                    t_nx.start()
+                    return
+
+        # Set the pending flag BEFORE _restore_home() / setFocusId() so that
+        # onFocus (which fires when setFocusId posts its message to the GUI thread)
+        # always finds the flag already True — eliminating the race condition where
+        # onFocus fired before the flag was set and missed the refresh.
+        if self._alive:
+            self._cw_refresh_pending = True
+
         self._restore_home()
 
+        # Always clear Kodi's own bookmark after watching — we manage resume
+        # ourselves via CW. Wait 1.5s so Kodi finishes its own final-bookmark
+        # write before we delete it.
+        if _played_url and self._alive:
+            xbmc.sleep(1500)
+            try:
+                _clear_kodi_resume(_played_url)
+            except Exception as exc:
+                logger.error('[CW] post-watch _clear_kodi_resume: %s' % str(exc))
+
+        # Refresh the CW row + genre row progress bars.
+        # _restore_home() bounces focus through CLOSE_BTN so onFocus always fires
+        # and drains _cw_refresh_pending on the GUI thread. The sleep+check below
+        # is a last-resort safety net: if onFocus still didn't fire (e.g. window
+        # not yet active), poke focus again to trigger it. Never call
+        # _refresh_cw_row() directly from this BG thread — all wl.reset()/
+        # addItems() calls MUST run on the GUI thread via onFocus.
+        xbmc.sleep(600)
+        if self._alive and self._cw_refresh_pending:
+            logger.warning('[CW] pending flag still set 600ms after restore — retrying focus bounce')
+            try:
+                self.setFocusId(CLOSE_BTN)  # triggers onFocus on GUI thread
+            except Exception:
+                pass
+
+    def _refresh_cw_row(self):
+        """Rebuild the Continue Watching row in-place without full home reload.
+        rows_data[0] is always the CW row — just update its items list.
+        Also re-applies CW progress data to any SC rows already rendered, so
+        that progress bars appear in genre carousels even when CW was empty at load.
+        """
+        try:
+            logger.info('[CW] _refresh_cw_row: start (populated=%s)' % sorted(self._populated))
+            cw_items = _build_cw_items()   # also rebuilds _cw_lookup_by_tmdb/title
+            logger.info('[CW] _refresh_cw_row: cw_items=%d tmdb_keys=%d title_keys=%d' % (
+                len(cw_items), len(_cw_lookup_by_tmdb), len(_cw_lookup_by_title)))
+            with self._rows_lock:
+                self.rows_data[0] = (_CW_ROW_LABEL, cw_items)
+
+            # Refresh CW row itself
+            self._populated.discard(0)
+            self._populate_single_row(0)
+
+            # Re-apply (or clear) CW data on all SC rows already rendered.
+            # SC rows start at index 1.
+            # We always do this — even when cw_items is empty — so that items
+            # removed from CW lose their progress bar immediately.
+            rows_changed = []
+            for i in range(1, len(self.rows_data)):
+                row_label, row_items = self.rows_data[i]
+                changed = False
+                n_matched = 0
+                n_cleared = 0
+                for it in row_items:
+                    # Use __dict__.get — Item.__getattr__ returns '' for unknowns,
+                    # causing '' > 0 TypeError.
+                    old_time = float(it.__dict__.get('cw_time_watched', 0) or 0)
+                    matched = _apply_cw_to_item(it)
+                    new_time = float(it.__dict__.get('cw_time_watched', 0) or 0)
+                    if matched:
+                        n_matched += 1
+                        if new_time != old_time:
+                            changed = True
+                    elif old_time > 0:
+                        _clear_cw_from_item(it)
+                        n_cleared += 1
+                        changed = True
+                if changed:
+                    rows_changed.append(i)
+                    logger.info('[CW] row %d "%s": matched=%d cleared=%d → re-render(in_populated=%s)' % (
+                        i, row_label, n_matched, n_cleared, i in self._populated))
+                if changed and i in self._populated:
+                    # Re-render the wraplist for this row to update bar steps.
+                    # Strategy: if this row has focus, move focus away first so Kodi
+                    # doesn't hold a lock on the wraplist during reset().
+                    wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                    try:
+                        currently_focused = (self.getFocusId() == wl_id)
+                        if currently_focused:
+                            try:
+                                self.setFocusId(CLOSE_BTN)
+                            except Exception:
+                                pass
+                        wl = self.getControl(wl_id)
+                        cur_pos = int(wl.getSelectedPosition() or 0)
+                        wl.reset()
+                        wl.addItems([_item_to_li(it) for it in row_items])
+                        if cur_pos > 0:
+                            try:
+                                wl.selectItem(cur_pos)
+                            except Exception:
+                                pass
+                        if currently_focused:
+                            try:
+                                self.setFocusId(wl_id)
+                            except Exception:
+                                pass
+                        logger.info('[CW] row %d re-render done (items=%d pos=%d)' % (
+                            i, len(row_items), cur_pos))
+                    except Exception as exc:
+                        logger.error('[CW] _refresh_cw_row re-render row %d: %s' % (i, str(exc)))
+
+            logger.info('[CW] _refresh_cw_row: done (rows_changed=%s)' % rows_changed)
+
+        except Exception as exc:
+            logger.error('[NetflixHome] _refresh_cw_row: %s' % str(exc))
+
     def _select_episode(self, item):
-        """Inline season/episode picker for TV shows (runs in a background thread)."""
+        """Episode picker for TV shows (runs in a background thread)."""
         try:
             # --- Fetch title page (has props.title.seasons) ---
             try:
@@ -714,14 +1274,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
             # --- Season selection (skip if only 1) ---
             if len(seasons) == 1:
+                season_idx = 0
                 chosen = seasons[0]
             else:
                 sl = ['Stagione %d  (%s ep.)' % (
                     s['number'], s.get('episodes_count', '?')) for s in seasons]
-                idx = xbmcgui.Dialog().select('[B]%s[/B]' % item.fulltitle, sl)
-                if idx < 0:
+                season_idx = xbmcgui.Dialog().select('[B]%s[/B]' % item.fulltitle, sl)
+                if season_idx < 0:
                     return
-                chosen = seasons[idx]
+                chosen = seasons[season_idx]
 
             # --- Fetch episode list for chosen season ---
             try:
@@ -753,6 +1314,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             ep = episodes[ei]
             title_id = str(chosen.get('title_id', ''))
 
+            next_ep_ctx = {
+                'show_item':  item,
+                'seasons':    seasons,
+                'season_idx': season_idx,
+                'episodes':   episodes,
+                'ep_idx':     ei,
+                'title_id':   title_id,
+            }
+
             import channels.streamingcommunity as _sc
             ep_item = item.clone(
                 action='findvideos',
@@ -764,16 +1334,442 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 contentTitle='',
                 url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, ep['id'])
             )
+            ep_item._cw_show_url = item.url   # preserve show URL for overlay when resumed from CW
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
-            t2 = threading.Thread(target=self._wait_and_restore)
+            t2 = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                  kwargs={'next_ep_ctx': next_ep_ctx})
             t2.daemon = True
             t2.start()
 
         except Exception as exc:
             logger.error('[NetflixHome] _select_episode: %s' % str(exc))
 
+# ── Continue Watching save helper ────────────────────────────────
 
-# ── Module-level helpers ──────────────────────────────────────
+def _save_cw(item, key, actual_time, total_time, played_url=''):
+    """Persist a watch-progress entry for *item* to the CW database."""
+    try:
+        title = (getattr(item, 'fulltitle', '') or
+                 getattr(item, 'show', '') or
+                 getattr(item, 'contentSerieName', '') or '')
+        ct = getattr(item, 'contentType', '') or ''
+        if ct == 'episode':
+            s     = getattr(item, 'contentSeason', 0) or 0
+            e_num = getattr(item, 'contentEpisodeNumber', 0) or 0
+            if s or e_num:
+                title = '%s  S%02dE%02d' % (title, int(s), int(e_num))
+        thumb    = getattr(item, 'thumbnail', '') or ''
+        fanart   = getattr(item, 'fanart', '') or thumb
+        show_url = getattr(item, '_cw_show_url', '') or ''
+        watch_history.save_progress(
+            key, title, thumb, fanart,
+            actual_time, total_time,
+            item.tourl(),
+            show_url=show_url,
+            played_url=played_url,
+        )
+    except Exception as exc:
+        logger.error('[CW] _save_cw: %s' % str(exc))
+
+
+# ── Up Next helpers ────────────────────────────────────────────────────────────
+
+def _rebuild_ctx_from_cw(item):
+    """
+    Reconstruct next_ep_ctx for an episode item that was launched from the CW row.
+    Requires item._cw_show_url to be set (the SC titles page URL for the series).
+    Makes 2 HTTP calls; called from the background _wait_and_restore thread.
+    Returns a next_ep_ctx dict, or None on failure / non-episode.
+    """
+    try:
+        show_url = getattr(item, '_cw_show_url', '') or ''
+        if not show_url or getattr(item, 'contentType', '') != 'episode':
+            return None
+        cur_s = int(getattr(item, 'contentSeason', 0) or 0)
+        cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+        url   = getattr(item, 'url', '') or ''
+        m = re.search(r'/iframe/(\d+)', url)
+        if not m:
+            return None
+        title_id = m.group(1)
+
+        # Fetch seasons list
+        data    = _get_data(show_url)
+        seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+        if not seasons:
+            return None
+
+        # Find current season index
+        season_idx = 0
+        for si, s in enumerate(seasons):
+            if s.get('number') == cur_s:
+                season_idx = si
+                break
+
+        # Fetch episode list for current season
+        chosen   = seasons[season_idx]
+        sdata    = _get_data(show_url + '/season-%d' % chosen['number'])
+        episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+        if not episodes:
+            return None
+
+        # Find current episode index
+        ep_idx = 0
+        for ei, ep in enumerate(episodes):
+            if ep.get('number') == cur_e:
+                ep_idx = ei
+                break
+
+        show_item = item.clone(action='episodios', contentType='tvshow', url=show_url)
+        logger.info('[UpNext] rebuilt ctx from CW: S%02dE%02d, %d seasons, %d eps in S%d'
+                    % (cur_s, cur_e, len(seasons), len(episodes), cur_s))
+        return {
+            'show_item':  show_item,
+            'seasons':    seasons,
+            'season_idx': season_idx,
+            'episodes':   episodes,
+            'ep_idx':     ep_idx,
+            'title_id':   title_id,
+        }
+    except Exception as exc:
+        logger.error('[UpNext] _rebuild_ctx_from_cw: %s' % str(exc))
+        return None
+
+
+def _apply_cw_to_item(it):
+    """
+    If 'it' matches a CW entry (by TMDB ID or normalised show name), copy the
+    CW progress data onto it and make it act as a direct episode play — identical
+    to clicking the same item in the CW row.
+    Modifies 'it' in-place; no-op when there is no match.
+    Returns True if a CW match was found and applied, False otherwise.
+    """
+    global _cw_lookup_by_tmdb, _cw_lookup_by_title
+    tmdb = str(it.infoLabels.get('tmdb_id') or '').strip()
+    cw_match = _cw_lookup_by_tmdb.get(tmdb) if tmdb else None
+    if cw_match is None:
+        show_name = (getattr(it, 'show', '') or
+                     getattr(it, 'contentSerieName', '') or
+                     getattr(it, 'fulltitle', '') or '')
+        norm = _normalize_title(show_name)
+        cw_match = _cw_lookup_by_title.get(norm) if norm else None
+    if cw_match is None:
+        return False
+    # Save original state the first time we modify this item so it can be restored later
+    if not hasattr(it, '_orig_cw_state'):
+        it._orig_cw_state = {
+            # Use __dict__.get (not getattr) — Item.__getattr__ returns '' for unknowns,
+            # which would corrupt the saved state and cause '' > 0 TypeError later.
+            'cw_time_watched':      float(it.__dict__.get('cw_time_watched', 0) or 0),
+            'cw_total_time':        float(it.__dict__.get('cw_total_time', 0) or 0),
+            'action':               getattr(it, 'action', ''),
+            'url':                  getattr(it, 'url', ''),
+            'contentType':          getattr(it, 'contentType', ''),
+            'contentSeason':        getattr(it, 'contentSeason', 0),
+            'contentEpisodeNumber': getattr(it, 'contentEpisodeNumber', 0),
+            '_cw_show_url':         getattr(it, '_cw_show_url', ''),
+        }
+    # Apply progress bar data
+    it.cw_time_watched = cw_match.cw_time_watched
+    it.cw_total_time   = cw_match.cw_total_time
+    # Make it play the same episode (direct video play, bypassing season picker)
+    it.action               = cw_match.action
+    it.url                  = cw_match.url
+    it.contentType          = cw_match.contentType
+    it.contentSeason        = getattr(cw_match, 'contentSeason', 0)
+    it.contentEpisodeNumber = getattr(cw_match, 'contentEpisodeNumber', 0)
+    it._cw_show_url         = getattr(cw_match, '_cw_show_url', '')
+    return True
+
+
+def _clear_cw_from_item(it):
+    """
+    Undo a previous _apply_cw_to_item call: restore the item to its original
+    state (action, url, contentType, etc.) and zero progress bar fields.
+    """
+    orig = getattr(it, '_orig_cw_state', None)
+    if orig:
+        it.cw_time_watched      = orig['cw_time_watched']
+        it.cw_total_time        = orig['cw_total_time']
+        it.action               = orig['action']
+        it.url                  = orig['url']
+        it.contentType          = orig['contentType']
+        it.contentSeason        = orig['contentSeason']
+        it.contentEpisodeNumber = orig['contentEpisodeNumber']
+        it._cw_show_url         = orig['_cw_show_url']
+        del it._orig_cw_state
+    else:
+        it.cw_time_watched = 0
+        it.cw_total_time   = 0
+
+
+def _build_next_ep(ctx):
+    """
+    Given a next_ep_ctx dict describing the current episode, return
+    (ep_item, new_ctx) for the immediately following episode, or (None, None)
+    if no next episode exists or on network error.
+
+    ctx keys:
+      show_item  – original SC Item (action='seasons' or similar)
+      seasons    – list of all season dicts from the SC API
+      season_idx – int index of current season in `seasons`
+      episodes   – list of episode dicts for the current season
+      ep_idx     – int index of current episode in `episodes`
+      title_id   – str, the SC series title id
+    """
+    try:
+        show_item  = ctx['show_item']
+        seasons    = ctx['seasons']
+        si         = int(ctx['season_idx'])
+        episodes   = ctx['episodes']
+        ei         = int(ctx['ep_idx'])
+        title_id   = ctx['title_id']
+
+        import channels.streamingcommunity as _sc
+
+        # ── next episode in the same season ──────────────────────────────────
+        if ei + 1 < len(episodes):
+            next_ei     = ei + 1
+            next_ep     = episodes[next_ei]
+            next_season = seasons[si]
+            new_ctx     = dict(ctx, ep_idx=next_ei)
+
+        # ── first episode of the next season ─────────────────────────────────
+        elif si + 1 < len(seasons):
+            next_si     = si + 1
+            next_season = seasons[next_si]
+            try:
+                sdata = _get_data(show_item.url + '/season-%d' % next_season['number'])
+            except Exception as exc:
+                logger.error('[UpNext] fetch next season: %s' % str(exc))
+                return None, None
+            next_eps = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            if not next_eps:
+                return None, None
+            next_ep = next_eps[0]
+            new_ctx = dict(ctx, season_idx=next_si, episodes=next_eps, ep_idx=0)
+
+        else:
+            return None, None   # last episode of last season
+
+        ep_item = show_item.clone(
+            action='findvideos',
+            contentType='episode',
+            season=next_season['number'],
+            episode=next_ep['number'],
+            contentSeason=next_season['number'],
+            contentEpisodeNumber=next_ep['number'],
+            contentTitle='',
+            url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, next_ep['id'])
+        )
+        ep_item._upnext_season  = next_season['number']
+        ep_item._upnext_episode = next_ep['number']
+        ep_item._upnext_name    = (next_ep.get('name') or '').strip()
+        return ep_item, new_ctx
+
+    except Exception as exc:
+        logger.error('[UpNext] _build_next_ep: %s' % str(exc))
+        return None, None
+
+
+# ── Module-level helpers ────────────────────────────────────────────────────────
+
+def _apply_audio_sub_pref(player, item):
+    """
+    Apply the user's saved audio/subtitle preference for this content.
+    Called from _wait_and_restore after seeking resumes; runs in background thread.
+    Preferences are saved by DetailWindow._show_audio_sub_dialog() in addon settings.
+    """
+    try:
+        if item is None:
+            return
+        addon   = xbmcaddon.Addon()
+        tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+        key     = tmdb_id or re.sub(r'[^a-z0-9]', '',
+                                    (item.fulltitle or item.show or '').lower())
+        if not key:
+            return
+
+        audio_pref = addon.getSetting('audiolang_%s' % key) or ''
+        sub_pref   = addon.getSetting('sublang_%s'   % key) or ''
+        if not audio_pref and not sub_pref:
+            return   # no preference saved → leave streams as-is
+
+        # Wait up to 5 s for tracks to be available
+        for _ in range(50):
+            xbmc.sleep(100)
+            if not player.isPlaying():
+                return
+            if player.getAvailableAudioStreams():
+                break
+
+        # Extra 2-second buffer: on HLS/DASH streams the inputstream.adaptive
+        # demuxer keeps enumerating tracks for a while after the first are
+        # detected.  Calling setAudioStream() too early stalls the audio pipeline.
+        xbmc.sleep(2000)
+        if not player.isPlaying():
+            return
+
+        # ── Audio ──
+        if audio_pref and audio_pref != u'Originale (non cambiare)':
+            target = 'ital' if 'Italiano' in audio_pref else 'engl'
+            # Check whether the current audio track is already the preferred one
+            cur_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage').lower()
+            already_set = (
+                (target == 'ital' and ('ital' in cur_lang or cur_lang in ('it', 'ita', 'it-it'))) or
+                (target == 'engl' and ('engl' in cur_lang or cur_lang in ('en', 'eng', 'en-us', 'en-gb')))
+            )
+            if not already_set:
+                streams = player.getAvailableAudioStreams()
+                logger.info('[CW] audio_pref=%r  current=%r  available=%s' % (
+                    audio_pref, cur_lang, streams))
+                for idx, s in enumerate(streams):
+                    sl = s.lower()
+                    if target in sl or (target == 'ital' and sl in ('it', 'ita', 'it-it')) \
+                            or (target == 'engl' and sl in ('en', 'eng', 'en-us', 'en-gb')):
+                        try:
+                            player.setAudioStream(idx)
+                        except Exception as exc:
+                            logger.error('[CW] setAudioStream(%d): %s' % (idx, exc))
+                        break
+
+        # ── Subtitles ──
+        if sub_pref:
+            if sub_pref == u'Nessun sottotitolo':
+                player.showSubtitles(False)
+            else:
+                target_sub = None
+                if 'Italiano' in sub_pref:
+                    target_sub = 'ital'
+                elif 'Inglese' in sub_pref:
+                    target_sub = 'engl'
+                elif 'Come audio' in sub_pref:
+                    # same as chosen audio language
+                    if audio_pref and 'Italiano' in audio_pref:
+                        target_sub = 'ital'
+                    elif audio_pref and 'Inglese' in audio_pref:
+                        target_sub = 'engl'
+                if target_sub:
+                    sub_streams = player.getAvailableSubtitleStreams()
+                    chosen = None
+                    for idx, s in enumerate(sub_streams):
+                        sl = s.lower()
+                        if target_sub in sl or \
+                                (target_sub == 'ital' and sl in ('it', 'ita')) or \
+                                (target_sub == 'engl' and sl in ('en', 'eng')):
+                            chosen = idx
+                            break
+                    if chosen is not None:
+                        player.setSubtitleStream(chosen)
+                        player.showSubtitles(True)
+                    # If no matching sub track found, leave stream as-is
+    except Exception as exc:
+        logger.error('[CW] _apply_audio_sub_pref: %s' % str(exc))
+
+
+def _clear_kodi_resume(ep_url):
+    """Delete Kodi's internal resume/progress data for a StreamingCommunity episode.
+
+    Kodi stores resume points in MyVideosXXX.db.  For SC/vixcloud content:
+        path.strPath   = 'https://vixcloud.co/playlist/'
+        files.strFilename = '<episode_id>'  (just the number)
+    We extract episode_id from the iframe URL (?episode_id=NNN) and:
+      1. Delete all bookmarks for that file  (removes the "Resume from" dialog)
+      2. Delete the files row itself         (removes it from Kodi's own In-Progress list)
+    """
+    try:
+        import glob as _glob
+        import os   as _os
+        import sqlite3 as _sqlite3
+
+        logger.info('[CW] _clear_kodi_resume called with url: %s' % (ep_url or '(none)'))
+
+        # played_url is the vixcloud URL: https://vixcloud.co/playlist/697221?token=...
+        # Extract the numeric ID from the path segment (not ?episode_id= param).
+        m = re.search(r'/playlist/(\d+)', ep_url or '')
+        if not m:
+            logger.info('[CW] _clear_kodi_resume: no playlist ID in url, skipping')
+            return
+        ep_id = m.group(1)
+        logger.info('[CW] _clear_kodi_resume: vixcloud_id=%s' % ep_id)
+
+        db_dir = xbmc.translatePath('special://database/')
+        dbs = _glob.glob(_os.path.join(db_dir, 'MyVideos*.db'))
+        if not dbs:
+            logger.warning('[CW] _clear_kodi_resume: no MyVideos*.db found in %s' % db_dir)
+            return
+        db_path = max(dbs, key=_os.path.getmtime)  # highest version = active DB
+        logger.info('[CW] _clear_kodi_resume: using db=%s' % db_path)
+
+        conn = _sqlite3.connect(db_path, timeout=8)
+        try:
+            # Find idFile(s) matching this episode
+            id_rows = conn.execute(
+                "SELECT f.idFile FROM files f"
+                " JOIN path p ON p.idPath=f.idPath"
+                " WHERE p.strPath='https://vixcloud.co/playlist/'"
+                "   AND f.strFilename=?",
+                (ep_id,)
+            ).fetchall()
+            if not id_rows:
+                logger.info('[CW] _clear_kodi_resume: ep_id=%s not found in files table' % ep_id)
+                return
+            id_list = [r[0] for r in id_rows]
+            placeholders = ','.join('?' * len(id_list))
+            # 1. Delete all bookmarks for this file
+            c1 = conn.execute("DELETE FROM bookmark WHERE idFile IN (%s)" % placeholders, id_list)
+            # 2. Delete the files entry itself (removes it from Kodi In-Progress)
+            c2 = conn.execute("DELETE FROM files  WHERE idFile IN (%s)" % placeholders, id_list)
+            conn.commit()
+            logger.info('[CW] Kodi cleared ep_id=%s: bookmarks=%d files=%d'
+                        % (ep_id, c1.rowcount, c2.rowcount))
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.error('[CW] _clear_kodi_resume: %s' % str(exc))
+
+
+def _nuke_all_vixcloud_bookmarks():
+    """Delete ALL Kodi resume bookmarks for vixcloud content.
+
+    We manage our own resume system (CW DB). Kodi's built-in bookmarks only
+    cause stale "Resume from" dialogs when replaying or navigating episodes.
+    Called once at NetflixHome open time (fire-and-forget background thread)
+    to clean up any bookmarks left over from prior sessions.
+    """
+    try:
+        import glob as _glob
+        import os   as _os
+        import sqlite3 as _sqlite3
+
+        db_dir = xbmc.translatePath('special://database/')
+        dbs = _glob.glob(_os.path.join(db_dir, 'MyVideos*.db'))
+        if not dbs:
+            return
+        db_path = max(dbs, key=_os.path.getmtime)
+
+        conn = _sqlite3.connect(db_path, timeout=5)
+        try:
+            id_rows = conn.execute(
+                "SELECT f.idFile FROM files f"
+                " JOIN path p ON p.idPath=f.idPath"
+                " WHERE p.strPath='https://vixcloud.co/playlist/'"
+            ).fetchall()
+            if not id_rows:
+                logger.info('[CW] startup nuke: no vixcloud files found, skipping')
+                return
+            id_list = [r[0] for r in id_rows]
+            placeholders = ','.join('?' * len(id_list))
+            c1 = conn.execute("DELETE FROM bookmark WHERE idFile IN (%s)" % placeholders, id_list)
+            c2 = conn.execute("DELETE FROM files   WHERE idFile IN (%s)" % placeholders, id_list)
+            conn.commit()
+            logger.info('[CW] startup nuke: cleared vixcloud bookmarks=%d files=%d'
+                        % (c1.rowcount, c2.rowcount))
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.error('[CW] _nuke_all_vixcloud_bookmarks: %s' % str(exc))
+
 
 def _cdnthumb(img_dict, host):
     url = (img_dict.get('original_url') or '').strip()
@@ -876,7 +1872,8 @@ def _item_to_li(item):
     li.setProperty('plot',         plot)
     li.setProperty('rating',       str(item.infoLabels.get('rating') or ''))
     li.setProperty('genre',        str(item.infoLabels.get('genre') or ''))
-    # Populate Kodi's native info dict so internal dialogs show full metadata
+    # setInfo MUST run BEFORE setResumePoint: in Kodi 21 setInfo internally
+    # re-initialises the VideoInfoTag, wiping any previously set resume point.
     info_type = 'movie' if getattr(item, 'contentType', '') == 'movie' else 'video'
     info_dict = {}
     for _k in ('title', 'year', 'plot', 'rating', 'votes', 'genre',
@@ -886,6 +1883,22 @@ def _item_to_li(item):
             info_dict[_k] = _v
     if info_dict:
         li.setInfo(info_type, info_dict)
+    # Continue Watching progress bar — AFTER setInfo so resume point is preserved.
+    # Uses bar_step (1-9) for a 10-step image-based bar in the XML.
+    cw_time  = float(getattr(item, 'cw_time_watched', 0) or 0)
+    cw_total = float(getattr(item, 'cw_total_time', 0) or 0)
+    if cw_time > 0 and cw_total > 0:
+        pct  = max(0, min(96, int(cw_time / cw_total * 100)))
+        step = pct // 10   # 0..9  (step 0 = <10%, no bar shown)
+        if step >= 1:
+            li.setProperty('has_progress', '1')
+            li.setProperty('bar_step',     str(step))
+        try:
+            vt = li.getVideoInfoTag()
+            vt.setResumePoint(cw_time, cw_total)
+            vt.setPlaycount(0)
+        except Exception:
+            pass
     return li
 
 
@@ -1020,6 +2033,48 @@ def _extract_item_title(it):
     return re.sub(r'\[/?[A-Za-z][^\]]*\]', '', title).strip()
 
 
+def _tmdb_get_trailer(tmdb_id, ctype='movie'):
+    """
+    Fetch the official YouTube trailer ID from the TMDB /videos endpoint.
+    TMDB-sourced IDs are official uploads — never age-restricted.
+    Returns YouTube video_id string, or None.
+    Prefers Italian; falls back to English.
+    """
+    if not tmdb_id:
+        return None
+    try:
+        from core import httptools
+        import json as _json
+
+        _TMDB_HOST = 'https://api.themoviedb.org/3'
+        _TMDB_API  = 'a1ab8b8669da03637a4b98fa39c39228'
+        media_type = 'tv' if str(ctype) == 'tv' else 'movie'
+
+        def _fetch(lang):
+            url = '{}/{}/{}/videos?api_key={}&language={}'.format(
+                _TMDB_HOST, media_type, tmdb_id, _TMDB_API, lang)
+            resp = httptools.downloadpage(url, timeout=8, ignore_response_code=True)
+            if not resp.success:
+                return []
+            return _json.loads(resp.data or '{}').get('results', [])
+
+        for lang in ('it', 'en'):
+            videos = _fetch(lang)
+            # Prefer Trailer type on YouTube
+            for v in videos:
+                if v.get('site') == 'YouTube' and v.get('type') == 'Trailer':
+                    return v['key']
+            # Accept any YouTube video from this language
+            for v in videos:
+                if v.get('site') == 'YouTube':
+                    return v['key']
+
+        return None
+    except Exception as exc:
+        logger.error('[TMDBTrailer] %s' % str(exc)[:100])
+        return None
+
+
 # Public Invidious instances used as YouTube search API (tried in order, first success wins)
 def _youtube_search_trailer(title, year=''):
     """
@@ -1071,6 +2126,26 @@ def _youtube_search_trailer(title, year=''):
                     vid = vr.get('videoId')
                     if not vid:
                         continue
+                    # Skip age-restricted / sign-in required videos.
+                    # YouTube may signal this in two different places in the API response:
+                    # 1) badges list (metadataBadgeRenderer label)
+                    # 2) overlayTimeStatusRenderer style = "LIVE" or in
+                    #    videoRenderer.videoRequiresLogin (older responses)
+                    badges = vr.get('badges', [])
+                    age_gated = any(
+                        b.get('metadataBadgeRenderer', {}).get('label', '').lower()
+                        in ('age-restricted', 'age restricted', '18+', 'solo per adulti', 'contenuto per adulti')
+                        for b in badges
+                    )
+                    # Also check overlayBadges (second field YouTube sometimes uses)
+                    if not age_gated:
+                        for b in vr.get('ownerBadges', []):
+                            lbl = b.get('metadataBadgeRenderer', {}).get('label', '').lower()
+                            if 'age' in lbl or '18+' in lbl:
+                                age_gated = True
+                                break
+                    if age_gated:
+                        continue
                     # Parse duration string "M:SS" -> seconds
                     dur_str = vr.get('lengthText', {}).get('simpleText', '') or ''
                     secs = 0
@@ -1095,15 +2170,19 @@ def _youtube_search_trailer(title, year=''):
         parts.append('trailer ufficiale italiano')
         vid = _yt_search(' '.join(parts))
         if vid:
+            logger.info('[YTSearch] "%s" → query1 → %s' % (title, vid))
             return vid
 
         # Query 2: title + "trailer italiano" (drop year)
         vid = _yt_search('%s trailer italiano' % title)
         if vid:
+            logger.info('[YTSearch] "%s" → query2 → %s' % (title, vid))
             return vid
 
         # Query 3: English fallback
         vid = _yt_search('%s%s trailer official' % (title, (' ' + year) if year else ''))
+        if vid:
+            logger.info('[YTSearch] "%s" → query3 → %s' % (title, vid))
         return vid
 
     except Exception as exc:
@@ -1155,28 +2234,53 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
     if not seen:
         return
 
-    logger.info('[NetflixHome trailers] fetching %d new ids (3 workers)' % len(seen))
+    logger.info('[NetflixHome trailers] fetching %d new ids (daemon threads)' % len(seen))
     results = {}   # tmdb_id -> url str
     lock    = threading.Lock()
 
     def _one(tid):
         try:
-            it_obj = seen[tid]
-            title  = it_obj.fulltitle or it_obj.show or it_obj.contentSerieName or ''
-            year   = str(it_obj.infoLabels.get('year') or '')
+            it_obj  = seen[tid]
+            title   = it_obj.fulltitle or it_obj.show or it_obj.contentSerieName or ''
+            year    = str(it_obj.infoLabels.get('year') or '')
+            item_tmdb_id = str(it_obj.infoLabels.get('tmdb_id') or '').strip()
+            item_ctype   = 'tv' if getattr(it_obj, 'contentType', '') == 'tvshow' else 'movie'
 
             def _make_url(video_id):
                 return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
+            # YouTube search primary
             vid = _youtube_search_trailer(title, year)
+            # TMDB fallback: if YouTube finds nothing (all restricted or no results)
+            if not vid and item_tmdb_id:
+                vid = _tmdb_get_trailer(item_tmdb_id, item_ctype)
             with lock:
                 results[tid] = _make_url(vid) if vid else False
         except Exception as exc:
             logger.error('[NetflixHome trailers] %s: %s' % (tid, str(exc)[:60]))
 
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        pool.map(_one, list(seen.keys()), timeout=30)
+    # Use daemon threads so they don't block addon shutdown (prevents the
+    # "script didn't stop in 5 seconds" kill that was crashing Kodi).
+    import time as _time
+    threads = [threading.Thread(target=_one, args=(tid,), daemon=True)
+               for tid in list(seen.keys())]
+    # Throttle: start 2 at a time to avoid flooding YouTube
+    active = []
+    pending = list(threads)
+    deadline = _time.time() + 30
+    while (pending or active) and _time.time() < deadline:
+        # Refill active pool up to 2
+        while pending and len(active) < 2:
+            t = pending.pop(0)
+            t.start()
+            active.append(t)
+        active = [t for t in active if t.is_alive()]
+        if active:
+            xbmc.sleep(150)
+    # Wait briefly for any still-running threads (up to remaining deadline)
+    remaining = max(0.1, deadline - _time.time())
+    for t in threads:
+        t.join(timeout=min(remaining, 1.0))
 
     # Store results in module cache and apply to items
     for tid, val in results.items():
@@ -1428,6 +2532,85 @@ def _fetch_rows():
     return rows
 
 
+
+# ── Up Next Overlay Window ──────────────────────────────────────────────────────────
+
+class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
+    """
+    Netflix-style overlay shown ON TOP of the fullscreen video player.
+    Non-blocking (uses show() not doModal()). The calling thread polls
+    is_done() and calls update() each second.
+    """
+
+    BTN_PLAY   = 9901
+    BTN_CANCEL = 9902
+    LBL_TITLE  = 9903
+    LBL_TIMER  = 9904
+    PROG_BAR   = 9905
+
+    def __init__(self, *args, **kwargs):
+        self._ep_label = kwargs.pop('ep_label', '')
+        self._result   = 'cancel'
+        self._done     = False
+
+    def onInit(self):
+        try:
+            self.getControl(self.LBL_TITLE).setLabel(self._ep_label)
+        except Exception:
+            pass
+        try:
+            self.getControl(self.LBL_TIMER).setLabel('')
+        except Exception:
+            pass
+        try:
+            self.getControl(self.PROG_BAR).setPercent(0)
+        except Exception:
+            pass
+
+    def update(self, secs_remaining, pct_elapsed):
+        """Update countdown label and progress bar. Called every second from caller thread."""
+        if self._done:
+            return
+        if secs_remaining > 0:
+            mins = secs_remaining // 60
+            secs = secs_remaining % 60
+            timer_txt = (u'Parte in [B]%d:%02d[/B]'
+                         u'  —  [COLOR FFE50914]▶ Guarda subito[/COLOR] per iniziare ora'
+                         % (mins, secs))
+        else:
+            timer_txt = u'[B]In partenza...[/B]'
+        try:
+            self.getControl(self.LBL_TIMER).setLabel(timer_txt)
+            self.getControl(self.PROG_BAR).setPercent(min(100, pct_elapsed))
+        except Exception:
+            pass
+
+    def is_done(self):
+        return self._done
+
+    def onClick(self, ctrl_id):
+        if ctrl_id == self.BTN_PLAY:
+            self._result = 'play'
+        else:
+            self._result = 'cancel'
+        self._done = True
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def onAction(self, action):
+        aid = action.getId()
+        if aid in (92, 10, xbmcgui.ACTION_STOP,
+                   xbmcgui.ACTION_BACKSPACE, xbmcgui.ACTION_PREVIOUS_MENU):
+            self._result = 'cancel'
+            self._done   = True
+            try:
+                self.close()
+            except Exception:
+                pass
+
+
 # ── Detail Window ─────────────────────────────────────────────────────────────
 
 class DetailWindow(xbmcgui.WindowXMLDialog):
@@ -1441,9 +2624,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
     ACTION_BACK = 92
 
     def __init__(self, *args, **kwargs):
-        self._item   = kwargs.pop('item', None)
-        self._result = None   # 'play' | 'list' | None after close
-        self._player = xbmc.Player()
+        self._item            = kwargs.pop('item', None)
+        self._result          = None   # 'play' | 'list' | None after close
+        self._player          = xbmc.Player()
+        self._close_requested = False  # Signal background threads to bail out
 
     def onInit(self):
         item = self._item
@@ -1557,39 +2741,123 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             pass
 
-        # ── Videowindow starts behind fanart; fanart is hidden by _start_trailer ──
-        # (no need to touch videowindow visibility — fanart covers it until trailer plays)
+        # ── Play button label: "Continua a guardare" if there's a saved position ──
+        try:
+            cw_entry = watch_history.get(_cw_key(item))
+            if cw_entry:
+                t_saved = float(cw_entry.get('time_watched', 0))
+                t_total = float(cw_entry.get('total_time', 0) or 1)
+                pct     = int(t_saved / t_total * 100)
+                mins    = int(t_saved // 60)
+                secs    = int(t_saved % 60)
+                btn_label = u'\u25b6  Continua a guardare  \u2013  %d:%02d  (%d%%)' % (mins, secs, pct)
+                self.getControl(DW_BTN_PLAY).setLabel(btn_label)
+        except Exception:
+            pass
 
-        # ── Start trailer in background after short delay ─────────────────
-        if trailer:
-            t = threading.Thread(target=self._start_trailer, args=(trailer,))
-            t.daemon = True
-            t.start()
+        # ── Background media: fanart slideshow for CW items, trailer otherwise ──
+        tmdb_id_tr = str(item.infoLabels.get('tmdb_id') or '').strip()
+        ctype_tr   = 'tv' if getattr(item, 'contentType', '') == 'tvshow' else 'movie'
+        is_cw_item = bool(watch_history.get(_cw_key(item)))
+
+        # Show/hide the "Remove from CW" button via window property
+        try:
+            self.setProperty('show_remove_cw', '1' if is_cw_item else '')
+        except Exception:
+            pass
+
+        if is_cw_item:
+            # CW item: rotate TMDB backdrops every 5 s, no trailer
+            t2 = threading.Thread(
+                target=self._start_fanart_slideshow,
+                args=(tmdb_id_tr, ctype_tr, fanart),
+            )
         else:
-            # Item was not pre-fetched (e.g. beyond per_row limit) → search on-demand
-            tmdb_id_tr = str(item.infoLabels.get('tmdb_id') or '').strip()
-            ctype_tr   = 'tv' if getattr(item, 'contentType', '') == 'tvshow' else 'movie'
+            # Normal item: play trailer
             t2 = threading.Thread(
                 target=self._fetch_and_start_trailer,
-                args=(title, year, tmdb_id_tr, ctype_tr),
+                args=(title, year, tmdb_id_tr, ctype_tr, trailer),
             )
-            t2.daemon = True
-            t2.start()
+        t2.daemon = True
+        t2.start()
 
-    def _fetch_and_start_trailer(self, title, year, tmdb_id, ctype):
-        """On-demand trailer search for items not pre-fetched. Runs in background thread."""
+    def _start_fanart_slideshow(self, tmdb_id, ctype, initial_fanart=''):
+        """
+        For CW items: rotate TMDB backdrop images on DW_BG_FANART every 5 seconds.
+        Fetches up to 6 backdrops from TMDB /images endpoint (no_language filter
+        gives the widest selection). Falls back to initial_fanart if TMDB fails.
+        Runs in a background thread; respects _close_requested.
+        """
+        try:
+            backdrops = []
+            if tmdb_id:
+                try:
+                    from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+                    url   = '%s/%s/%s/images?api_key=%s&include_image_language=null' % (
+                            _tmdb_host, ctype, tmdb_id, _tmdb_api)
+                    data  = _Tmdb.get_json(url)
+                    blist = (data or {}).get('backdrops', [])
+                    for b in blist[:6]:
+                        fp = b.get('file_path') or ''
+                        if fp:
+                            backdrops.append('https://image.tmdb.org/t/p/original' + fp)
+                except Exception as exc:
+                    logger.error('[DetailWindow] fanart slideshow fetch: %s' % str(exc)[:80])
+
+            # If TMDB gave nothing, keep the initial fanart (already set in onInit)
+            if not backdrops:
+                if initial_fanart:
+                    backdrops = [initial_fanart]
+                else:
+                    return   # nothing to show
+
+            # Rotate: show each image for 5 seconds, loop indefinitely
+            idx = 0
+            while not self._close_requested:
+                img = backdrops[idx % len(backdrops)]
+                try:
+                    self.getControl(DW_BG_FANART).setImage(img)
+                except Exception:
+                    break
+                # Sleep in 200 ms chunks so we can react to close quickly
+                for _ in range(25):   # 25 * 200 ms = 5 s
+                    if self._close_requested:
+                        return
+                    xbmc.sleep(200)
+                idx += 1
+        except Exception as exc:
+            logger.error('[DetailWindow] fanart slideshow: %s' % str(exc)[:80])
+
+    def _fetch_and_start_trailer(self, title, year, tmdb_id, ctype, fallback_url=''):
+        """Trailer search: YouTube first (age-restriction filtered), then TMDB, then
+        the pre-existing URL from the channel as last resort. Runs in background thread."""
+        if self._close_requested:
+            return
         try:
             def _make_url(video_id):
                 return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
+            # 1) YouTube search (filters age-restricted results)
             vid = _youtube_search_trailer(title, year)
-            if vid:
-                self._start_trailer(_make_url(vid))
+            trailer_url = _make_url(vid) if vid else None
+
+            # 2) TMDB official videos if YouTube found nothing
+            if not trailer_url and tmdb_id:
+                vid = _tmdb_get_trailer(tmdb_id, ctype)
+                trailer_url = _make_url(vid) if vid else None
+
+            # 3) Pre-existing URL from channel as last resort
+            if not trailer_url and fallback_url:
+                trailer_url = fallback_url
+
+            if trailer_url and not self._close_requested:
+                self._start_trailer(trailer_url)
         except Exception as exc:
             logger.error('[DetailWindow] on-demand trailer: %s' % str(exc)[:100])
 
     def _load_hd_fanart(self, tmdb_id, ctype):
-        """Upgrade background to TMDB /original/ backdrop for maximum resolution."""
+        """Upgrade background to TMDB /original/ backdrop for maximum resolution.
+        Also updates DW_META1 with number of seasons for TV shows."""
         try:
             from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
             url  = '%s/%s/%s?api_key=%s' % (_tmdb_host, ctype, tmdb_id, _tmdb_api)
@@ -1598,27 +2866,38 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             if path:
                 hq_url = 'https://image.tmdb.org/t/p/original' + path
                 self.getControl(DW_BG_FANART).setImage(hq_url)
+            # For TV shows, prepend seasons count to META1
+            if ctype == 'tv' and data:
+                n_seasons = int((data or {}).get('number_of_seasons') or 0)
+                if n_seasons > 0:
+                    s_lbl = u'%d stagion%s' % (n_seasons, 'e' if n_seasons == 1 else 'i')
+                    try:
+                        current = self.getControl(DW_META1).getLabel()
+                        new_meta1 = (s_lbl + u'  \u2022  ' + current) if current else s_lbl
+                        self.getControl(DW_META1).setLabel(new_meta1)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
     def _start_trailer(self, trailer_url):
         """Delay slightly then fire PlayMedia so the window is fully rendered first."""
-        xbmc.sleep(900)
+        # Check close flag before the initial delay: if user already pressed back, skip entirely
+        if self._close_requested:
+            return
+        # Slice the 900 ms wait into 100 ms chunks so we can bail out early
+        for _ in range(9):
+            xbmc.sleep(100)
+            if self._close_requested:
+                return
         try:
-            # Configure YouTube plugin to auto-select and download Italian subtitles.
-            # kodion.subtitle.languages.num=2 → "preferred language with fallback"
-            # (preferred = youtube.language which is already 'it').
-            # kodion.subtitle.download=true → plugin writes the sub track so Kodi picks it up.
-            # These settings are persistent but harmless — they just set Italian subs globally.
+            # Configure YouTube plugin subtitles / quality (persistent but harmless settings)
             try:
                 yt = xbmcaddon.Addon('plugin.video.youtube')
                 if yt.getSetting('kodion.subtitle.languages.num') != '2':
                     yt.setSetting('kodion.subtitle.languages.num', '2')
                 if yt.getSetting('kodion.subtitle.download') != 'true':
                     yt.setSetting('kodion.subtitle.download', 'true')
-                # Enforce at least 1080p (FHD):
-                # When ISA is active: kodion.mpd.quality.selection 4=1080p, default is already 4
-                # When ISA is off:    kodion.video.quality          4=max (1080p Live/720p cap)
                 try:
                     if yt.getSetting('kodion.video.quality.isa') == 'true':
                         if int(yt.getSetting('kodion.mpd.quality.selection') or '0') < 4:
@@ -1630,21 +2909,36 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     pass
             except Exception:
                 pass
+
+            # Final check before issuing PlayMedia — CRITICAL: prevents PlayMedia
+            # from firing on a window that is already closing/closed (which would
+            # cause OutputPicture timeouts as DXVA tries to write to a destroyed surface)
+            if self._close_requested:
+                return
+
             xbmc.executebuiltin('PlayMedia(%s)' % trailer_url)
             # Wait up to 8 s for the YouTube plugin to start playing
             for _ in range(80):
+                if self._close_requested:
+                    # PlayMedia was issued but window is closing: cancel it immediately
+                    xbmc.executebuiltin('PlayerControl(Stop)')
+                    return
                 xbmc.sleep(100)
                 if self._player.isPlaying():
                     break
-            if self._player.isPlaying():
+            if self._player.isPlaying() and not self._close_requested:
                 # Hide fanart so the videowindow (behind it) becomes visible
                 try:
                     self.getControl(DW_BG_FANART).setVisible(False)
                 except Exception:
                     pass
-                # Wait longer for YouTube plugin to register audio/subtitle tracks
-                xbmc.sleep(5000)
-                self._maybe_set_subtitles()
+                # Wait for YouTube plugin to register audio/subtitle tracks
+                for _ in range(50):
+                    if self._close_requested:
+                        return
+                    xbmc.sleep(100)
+                if not self._close_requested:
+                    self._maybe_set_subtitles()
         except Exception as exc:
             logger.error('[DetailWindow] trailer start: %s' % str(exc))
 
@@ -1691,49 +2985,175 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             pass
 
-    def _stop_player(self):
-        """Stop any active playback (trailer) and wait until fully stopped."""
+    def _show_audio_sub_dialog(self):
+        """
+        Show a two-step dialog to let the user pick preferred audio language and
+        subtitle language for this content.  The choices are stored in addon settings
+        keyed by TMDB ID (or normalised title) so they persist across sessions.
+        For TV series the same preference is applied to every episode automatically
+        in _wait_and_restore() when the player announces a new audio stream.
+        """
+        item = self._item
+        if not item:
+            return
         try:
+            addon = xbmcaddon.Addon()
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            ct = getattr(item, 'contentType', '') or ''
+            key = tmdb_id or re.sub(r'[^a-z0-9]', '',
+                                    (item.fulltitle or item.show or '').lower())
+            if not key:
+                return
+
+            pref_key_audio = 'audiolang_%s' % key
+            pref_key_sub   = 'sublang_%s'   % key
+
+            # ── Audio language ──
+            audio_options = [
+                u'Italiano',
+                u'Inglese',
+                u'Originale (non cambiare)',
+            ]
+            cur_audio = addon.getSetting(pref_key_audio) or ''
+            cur_audio_idx = 0
+            for _i, _o in enumerate(audio_options):
+                if _o == cur_audio:
+                    cur_audio_idx = _i
+                    break
+            audio_idx = xbmcgui.Dialog().select(
+                u'Lingua audio preferita', audio_options,
+                preselect=cur_audio_idx)
+            if audio_idx < 0:
+                return   # user cancelled
+            addon.setSetting(pref_key_audio, audio_options[audio_idx])
+
+            # ── Subtitle language ──
+            sub_options = [
+                u'Nessun sottotitolo',
+                u'Italiano',
+                u'Inglese',
+                u'Come audio (stessa lingua)',
+            ]
+            cur_sub = addon.getSetting(pref_key_sub) or ''
+            cur_sub_idx = 0
+            for _i, _o in enumerate(sub_options):
+                if _o == cur_sub:
+                    cur_sub_idx = _i
+                    break
+            sub_idx = xbmcgui.Dialog().select(
+                u'Sottotitoli preferiti', sub_options,
+                preselect=cur_sub_idx)
+            if sub_idx < 0:
+                return   # user cancelled
+            addon.setSetting(pref_key_sub, sub_options[sub_idx])
+
+            xbmcgui.Dialog().notification(
+                u'PrippiStream',
+                u'Preferenze audio/sub salvate',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+        except Exception as exc:
+            logger.error('[DetailWindow] _show_audio_sub_dialog: %s' % str(exc))
+
+    def _remove_from_cw(self):
+        """Remove the current item from Continue Watching and close the detail card."""
+        item = self._item
+        if not item:
+            return
+        try:
+            key = _cw_key(item)
+            entry = watch_history.get(key)
+            if entry:
+                # Use the actual played URL (vixcloud CDN) saved during playback.
+                # Falling back to item.url or item_url won't work because Kodi
+                # stores the vixcloud ID, not the SC episode_id.
+                played_url = entry.get('played_url', '')
+                _clear_kodi_resume(played_url)
+                watch_history.remove(key)
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream',
+                    u'Rimosso da "Continua a guardare"',
+                    xbmcgui.NOTIFICATION_INFO, 2000)
+            self._initiate_close(result='removed_cw')
+        except Exception as exc:
+            logger.error('[DetailWindow] _remove_from_cw: %s' % str(exc))
+
+    def _initiate_close(self, result=None):
+        """
+        The ONLY way to close DetailWindow. Safe to call from any thread or GUI callback.
+
+        Sets _close_requested immediately (so _start_trailer bails out), then spawns
+        a single daemon thread that waits for the player to fully stop BEFORE calling
+        self.close(). This prevents the OutputPicture-timeout crash that occurs when
+        the window's videowindow D3D11 surface is destroyed while DXVA is still
+        pushing frames into it.
+        """
+        if self._close_requested:
+            return   # Already closing — ignore duplicate calls
+        if result is not None:
+            self._result = result
+        self._close_requested = True
+        threading.Thread(target=self._wait_stop_then_close, daemon=True).start()
+
+    def _wait_stop_then_close(self):
+        """
+        Background daemon thread:
+          1. Cancel any pending/active playback
+          2. Poll until player is confirmed stopped (max 3 s)
+          3. Wait for DXVA render buffers to flush (400 ms)
+          4. Restore fanart overlay
+          5. Close the window
+        """
+        try:
+            # Step 1: cancel playback via both APIs to cover every state:
+            # - PlayerControl(Stop) cancels a queued/starting PlayMedia
+            # - player.stop() signals an already-playing stream to stop
+            xbmc.executebuiltin('PlayerControl(Stop)')
+            xbmc.sleep(150)   # brief yield so the stop message is processed
             if self._player.isPlaying():
                 self._player.stop()
-                # Poll until isPlaying() returns False (up to 2s)
-                for _ in range(20):
-                    xbmc.sleep(100)
-                    if not self._player.isPlaying():
-                        break
-                # Restore fanart overlay (covers videowindow black rectangle when idle)
-                try:
-                    self.getControl(DW_BG_FANART).setVisible(True)
-                except Exception:
-                    pass
-                # IMPORTANT: isPlaying()==False does NOT mean DXVA GPU buffers are
-                # released — that happens asynchronously in the video decoder thread.
-                # Without this extra wait, closing the window immediately after triggers
-                # a D3D11 race condition between window repaint and DXVA buffer release.
-                xbmc.sleep(600)
+
+            # Step 2: wait until isPlaying() is False (max 3 s)
+            for _ in range(30):
+                xbmc.sleep(100)
+                if not self._player.isPlaying():
+                    break
+
+            # Step 3: DXVA buffer flush.
+            # isPlaying()==False means CVideoPlayer acknowledged the stop, but the
+            # CVideoPlayerVideo decoder thread may still hold GPU buffer locks for
+            # one more OutputPicture cycle. Without this wait the window teardown
+            # races with the decoder → OutputPicture timeout → crash.
+            xbmc.sleep(400)
+
+            # Step 4: restore fanart overlay so there's no black flash
+            try:
+                self.getControl(DW_BG_FANART).setVisible(True)
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+        # Step 5: close the window (safe to call from any thread in Kodi)
+        try:
+            self.close()
         except Exception:
             pass
 
     def onAction(self, action):
         aid = action.getId()
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
-            self._stop_player()
-            self.close()
+            self._initiate_close()
 
     def onClick(self, control_id):
         if control_id == DW_BTN_CLOSE:
-            self._stop_player()
-            self.close()
-
+            self._initiate_close()
         elif control_id == DW_BTN_PLAY:
-            self._result = 'play'
-            self._stop_player()
-            self.close()
-
-        elif control_id == DW_BTN_LIST:
-            self._result = 'list'
-            self._stop_player()
-            self.close()
+            self._initiate_close(result='play')
+        elif control_id == DW_BTN_AUDIO_SUB:
+            self._show_audio_sub_dialog()
+        elif control_id == DW_BTN_REMOVE_CW:
+            self._remove_from_cw()
 
 
 def open_netflix_home():

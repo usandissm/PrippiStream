@@ -1,0 +1,109 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<window>
+    <allowoverlays>false</allowoverlays>
+    <animation type="WindowOpen" reversible="false">
+        <effect type="slide" start="0,200" end="0,0" center="640,225" delay="160" tween="cubic" time="200" />
+        <effect type="fade" delay="160" end="100" time="240" />
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="slide" start="0,0" end="0,200" center="640,225" easing="in" tween="cubic" time="200" />
+        <effect type="fade" start="100" end="0" time="240" />
+    </animation>
+    <controls>
+        <control type="group">
+            <description>Container</description>
+            <left>60</left>
+            <top>90</top>
+            <width>1800</width>
+            <height>900</height>
+            <control type="image">
+                <description>Background</description>
+                <width>100%</width>
+                <height>100%</height>
+                <texture colordiffuse="FF232323">white.png</texture>
+            </control>
+            <control type="image">
+                <description>Poster</description>
+                <top>0</top>
+                <left>0</left>
+                <height>900</height>
+                <width>600</width>
+                <texture>$INFO[Container(2).ListItem.Property(thumb)]</texture>
+            </control>
+            <control type="textbox" id="1">
+                <description>Heading</description>
+                <top>0</top>
+                <left>690</left>
+                <height>120</height>
+                <width>1020</width>
+                <font>font13</font>
+                <textcolor>FFFFFFFF</textcolor>
+                <align>left</align>
+                <aligny>center</aligny>
+                <label></label>
+            </control>
+            <control type="group">
+                <left>660</left>
+                <top>120</top>
+                <width>1080</width>
+                <height>720</height>
+                <control type="list" id="2">
+					<description>List</description>
+					<left>0</left>
+					<top>0</top>
+					<width>1080</width>
+					<height>795</height>
+					<onup>100</onup>
+                    <onright>4</onright>
+					<orientation>vertical</orientation>
+					<scrolltime>200</scrolltime>
+					<itemlayout height="90" width="1080">
+						<control type="textbox">
+							<description>Selected Item</description>
+							<left>30</left>
+							<top>0</top>
+							<width>1020</width>
+							<height>90</height>
+							<font>font13</font>
+							<textcolor>FFFFFFFF</textcolor>
+							<label>[B]$INFO[ListItem.Property(title)][/B] $ADDON[plugin.video.prippistream 30140]: $INFO[ListItem.Property(seasons)] $ADDON[plugin.video.prippistream 70362]: $INFO[ListItem.Property(episodes)]</label>
+							<align>left</align>
+							<aligny>center</aligny>
+						</control>
+					</itemlayout>
+					<focusedlayout height="300" width="1080">
+						<control type="image">
+							<top>2</top>
+							<width>100%</width>
+							<height>100%</height>
+							<texture colordiffuse="FF0081C2">white.png</texture>
+						</control>
+						<control type="textbox">
+							<description>Selected Item</description>
+							<left>30</left>
+							<top>30</top>
+							<width>1020</width>
+							<height>240</height>
+							<font>font13</font>
+							<textcolor>FFFFFFFF</textcolor>
+							<label>[B]$INFO[ListItem.Property(title)][/B] $ADDON[plugin.video.prippistream 30140]: $INFO[ListItem.Property(seasons)] $ADDON[plugin.video.prippistream 70362]: $INFO[ListItem.Property(episodes)]$INFO[ListItem.Property(description)]</label>
+                            <autoscroll time="3000" delay="3000" repeat="3000">True</autoscroll>
+							<align>left</align>
+							<aligny>center</aligny>
+						</control>
+					</focusedlayout>
+				</control>
+            </control>
+            <control type="button" id="100">
+                    <description>Close Button</description>
+                    <right>30</right>
+                    <top>30</top>
+                    <width>60</width>
+                    <height>60</height>
+                    <texturefocus colordiffuse="FFFFFFFF">close.png</texturefocus>
+                    <texturenofocus colordiffuse="55FFFFFF">close.png</texturenofocus>
+                    <ondown>2</ondown>
+                </control>
+        </control>
+    </controls>
+</window>

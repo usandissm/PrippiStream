@@ -1,0 +1,167 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<window>
+    <depth>0.52</depth>
+    <coordinates>
+        <left>0</left>
+        <top>0</top>
+    </coordinates>
+    <controls>
+        <!-- CLOSE BUTTON / BACKGROUND -->
+        <control type="button">
+            <left>0</left>
+            <top>0</top>
+            <width>100%</width>
+            <height>100%</height>
+            <texturefocus colordiffuse="FF232323">white.png</texturefocus>
+            <texturenofocus colordiffuse="FF232323">white.png</texturenofocus>
+            <animation effect="fade" time="200">WindowOpen</animation>
+            <animation effect="fade" time="200">WindowClose</animation>
+            <onclick>Action(close)</onclick>
+        </control>
+        <!-- GROUP CONTROLS -->
+        <control type="group">
+            <left>0</left>
+            <top>0</top>
+            <animation type="WindowOpen" reversible="false">
+                <effect type="slide" start="0,100" end="0,0" delay="160" time="160" />
+                <effect type="fade" delay="160" end="100" time="100" />
+            </animation>
+            <animation type="WindowClose" reversible="false">
+                <effect type="slide" start="0,0" end="0,100" delay="160" time="160" />
+                <effect type="fade" delay="160" start="100" end="0" time="100" />
+            </animation>
+
+            <!-- BACKGROUND -->
+            <control type="image" id='30000'>
+                <width>1920</width>
+                <height>1080</height>
+                <texture colordiffuse="FF555555"/>
+            </control>
+            <!-- LOADING -->
+			<control type="image" id='30011'>
+				<top>532</top>
+				<left>735</left>
+				<width>450</width>
+				<height>15</height>
+				<texture>white.png</texture>
+				<animation effect="zoom" pulse ="true" center="auto" start="0,100" end="100,100" time="1000" condition="Control.IsVisible(30011)">Conditional</animation>
+			</control>
+            <!-- TITLE -->
+            <control type="textbox" id='30001'>
+                <left>60</left>
+                <top>75</top>
+                <width>1500</width>
+                <height>45</height>
+                <font>font13</font>
+                <textcolor>FFFFFFFF</textcolor>
+                <shadowcolor>00000000</shadowcolor>
+                <label>[UPPERCASE]$ADDON[plugin.video.prippistream 70821][/UPPERCASE]</label>
+                <align>left</align>
+                <aligny>center</aligny>
+            </control>
+
+            <!-- SEARCH ITEM -->
+            <control type="fixedlist" id="30500">
+                <bottom>60</bottom>
+                <width>1920</width>
+                <height>855</height>
+                <onup>30012</onup>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">300</scrolltime>
+                <itemlayout height="855" width="270">
+                    <!-- Poster -->
+                    <control type="image">
+                        <top>450</top>
+                        <left>0</left>
+                        <width>270</width>
+                        <height>405</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <bordersize>10</bordersize>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="855" width="570">
+                    <!-- Title -->
+                    <control type="textbox">
+                        <left>600</left>
+                        <top>15</top>
+                        <width>1200</width>
+                        <height>45</height>
+                        <font>font13</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>00000000</shadowcolor>
+                        <label>[B]$INFO[ListItem.Label] [COLOR FFAAAAAA]$INFO[ListItem.Property(year)][/COLOR][/B] </label>
+                        <align>left</align>
+                        <aligny>center</aligny>
+                    </control>
+                    <!-- Tagline -->
+                    <control type="textbox">
+                        <left>600</left>
+                        <top>75</top>
+                        <width>1200</width>
+                        <height>45</height>
+                        <font>font13</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>00000000</shadowcolor>
+                        <label>[B]$INFO[ListItem.Property(channel)][/B]</label>
+                        <align>left</align>
+                    </control>
+                    <!-- Plot -->
+                    <control type="textbox">
+                        <left>600</left>
+                        <top>135</top>
+                        <width>1200</width>
+                        <height>255</height>
+                        <font>font13</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>00000000</shadowcolor>
+                        <label>$INFO[ListItem.Property(plot)]</label>
+                        <align>left</align>
+                    </control>
+                    <!-- Poster -->
+                    <control type="image">
+                        <top>0</top>
+                        <left>0</left>
+                        <width>570</width>
+                        <height>855</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <bordersize>10</bordersize>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="list" id="30012">
+                <top>38</top>
+                <right>38</right>
+                <height>75</height>
+                <width>210</width>
+                <align>right</align>
+                <ondown>30500</ondown>
+                <orientation>horizontal</orientation>
+                <itemlayout height="75" width="105">
+                    <control type="image">
+                        <width>75</width>
+                        <height>75</height>
+                        <texture colordiffuse="AAFFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="75" width="105">
+                    <control type="image">
+                        <width>75</width>
+                        <height>75</height>
+                        <texture colordiffuse="FFFFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <visible>Control.HasFocus(30012)</visible>
+                    </control>
+                    <control type="image">
+                        <width>75</width>
+                        <height>75</height>
+                        <texture colordiffuse="AAFFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <visible>!Control.HasFocus(30012)</visible>
+                    </control>
+                </focusedlayout>
+            </control>
+
+        </control>
+        <!-- GROUP CONTROLS END -->
+    </controls>
+</window>

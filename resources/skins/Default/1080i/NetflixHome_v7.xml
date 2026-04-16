@@ -1,0 +1,1195 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  StreamingUnity Home 1280x720 v7
+  TV-first adaptation of streamingunity.biz for Kodi.
+  Hero 276px | Divider 3px | Rows 441px
+  Keeps grouplist + wraplist navigation and IDs 2000..2110
+-->
+<window>
+    <defaultcontrol>2000</defaultcontrol>
+
+    <animation type="WindowOpen" reversible="false">
+        <effect type="fade" start="0" end="100" time="260" tween="sine"/>
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="fade" start="100" end="0" time="170" tween="sine"/>
+    </animation>
+
+    <controls>
+
+        <!-- Base -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1920</width><height>1080</height>
+            <texture colordiffuse="FF0D0D0D">white.png</texture>
+        </control>
+
+        <!-- Hero fanart -->
+        <control type="image" id="100">
+            <left>0</left><top>0</top>
+            <width>1920</width><height>414</height>
+            <texture colordiffuse="00FFFFFF">white.png</texture>
+            <aspectratio>scale</aspectratio>
+        </control>
+
+        <!-- Hero overlays -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1920</width><height>414</height>
+            <texture colordiffuse="66000000">white.png</texture>
+        </control>
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>930</width><height>414</height>
+            <texture colordiffuse="F00D0D0D">white.png</texture>
+        </control>
+        <control type="image">
+            <left>930</left><top>0</top>
+            <width>210</width><height>414</height>
+            <texture colordiffuse="900D0D0D">white.png</texture>
+        </control>
+        <control type="image">
+            <left>1140</left><top>0</top>
+            <width>240</width><height>414</height>
+            <texture colordiffuse="480D0D0D">white.png</texture>
+        </control>
+        <control type="image">
+            <left>0</left><top>348</top>
+            <width>1920</width><height>66</height>
+            <texture colordiffuse="FF0D0D0D">white.png</texture>
+        </control>
+
+        <!-- Top bar -->
+        <control type="image">
+            <left>0</left><top>0</top>
+            <width>1920</width><height>78</height>
+            <texture colordiffuse="C8000000">white.png</texture>
+        </control>
+
+        <!-- Brand -->
+        <control type="label">
+            <left>42</left><top>21</top>
+            <width>285</width><height>36</height>
+            <font>font14</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        </control>
+
+        <!-- Close button -->
+        <control type="button" id="108">
+            <left>1785</left><top>18</top>
+            <width>93</width><height>42</height>
+            <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
+            <label>[B]✕ EXIT[/B]</label>
+            <font>font10</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <ondown>2000</ondown>
+        </control>
+
+        <!-- Hero content -->
+        <control type="label" id="102">
+            <left>48</left><top>93</top>
+            <width>960</width><height>27</height>
+            <font>font10</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label></label>
+        </control>
+
+        <control type="label" id="103">
+            <left>48</left><top>123</top>
+            <width>1050</width><height>66</height>
+            <font>font16</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+        </control>
+
+        <control type="label" id="104">
+            <left>48</left><top>195</top>
+            <width>1020</width><height>27</height>
+            <font>font12</font>
+            <textcolor>FF22C55E</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label></label>
+        </control>
+
+        <control type="label" id="105">
+            <left>48</left><top>228</top>
+            <width>1080</width><height>84</height>
+            <font>font12</font>
+            <textcolor>FFB8B8B8</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <label></label>
+            <wrapwidth>720</wrapwidth>
+        </control>
+
+        <!-- Hero CTA row -->
+        <control type="image">
+            <left>48</left><top>321</top>
+            <width>252</width><height>48</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+        <control type="label">
+            <left>48</left><top>324</top>
+            <width>252</width><height>42</height>
+            <font>font12</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>FF000000</shadowcolor>
+            <align>center</align>
+            <label>[B]&#9654;  PLAY[/B]</label>
+        </control>
+
+        <control type="image">
+            <left>318</left><top>321</top>
+            <width>222</width><height>48</height>
+            <texture colordiffuse="38FFFFFF">white.png</texture>
+        </control>
+        <control type="label">
+            <left>318</left><top>324</top>
+            <width>222</width><height>42</height>
+            <font>font12</font>
+            <textcolor>FFEBEBEB</textcolor>
+            <align>center</align>
+            <label>[B]MORE INFO[/B]</label>
+        </control>
+
+        <control type="image">
+            <left>558</left><top>321</top>
+            <width>198</width><height>48</height>
+            <texture colordiffuse="16000000">white.png</texture>
+        </control>
+        <control type="image">
+            <left>558</left><top>321</top>
+            <width>198</width><height>2</height>
+            <texture colordiffuse="30FFFFFF">white.png</texture>
+        </control>
+        <control type="label">
+            <left>558</left><top>324</top>
+            <width>198</width><height>42</height>
+            <font>font12</font>
+            <textcolor>FFD8D8D8</textcolor>
+            <align>center</align>
+            <label>[B]MY LIST[/B]</label>
+        </control>
+
+        <!-- Divider -->
+        <control type="image">
+            <left>0</left><top>414</top>
+            <width>1920</width><height>2</height>
+            <texture colordiffuse="FF1F1F1F">white.png</texture>
+        </control>
+        <control type="image">
+            <left>0</left><top>416</top>
+            <width>1920</width><height>3</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+
+        <!-- Loading overlay -->
+        <control type="group" id="200">
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>1080</height>
+                <texture colordiffuse="EE090909">white.png</texture>
+            </control>
+            <control type="image">
+                <left>639</left><top>429</top>
+                <width>642</width><height>183</height>
+                <texture colordiffuse="FF161616">white.png</texture>
+            </control>
+            <control type="image">
+                <left>639</left><top>429</top>
+                <width>642</width><height>6</height>
+                <texture colordiffuse="FFE50914">white.png</texture>
+            </control>
+            <control type="label">
+                <left>639</left><top>459</top>
+                <width>642</width><height>36</height>
+                <font>font14</font>
+                <textcolor>FFFFFFFF</textcolor>
+                <align>center</align>
+                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+            </control>
+            <control type="label">
+                <left>639</left><top>507</top>
+                <width>642</width><height>30</height>
+                <font>font12</font>
+                <textcolor>FF7E7E7E</textcolor>
+                <align>center</align>
+                <label>Loading homepage...</label>
+                <animation effect="fade" start="18" end="100" time="900" tween="sine" loop="true" reversible="true">Visible</animation>
+            </control>
+            <control type="image">
+                <left>687</left><top>564</top>
+                <width>546</width><height>3</height>
+                <texture colordiffuse="FF252525">white.png</texture>
+            </control>
+            <control type="image">
+                <left>687</left><top>564</top>
+                <width>246</width><height>3</height>
+                <texture colordiffuse="FFE50914">white.png</texture>
+                <animation effect="fade" start="18" end="86" time="560" tween="cubic" loop="true" reversible="true">Visible</animation>
+            </control>
+        </control>
+
+        <!-- Rows area -->
+        <control type="grouplist" id="9000">
+            <left>0</left><top>418</top>
+            <width>1920</width><height>662</height>
+            <orientation>vertical</orientation>
+            <defaultcontrol>2000</defaultcontrol>
+            <scrolltime tween="cubic" easing="out">240</scrolltime>
+
+            <!-- ROW 00  id=2000 -->
+            <control type="wraplist" id="2000">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 01  id=2010 -->
+            <control type="wraplist" id="2010">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 02  id=2020 -->
+            <control type="wraplist" id="2020">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 03  id=2030 -->
+            <control type="wraplist" id="2030">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 04  id=2040 -->
+            <control type="wraplist" id="2040">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 05  id=2050 -->
+            <control type="wraplist" id="2050">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 06  id=2060 -->
+            <control type="wraplist" id="2060">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 07  id=2070 -->
+            <control type="wraplist" id="2070">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 08  id=2080 -->
+            <control type="wraplist" id="2080">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 09  id=2090 -->
+            <control type="wraplist" id="2090">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 10  id=2100 -->
+            <control type="wraplist" id="2100">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+            <!-- ROW 11  id=2110 -->
+            <control type="wraplist" id="2110">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>288</height>
+                <viewtype>wrap</viewtype>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">210</scrolltime>
+                <itemlayout height="288" width="222">
+                    <control type="image">
+                        <left>12</left><top>6</top>
+                        <width>198</width><height>258</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>8</top>
+                        <width>195</width><height>255</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>9</left><top>266</top>
+                        <width>204</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="288" width="222">
+                    <control type="image">
+                        <left>2</left><top>2</top>
+                        <width>219</width><height>282</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>279</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>3</left><top>0</top>
+                        <width>216</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>210</width><height>258</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>264</top>
+                        <width>210</width><height>24</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>12</height>
+                <texture colordiffuse="FF0D0D0D">white.png</texture>
+            </control>
+        </control>
+
+        <!-- Side arrows (mouse only) -->
+        <control type="button" id="5000">
+            <left>0</left><top>418</top>
+            <width>51</width><height>662</height>
+            <texturefocus colordiffuse="74000000">white.png</texturefocus>
+            <texturenofocus colordiffuse="00000000">white.png</texturenofocus>
+            <label>[B]‹[/B]</label>
+            <font>font14</font>
+            <textcolor>BBFFFFFF</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onup>108</onup>
+            <ondown>9000</ondown>
+            <onleft>9000</onleft>
+            <onright>9000</onright>
+        </control>
+
+        <control type="button" id="5001">
+            <left>1869</left><top>418</top>
+            <width>51</width><height>662</height>
+            <texturefocus colordiffuse="74000000">white.png</texturefocus>
+            <texturenofocus colordiffuse="00000000">white.png</texturenofocus>
+            <label>[B]›[/B]</label>
+            <font>font14</font>
+            <textcolor>BBFFFFFF</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onup>108</onup>
+            <ondown>9000</ondown>
+            <onleft>9000</onleft>
+            <onright>9000</onright>
+        </control>
+
+    </controls>
+</window>
