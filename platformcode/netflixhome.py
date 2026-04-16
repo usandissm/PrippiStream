@@ -73,6 +73,33 @@ _enrich_cache = {}
 # Never expires — trailer links are stable YouTube IDs.
 _trailer_cache = {}
 
+# Shutdown event: set by open_netflix_home() the moment the user closes the home screen
+# AND by _AppShutdownMonitor.onAbortRequested() the instant Kodi sends the global abort
+# signal to our invoker.  ALL background network threads check this flag before starting
+# a new HTTP request so they exit within the current request's socket timeout (≤3 s).
+# Using a PUSH callback (onAbortRequested) instead of relying solely on polling guarantees
+# the flag is set the moment Kodi signals our CPythonInvoker — regardless of whether
+# open_netflix_home()'s while loop has had a chance to detect it yet.
+_shutdown_event = threading.Event()
+
+
+class _AppShutdownMonitor(xbmc.Monitor):
+    """Receives Kodi's abort signal immediately via callback and sets _shutdown_event.
+
+    Kodi processes invokers sequentially during shutdown: our invoker may not receive
+    the signal for several seconds after "Stopping the application".  When it finally
+    does, onAbortRequested() fires instantly — before the polling loop in
+    open_netflix_home() even gets a chance to check.  This eliminates the window where
+    background trailer threads run unchecked after the user has closed Kodi.
+    """
+
+    def onAbortRequested(self):
+        _shutdown_event.set()
+
+
+# Singleton registered at import time so it is always listening.
+_app_monitor = _AppShutdownMonitor()
+
 # SC rows cache: populated on first home load, reused on subsequent opens without refetch.
 _sc_rows_cache = None
 
@@ -296,13 +323,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         If not yet visible, items are queued in rows_data for lazy population.
         """
         try:
+            _monitor_bg = xbmc.Monitor()
+
             # Step 1: collect which content types are needed across all SC rows
             needed_types = set()
             for label, _ in list(self.rows_data):
                 ct = _row_content_type(label)
                 if ct:
                     needed_types.add(ct)
-            if not needed_types or not self._alive:
+            if not needed_types or not self._alive or _monitor_bg.abortRequested():
                 return
 
             # Step 2: pre-fetch all needed types concurrently
@@ -312,15 +341,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 t.daemon = True
                 fetch_threads.append(t)
                 t.start()
+            # Join each fetch thread, but bail out immediately if Kodi is closing.
+            # threading.join() uses a C-level semaphore wait that ignores Python's
+            # interrupt flag — so we must check abort BEFORE each join, not during.
             for t in fetch_threads:
+                if not self._alive or _monitor_bg.abortRequested():
+                    return
                 t.join(timeout=_EXTRA_TIMEOUT + 5)
 
-            if not self._alive:
+            if not self._alive or _monitor_bg.abortRequested():
                 return
 
             # Step 3: enrich each SC row using the now-cached pools
             for i in range(len(self.rows_data)):
-                if not self._alive:
+                if not self._alive or _monitor_bg.abortRequested():
                     return
                 with self._rows_lock:
                     if i >= len(self.rows_data):
@@ -369,8 +403,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
             # Final step: fetch trailers for first 20 visible items.
             # Runs AFTER all enrichment threads have completed, so thread count is low.
-            # Uses 3 workers max and a lightweight /videos endpoint — safe for Kodi.
-            if self._alive:
+            # Uses 2 workers max and a lightweight /videos endpoint — safe for Kodi.
+            if self._alive and not _monitor_bg.abortRequested():
                 _fetch_trailers_small(list(self.rows_data))
 
         except Exception as exc:
@@ -1980,6 +2014,8 @@ def _get_data(url):
     import html as _html
     from core import httptools
 
+    if _shutdown_event.is_set():
+        return {}
     try:
         resp = httptools.downloadpage(url, ignore_response_code=True)
         raw_html = resp.data if resp else ''
@@ -2040,7 +2076,7 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
     Returns YouTube video_id string, or None.
     Prefers Italian; falls back to English.
     """
-    if not tmdb_id:
+    if not tmdb_id or _shutdown_event.is_set():
         return None
     try:
         from core import httptools
@@ -2051,9 +2087,11 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
         media_type = 'tv' if str(ctype) == 'tv' else 'movie'
 
         def _fetch(lang):
+            if _shutdown_event.is_set():
+                return []
             url = '{}/{}/{}/videos?api_key={}&language={}'.format(
                 _TMDB_HOST, media_type, tmdb_id, _TMDB_API, lang)
-            resp = httptools.downloadpage(url, timeout=8, ignore_response_code=True)
+            resp = httptools.downloadpage(url, timeout=3, ignore_response_code=True)
             if not resp.success:
                 return []
             return _json.loads(resp.data or '{}').get('results', [])
@@ -2090,6 +2128,10 @@ def _youtube_search_trailer(title, year=''):
             from urllib.parse import quote_plus    # Py3 (Kodi 19+)
 
         def _yt_search(query):
+            # Exit immediately if Kodi is shutting down — prevents blocking
+            # the CPythonInvoker for the full socket-timeout duration.
+            if _shutdown_event.is_set():
+                return None
             body = _json.dumps({
                 'query': query,
                 'context': {
@@ -2110,7 +2152,7 @@ def _youtube_search_trailer(title, year=''):
                     'Accept-Language': 'it-IT,it;q=0.9',
                 },
                 ignore_response_code=True,
-                timeout=10
+                timeout=3   # short timeout so threads exit within Kodi's 5-s kill window
             )
             if not resp.success:
                 return None
@@ -2190,7 +2232,7 @@ def _youtube_search_trailer(title, year=''):
         return None
 
 
-def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
+def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
     """
     Fetch trailers via YouTube search (youtubei internal API).
     Results are cached in the module-level _trailer_cache dict so that
@@ -2240,6 +2282,10 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
 
     def _one(tid):
         try:
+            # Bail out immediately if Kodi is shutting down — no need to
+            # fetch trailers when the window is being closed.
+            if _shutdown_event.is_set():
+                return
             it_obj  = seen[tid]
             title   = it_obj.fulltitle or it_obj.show or it_obj.contentSerieName or ''
             year    = str(it_obj.infoLabels.get('year') or '')
@@ -2265,10 +2311,15 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
     threads = [threading.Thread(target=_one, args=(tid,), daemon=True)
                for tid in list(seen.keys())]
     # Throttle: start 2 at a time to avoid flooding YouTube
+    _abort_monitor = xbmc.Monitor()
     active = []
     pending = list(threads)
     deadline = _time.time() + 30
     while (pending or active) and _time.time() < deadline:
+        # Exit immediately if Kodi is shutting down — prevents this loop from
+        # blocking the CPythonInvoker past Kodi's 5-second kill timeout.
+        if _abort_monitor.abortRequested() or _shutdown_event.is_set():
+            return
         # Refill active pool up to 2
         while pending and len(active) < 2:
             t = pending.pop(0)
@@ -2276,11 +2327,16 @@ def _fetch_trailers_small(rows_snapshot, per_row=15, max_total=60):
             active.append(t)
         active = [t for t in active if t.is_alive()]
         if active:
-            xbmc.sleep(150)
+            # Use Event.wait() instead of xbmc.sleep() so we wake IMMEDIATELY when
+            # _shutdown_event.set() is called (e.g. from onAbortRequested), rather
+            # than blocking the full 150 ms in a Kodi API call that may no longer be
+            # safe after Kodi's C++ objects start tearing down.
+            _shutdown_event.wait(timeout=0.15)
     # Wait briefly for any still-running threads (up to remaining deadline)
     remaining = max(0.1, deadline - _time.time())
     for t in threads:
-        t.join(timeout=min(remaining, 1.0))
+        if t.is_alive():
+            t.join(timeout=min(remaining, 1.0))
 
     # Store results in module cache and apply to items
     for tid, val in results.items():
@@ -2370,7 +2426,10 @@ def _fetch_enrich_items(ctype):
         t.daemon = True
         threads.append(t)
         t.start()
+    _mon_enr = xbmc.Monitor()
     for t in threads:
+        if _mon_enr.abortRequested() or _shutdown_event.is_set():
+            break
         t.join(timeout=_EXTRA_TIMEOUT)
 
     if all_items:
@@ -2516,7 +2575,10 @@ def _fetch_rows():
                     t.daemon = True
                     threads.append(t)
                     t.start()
+                _mon_gr = xbmc.Monitor()
                 for t in threads:
+                    if _mon_gr.abortRequested() or _shutdown_event.is_set():
+                        break
                     t.join(timeout=12)
                 rows.extend(genre_results[:remaining])
             except Exception as exc:
@@ -3158,9 +3220,17 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
 
 def open_netflix_home():
     """Public entry point — called from launcher.py."""
+    _shutdown_event.clear()   # reset shutdown flag for this session
     win = NetflixHomeWindow('NetflixHome.xml', config.get_runtime_path())
     win.show()
     monitor = xbmc.Monitor()
     while not monitor.abortRequested() and win._alive:
         monitor.waitForAbort(0.5)
+    # Signal all background threads to stop BEFORE destroying the window.
+    # _shutdown_event tells every BG network thread not to issue new HTTP requests.
+    # The currently-in-flight request will finish within its 3-second socket timeout,
+    # then the thread checks the flag and returns — all within Kodi's 5-second window.
+    win._alive = False
+    _shutdown_event.set()     # unblocks all BG network threads immediately
+    xbmc.sleep(300)   # brief pause so threads notice _alive=False / _shutdown_event
     del win
