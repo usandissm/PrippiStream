@@ -24,6 +24,7 @@ out = os.path.join(docs_dir, f'{addon_id}-{version}.zip')
 
 exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.vscode',
                  'build', 'release.ps1',
+                 '.gitignore', '.gitattributes', '.gitmodules',
                  '_test_images.py', '_test_sc.py', '_test_sc2.py',
                  '_write_xml.py', '_write_xml.py.bak', '_write_xml2.py', '_write_xml2_v6.py',
                  '_patch_xml_gen.py', '_fix_wraplist_bars.py', '_patch_upnext.py',
@@ -56,3 +57,21 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
                 zf.write(filepath, arcname)
 
 print(f'ZIP addon creato: {out}')
+
+# Rigenera index.html nella cartella docs/plugin.video.prippistream
+index_sub = f'''<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+ <head>
+  <title>Index of /plugin.video.prippistream</title>
+ </head>
+ <body>
+<h1>Index of /plugin.video.prippistream</h1>
+<pre>      <a href="?C=N;O=D">Name</a>                                        <a href="?C=M;O=A">Last modified</a>      <a href="?C=S;O=A">Size</a>  <a href="?C=D;O=A">Description</a><hr>      <a href="../">Parent Directory</a>
+      <a href="{addon_id}-{version}.zip">{addon_id}-{version}.zip</a>
+      <a href="icon.png">icon.png</a>
+      <a href="fanart.jpg">fanart.jpg</a>
+<hr></pre>
+</body></html>'''
+with open(os.path.join(docs_dir, 'index.html'), 'w', encoding='utf-8') as f:
+    f.write(index_sub)
+print('index.html aggiornato in docs/plugin.video.prippistream/')
