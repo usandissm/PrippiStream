@@ -19,3 +19,6 @@ tools/inspect_kodi_db2.py
 # build artifacts / distribution ZIPs (generated on demand, not tracked)
 build/
 *.zip
+# ma i ZIP in docs/ devono essere su GitHub Pages per Kodi
+!docs/**/*.zip
+!docs/*.zip
