@@ -19,18 +19,30 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Update domains
+      - name: Install Python dependencies
+        run: pip install requests --quiet
+
+      - name: Update channel domains
         run: python tools/updateDomains.py
 
-      - name: Rigenerai zip e addons.xml
+      - name: Bump patch version
+        id: version
+        run: |
+          NEW_VER=$(python tools/bump_version.py)
+          echo "version=$NEW_VER" >> $GITHUB_OUTPUT
+          echo "Nuova versione: $NEW_VER"
+
+      - name: Rebuild addon ZIP, addons.xml e repository ZIP
         run: |
           python tools/make_addon_zip.py
           python tools/make_addons_xml.py
+          python tools/make_repo_zip.py
 
       - name: Commit & Push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add channels.json docs/
-          git diff --staged --quiet || git commit -m "Aggiornamento automatico domini"
+          git add addon.xml channels.json docs/
+          git diff --staged --quiet && echo "Nessuna modifica." || \
+            git commit -m "Daily update: domini + Release v${{ steps.version.outputs.version }} [skip ci]"
           git push

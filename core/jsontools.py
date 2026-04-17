@@ -25,6 +25,11 @@ def load(*args, **kwargs):
         kwargs["object_hook"] = to_utf8
 
     try:
+        # Strip UTF-8 BOM if present (json.loads rejects it)
+        if args and isinstance(args[0], str) and args[0].startswith('\ufeff'):
+            args = (args[0][1:],) + args[1:]
+        elif args and isinstance(args[0], bytes) and args[0][:3] == b'\xef\xbb\xbf':
+            args = (args[0][3:],) + args[1:]
         value = json.loads(*args, **kwargs)
     except:
         if not silent:

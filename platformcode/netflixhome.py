@@ -12,7 +12,7 @@ import xbmcaddon
 import xbmcgui
 
 from core.item import Item
-from platformcode import config, logger, watch_history
+from platformcode import config, logger, watch_history, platformtools
 
 PY3 = sys.version_info[0] >= 3
 
@@ -739,6 +739,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
         # ── Search button → open Netflix-style search overlay ──
         if control_id == SEARCH_BTN_HOME:
+            xbmc.log('[NetflixHome] onClick SEARCH_BTN_HOME (109) triggered', xbmc.LOGINFO)
+            xbmcgui.Dialog().notification('PrippiStream', 'Aprendo ricerca...', xbmcgui.NOTIFICATION_INFO, 1500)
             _open_search(parent_window=self)
             return
 
@@ -3261,7 +3263,14 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
 
 def _open_search(parent_window=None):
     """Ask for query text then open the search overlay modal."""
+    # ── DIAGNOSTIC ──────────────────────────────────────────────────────────
+    _ns_cls = globals().get('NetflixSearchWindow')
+    xbmc.log('[NetflixSearch] DEBUG globals NetflixSearchWindow=%r' % _ns_cls, xbmc.LOGINFO)
+    xbmc.log('[NetflixSearch] DEBUG module=%r' % globals().get('__name__'), xbmc.LOGINFO)
+    # ────────────────────────────────────────────────────────────────────────
+    xbmc.log('[NetflixSearch] _open_search: calling dialog_input', xbmc.LOGINFO)
     query = platformtools.dialog_input('', heading='Cerca su PrippiStream...')
+    xbmc.log('[NetflixSearch] _open_search: dialog_input returned: %r' % query, xbmc.LOGINFO)
     if not query:
         return
     query = query.strip()
@@ -3271,16 +3280,25 @@ def _open_search(parent_window=None):
         # Pause BG UI refreshes while search window is open (parent may be None)
         if parent_window is not None:
             parent_window._bg_ui_pause.clear()
+        xbmc.log('[NetflixSearch] _open_search: creating NetflixSearchWindow', xbmc.LOGINFO)
         win = NetflixSearchWindow(
             'NetflixSearch.xml',
             config.get_runtime_path(),
             query=query,
+            parent_window=parent_window,
         )
+        xbmc.log('[NetflixSearch] _open_search: calling doModal', xbmc.LOGINFO)
         win.doModal()
+        xbmc.log('[NetflixSearch] _open_search: doModal returned', xbmc.LOGINFO)
         del win
+    except Exception as exc:
+        xbmc.log('[NetflixSearch] _open_search ERROR: %s' % str(exc), xbmc.LOGERROR)
     finally:
         if parent_window is not None:
             parent_window._bg_ui_pause.set()
+
+
+xbmc.log('[NetflixSearch] MODULE: about to define NetflixSearchWindow', xbmc.LOGINFO)
 
 
 class NetflixSearchWindow(xbmcgui.WindowXML):
@@ -3298,11 +3316,11 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
     ACTION_EXIT = 10
     ACTION_BACK = 92
 
-    def __init__(self, xmlFilename, scriptPath, query='', **kwargs):
+    def __init__(self, xmlFilename, scriptPath, query='', parent_window=None, **kwargs):
         super().__init__(xmlFilename, scriptPath, **kwargs)
-        self._query     = query
-        # Three buckets: sc / other_movies / other_tv
-        self._rows      = [[], [], []]   # list of (label, [items])
+        self._query          = query
+        self._parent_window  = parent_window   # NetflixHomeWindow — for CW/launch delegation
+        self._items     = []             # flat list of all results
         self._hero_item = None           # item currently shown in hero
         self._search_done = threading.Event()
         self._lock      = threading.Lock()
@@ -3331,6 +3349,14 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._cancelled.set()
             self.close()
+            return
+        # UP from grid → search bar; DOWN from top bar → grid
+        if aid == ACTION_UP and self.getFocusId() == SEARCH_WL_SC:
+            self.setFocusId(SEARCH_QUERY_BTN)
+            return
+        if aid == ACTION_DOWN and self.getFocusId() in (SEARCH_QUERY_BTN, SEARCH_BTN_BACK, SEARCH_CLOSE):
+            self.setFocusId(SEARCH_WL_SC)
+            return
 
     def onClick(self, control_id):
         if control_id in (SEARCH_BTN_BACK, SEARCH_CLOSE):
@@ -3340,7 +3366,6 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         if control_id == SEARCH_QUERY_BTN:
             self._cancelled.set()
             self.close()
-            # Re-open with new query
             _open_search()
             return
         if control_id == SEARCH_PLAY:
@@ -3351,29 +3376,22 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             if self._hero_item:
                 self._open_detail(self._hero_item)
             return
-        # Card click in one of the three wraplist rows
-        for row_idx, wl_id in enumerate([SEARCH_WL_SC, SEARCH_WL_FILM, SEARCH_WL_TV]):
-            if control_id == wl_id:
-                try:
-                    pos   = int(self.getControl(wl_id).getSelectedPosition() or 0)
-                    items = self._rows[row_idx]
-                    if 0 <= pos < len(items):
-                        self._open_detail(items[pos])
-                except Exception as exc:
-                    logger.error('[NetflixSearch] onClick row %d: %s' % (row_idx, str(exc)))
-                return
+        if control_id == SEARCH_WL_SC:   # panel grid id=160
+            try:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._open_detail(self._items[pos])
+            except Exception as exc:
+                logger.error('[NetflixSearch] onClick grid: %s' % str(exc))
 
     def onFocus(self, control_id):
-        for row_idx, wl_id in enumerate([SEARCH_WL_SC, SEARCH_WL_FILM, SEARCH_WL_TV]):
-            if control_id == wl_id:
-                try:
-                    pos   = int(self.getControl(wl_id).getSelectedPosition() or 0)
-                    items = self._rows[row_idx]
-                    if 0 <= pos < len(items):
-                        self._update_hero(items[pos])
-                except Exception:
-                    pass
-                return
+        if control_id == SEARCH_WL_SC:   # panel grid id=160
+            try:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._update_hero(self._items[pos])
+            except Exception:
+                pass
 
     # ── Hero panel ────────────────────────────────────────────────────────
 
@@ -3425,22 +3443,24 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             logger.error('[NetflixSearch] _open_detail: %s' % str(exc))
 
     def _launch_item(self, item):
-        """Play item directly or open episode browser for TV shows."""
+        """Play item, delegating to home window for CW tracking and episode selection."""
         try:
-            if item.action == 'findvideos':
+            xbmc.log('[NetflixSearch] _launch_item action=%r contentType=%r' % (item.action, getattr(item,'contentType','')), xbmc.LOGINFO)
+            if self._parent_window is not None:
+                self._cancelled.set()
+                self.close()
+                self._parent_window._launch(item)
+            else:
                 xbmc.executebuiltin(
                     'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl()
                 )
-            else:
-                # TV show or indirect action: let DetailWindow handle it
-                self._open_detail(item)
         except Exception as exc:
             logger.error('[NetflixSearch] _launch_item: %s' % str(exc))
 
     # ── Wraplist helpers ────────────────────────────────────────────────────
 
-    def _populate_row(self, wl_id, items, badge_id):
-        """Add *items* to wraplist *wl_id* on the GUI thread-safely."""
+    def _populate_grid(self, items):
+        """Populate the panel grid (id=160) with *items*."""
         if self._cancelled.is_set():
             return
         list_items = []
@@ -3448,38 +3468,48 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
             li.setArt({'thumb': it.thumbnail or ''})
             li.setProperty('thumbnail', it.thumbnail or '')
-            # Channel badge for non-SC rows
-            badge = getattr(it, '_search_channel', '')
-            if badge:
-                li.setProperty('channel_badge', badge[:8].upper())
             list_items.append(li)
         try:
-            self.getControl(wl_id).addItems(list_items)
-            if badge_id:
-                self.getControl(badge_id).setLabel(str(len(items)) + ' risultati')
+            self.getControl(SEARCH_WL_SC).addItems(list_items)
         except Exception as exc:
-            logger.error('[NetflixSearch] _populate_row wl=%d: %s' % (wl_id, str(exc)))
+            logger.error('[NetflixSearch] _populate_grid: %s' % str(exc))
 
     # ── Search engine ───────────────────────────────────────────────────────
 
     def _run_search_thread(self):
-        """Background search: SC first, then global-search channels in parallel."""
+        """Background search: SC first (shown immediately), then ALL other active channels in parallel.
+
+        Flow:
+          1. Search StreamingCommunity → show results immediately (fast feedback).
+          2. Search all other channels with include_in_global_search=True in parallel (6 workers).
+          3. Merge SC + others, sort by title relevance (exact match first, SC preferred),
+             dedup by tmdb_id (first/highest-priority occurrence wins), reset panel,
+             re-populate with final sorted list.
+
+        Fixed bugs vs previous version:
+          - get_channels(Item(mode='all')) — was Item() whose mode="" matched no channel → returned [].
+          - _do_channel receives a string (channel name), not a dict — was calling .get() on it.
+        """
+        import re as _re
+
         query = self._query
-        sc_items   = []
-        oth_movies = []
-        oth_tvshows= []
+        # Strip Kodi colour/format tags for title comparison
+        query_clean = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', query).strip().lower()
+        sc_items    = []
         sc_tmdb_ids = set()
 
-        # ── Step 1: StreamingCommunity ─────────────────────────────────
+        # ── Step 1: StreamingCommunity (fastest, shown first) ──────────
         try:
-            self._set_progress('StreamingCommunity...')
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  StreamingCommunity...')
             from channels import streamingcommunity as _sc
-            from core.item import Item
-            sc_seed = Item(channel='streamingcommunity', extra='search', text_color='FFFFFFFF')
-            sc_raw  = _sc.search(sc_seed, query) or []
-            sc_items = list(sc_raw)
-            # Collect tmdb_ids for deduplication
+            from core.item import Item as _Item
+            sc_seed = _Item(channel='streamingcommunity', extra='search', text_color='FFFFFFFF')
+            sc_items = list(_sc.search(sc_seed, query) or [])
+            # Filter out SC results without a valid thumbnail (blank cards)
+            sc_items = [it for it in sc_items if (it.thumbnail or '').strip()
+                        and (it.thumbnail or '').strip().lower() not in ('none', 'false', 'null', 'n/a')]
             for it in sc_items:
+                it._search_channel = 'sc'
                 tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
                 if tmdb:
                     sc_tmdb_ids.add(str(tmdb))
@@ -3489,50 +3519,56 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         if self._cancelled.is_set():
             return
 
-        # Populate SC row immediately (fastest response)
+        # Show SC results immediately in the grid (user sees something right away)
         with self._lock:
-            self._rows[0] = sc_items
-        self._populate_row(SEARCH_WL_SC, sc_items, SEARCH_BADGE_SC)
+            self._items = list(sc_items)
+        self._populate_grid(sc_items)
         if sc_items:
             self._update_hero(sc_items[0])
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  SC: %d risultati · cercando altri canali...' % len(sc_items))
+        else:
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  Nessun risultato SC · cercando altri canali...')
 
-        # ── Step 2: Global-search channels (parallel) ──────────────────
+        # ── Step 2: Other channels (parallel) ──────────────────────────
+        # FIX: must pass mode='all' — Item().mode is "" which matches no category in get_channels.
         try:
             from specials import search as _gsearch
-            from core.item import Item
-            seed = Item()
-            channels, _titles = _gsearch.get_channels(seed)
+            from core.item import Item as _Item
+            channels, _titles = _gsearch.get_channels(_Item(mode='all'))
+            # Exclude SC — already searched above; avoid double results.
+            channels = [c for c in channels if c != 'streamingcommunity']
         except Exception as exc:
             logger.error('[NetflixSearch] get_channels error: %s' % str(exc))
             channels = []
 
+        logger.info('[NetflixSearch] global search: %d other channels' % len(channels))
         total_ch = len(channels)
         done_ch  = [0]
+        all_others = []
 
-        def _do_channel(ch_info):
+        # FIX: get_channels returns a list of strings (channel names), not dicts.
+        def _do_channel(ch_name):
             if self._cancelled.is_set():
                 return []
-            ch_name = ch_info.get('channel', '')
             try:
                 ch_module = __import__('channels.' + ch_name, fromlist=[ch_name])
                 if not hasattr(ch_module, 'search'):
                     return []
-                from core.item import Item
-                it_seed = Item(channel=ch_name)
-                results = ch_module.search(it_seed, query) or []
+                from core.item import Item as _Item
+                results = ch_module.search(_Item(channel=ch_name), query) or []
                 filtered = []
                 for r in results:
                     tmdb = (r.infoLabels or {}).get('tmdb_id') or (r.infoLabels or {}).get('tmdb')
                     if tmdb and str(tmdb) in sc_tmdb_ids:
-                        continue   # already covered by SC
+                        continue   # SC has this exact title — SC version wins
                     r._search_channel = ch_name
                     filtered.append(r)
+                logger.debug('[NetflixSearch] %s: %d results' % (ch_name, len(filtered)))
                 return filtered
             except Exception as exc:
                 logger.debug('[NetflixSearch] channel %s error: %s' % (ch_name, str(exc)))
                 return []
 
-        all_others = []
         from concurrent.futures import ThreadPoolExecutor, as_completed
         with ThreadPoolExecutor(max_workers=6) as pool:
             future_map = {pool.submit(_do_channel, ch): ch for ch in channels}
@@ -3542,36 +3578,97 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 batch = fut.result() or []
                 all_others.extend(batch)
                 done_ch[0] += 1
-                self._set_progress('%d/%d canali...' % (done_ch[0], total_ch))
+                if total_ch > 0:
+                    self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  %d / %d canali...' % (done_ch[0], total_ch))
 
-        # ── Step 3: Bucket by mediatype ───────────────────────────────────
-        for r in all_others:
-            mt = (r.infoLabels or {}).get('mediatype', '').lower()
-            if mt in ('tvshow', 'episode', 'season', 'show', 'tv'):
-                oth_tvshows.append(r)
+        if self._cancelled.is_set():
+            return
+
+        # ── Step 3: Sort by relevance + dedup by tmdb_id OR normalized title ──
+        combined = list(sc_items) + all_others
+
+        def _relevance_key(it):
+            raw   = (it.fulltitle or it.title or '').lower()
+            clean = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip()
+            is_sc    = (getattr(it, '_search_channel', '') == 'sc')
+            exact    = (clean == query_clean)
+            starts   = clean.startswith(query_clean)
+            contains = (query_clean in clean)
+            # Tuple: (priority_bucket 0-7, title for stable secondary sort)
+            if exact    and is_sc:  return (0, clean)
+            if exact:               return (1, clean)
+            if starts   and is_sc:  return (2, clean)
+            if starts:              return (3, clean)
+            if contains and is_sc:  return (4, clean)
+            if contains:            return (5, clean)
+            if is_sc:               return (6, clean)
+            return                         (7, clean)
+
+        combined.sort(key=_relevance_key)
+
+        def _norm_title(it):
+            """Normalized title for dedup fallback when tmdb_id is absent."""
+            raw = (it.fulltitle or it.title or '')
+            t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
+            t = _re.sub(r'[^a-z0-9 ]', '', t)
+            t = _re.sub(r'\s+', ' ', t).strip()
+            # strip leading articles (IT + EN)
+            t = _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
+            return t
+
+        def _valid_thumb(it):
+            """Return True only if thumbnail is a usable URL or local path."""
+            t = (it.thumbnail or '').strip()
+            return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
+
+        # Dedup: first occurrence (highest priority) wins per tmdb_id;
+        # ALSO dedup by normalized title regardless of whether tmdb_id is present.
+        seen_tmdb  = set()
+        seen_title = set()
+        deduped    = []
+        for it in combined:
+            # Skip items with no valid thumbnail — they render as blank cards
+            if not _valid_thumb(it):
+                continue
+            nt   = _norm_title(it)
+            tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
+            if tmdb:
+                key = str(tmdb)
+                if key in seen_tmdb:
+                    continue
+                # Even if tmdb_id is unique, skip if another item with same title already shown
+                if nt and nt in seen_title:
+                    continue
+                seen_tmdb.add(key)
             else:
-                oth_movies.append(r)
+                if not nt:
+                    continue   # skip items with no usable title
+                if nt in seen_title:
+                    continue
+            if nt:
+                seen_title.add(nt)
+            deduped.append(it)
 
+        # ── Step 4: Reset panel and re-populate with final sorted list ─
         with self._lock:
-            self._rows[1] = oth_movies
-            self._rows[2] = oth_tvshows
+            self._items = deduped
+        try:
+            self.getControl(SEARCH_WL_SC).reset()
+        except Exception:
+            pass
+        self._populate_grid(deduped)
+        if deduped:
+            self._update_hero(deduped[0])
 
-        if not self._cancelled.is_set():
-            self._populate_row(SEARCH_WL_FILM, oth_movies, SEARCH_BADGE_FILM)
-            self._populate_row(SEARCH_WL_TV,   oth_tvshows, SEARCH_BADGE_TV)
-            # Update hero if SC had nothing
-            if not sc_items and oth_movies:
-                self._update_hero(oth_movies[0])
-            elif not sc_items and oth_tvshows:
-                self._update_hero(oth_tvshows[0])
-
-        # ── Step 4: Finalize UI ───────────────────────────────────────────
-        total = len(sc_items) + len(oth_movies) + len(oth_tvshows)
+        # ── Step 5: Finalize ───────────────────────────────────────────
+        total = len(deduped)
         try:
             self.getControl(SEARCH_LOADING).setVisible(False)
             if total == 0:
                 self.getControl(SEARCH_NORESULTS).setVisible(True)
-            self._set_progress('%d risultati' % total)
+                self._set_progress('Nessun risultato trovato per questa ricerca.')
+            else:
+                self._set_progress('[B]%d risultati[/B]  trovati tra tutti i canali' % total)
         except Exception:
             pass
         self._search_done.set()
@@ -3581,6 +3678,12 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self.getControl(SEARCH_PROGRESS).setLabel(text)
         except Exception:
             pass
+
+
+xbmc.log('[NetflixSearch] MODULE: NetflixSearchWindow defined OK', xbmc.LOGINFO)
+
+
+def open_netflix_home():
     """Public entry point — called from launcher.py."""
     _shutdown_event.clear()   # reset shutdown flag for this session
     win = NetflixHomeWindow('NetflixHome.xml', config.get_runtime_path())

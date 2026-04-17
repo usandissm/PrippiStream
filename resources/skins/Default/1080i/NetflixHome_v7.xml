@@ -78,17 +78,17 @@
 
         <!-- Search button (id=109) — opens NetflixSearch overlay -->
         <control type="button" id="109">
-            <left>348</left><top>18</top>
-            <width>360</width><height>42</height>
-            <texturefocus colordiffuse="38FFFFFF">white.png</texturefocus>
-            <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
-            <label>[COLOR FF888888]Ricerca...</label>
+            <left>720</left><top>18</top>
+            <width>480</width><height>42</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+            <label>[B][COLOR FF666666]&#128269;[/COLOR][/B]  [COLOR FFAAAAAA]Ricerca...[/COLOR]</label>
             <font>font12</font>
-            <textcolor>FF888888</textcolor>
+            <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>left</align>
             <aligny>center</aligny>
-            <textoffsetx>15</textoffsetx>
+            <textoffsetx>18</textoffsetx>
             <onright>108</onright>
             <ondown>2000</ondown>
         </control>

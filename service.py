@@ -322,7 +322,8 @@ def get_ua_list():
 
 def run_threaded(job_func, args):
     job_thread = threading.Thread(target=job_func, args=args)
-    job_thread.start()
+    job_thread.daemon = True   # daemon=True: Python interpreter can exit even if this
+    job_thread.start()         # thread is still running (e.g. long library update scan)
     threads.append(job_thread)
 
 
@@ -330,7 +331,7 @@ def join_threads():
     logger.debug(threads)
     for th in threads:
         try:
-            th.join()
+            th.join(timeout=5)   # cap wait — network threads may block indefinitely
         except:
             logger.error(traceback.format_exc())
 

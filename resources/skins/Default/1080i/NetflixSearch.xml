@@ -122,15 +122,15 @@
             <ondown>160</ondown>
         </control>
 
-        <!-- Progress info label (id=121) — e.g. "SC · 4/10 canali" -->
+        <!-- Progress info label (id=121) — e.g. "Ricerca in corso..." / "21 risultati" -->
         <control type="label" id="121">
-            <left>1326</left><top>24</top>
-            <width>420</width><height>30</height>
-            <font>font10</font>
-            <textcolor>FF888888</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
+            <left>470</left><top>24</top>
+            <width>1290</width><height>30</height>
+            <font>font12</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
             <label></label>
-            <align>right</align>
+            <align>center</align>
         </control>
 
         <!-- Close button (id=122) -->
@@ -238,374 +238,89 @@
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             ROWS AREA (top=293, height=787)
-             3 rows × (24px label + 261px wraplist + 3px sep) = 288+3 = ~  789px
+             GRID AREA (top=293, height=787) — Netflix-style poster grid
+             192px wide items → 10 per row, 265px tall → ~3 rows visible
         ═══════════════════════════════════════════════════════════ -->
-        <control type="grouplist" id="9010">
+        <control type="panel" id="160">
             <left>0</left><top>293</top>
             <width>1920</width><height>787</height>
-            <orientation>vertical</orientation>
-            <defaultcontrol>160</defaultcontrol>
             <scrolltime tween="cubic" easing="out">220</scrolltime>
-
-            <!-- ── Row 0: StreamingCommunity ── -->
-            <control type="group">
+            <scrollwrap>false</scrollwrap>
+            <onup>120</onup>
+            <itemlayout height="380" width="270">
+                <!-- shadow bg -->
+                <control type="image">
+                    <left>6</left><top>4</top>
+                    <width>258</width><height>340</height>
+                    <texture colordiffuse="18000000">white.png</texture>
+                </control>
+                <!-- poster -->
+                <control type="image">
+                    <left>8</left><top>5</top>
+                    <width>254</width><height>340</height>
+                    <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                    <aspectratio>scale</aspectratio>
+                </control>
+                <!-- title -->
                 <control type="label">
-                    <left>48</left><top>0</top>
-                    <width>800</width><height>27</height>
+                    <left>8</left><top>350</top>
+                    <width>254</width><height>22</height>
                     <font>font10</font>
                     <textcolor>FFAAAAAA</textcolor>
-                    <label>[B]STREAMING COMMUNITY[/B]</label>
+                    <label>$INFO[ListItem.Label]</label>
+                    <align>center</align>
+                    <truncated>true</truncated>
                 </control>
-                <!-- source count badge -->
-                <control type="label" id="150">
-                    <left>48</left><top>0</top>
-                    <width>1800</width><height>27</height>
-                    <font>font10</font>
-                    <textcolor>FF666666</textcolor>
-                    <label></label>
-                    <align>right</align>
+            </itemlayout>
+            <focusedlayout height="380" width="270">
+                <!-- glow -->
+                <control type="image">
+                    <left>1</left><top>1</top>
+                    <width>268</width><height>372</height>
+                    <texture colordiffuse="66000000">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
                 </control>
-            </control>
-
-            <control type="wraplist" id="160">
-                <left>0</left><top>0</top>
-                <width>1920</width><height>261</height>
-                <viewtype>wrap</viewtype>
-                <orientation>horizontal</orientation>
-                <scrolltime tween="cubic" easing="out">210</scrolltime>
-                <onup>120</onup>
-                <ondown>161</ondown>
-                <itemlayout height="261" width="198">
-                    <control type="image">
-                        <left>10</left><top>5</top>
-                        <width>178</width><height>231</height>
-                        <texture colordiffuse="18000000">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>12</left><top>7</top>
-                        <width>175</width><height>228</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                    </control>
-                    <control type="label">
-                        <left>8</left><top>238</top>
-                        <width>182</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFAAAAAA</textcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </itemlayout>
-                <focusedlayout height="261" width="198">
-                    <control type="image">
-                        <left>1</left><top>1</top>
-                        <width>196</width><height>258</height>
-                        <texture colordiffuse="66000000">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>255</height>
-                        <texture colordiffuse="F2FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>4</left><top>2</top>
-                        <width>190</width><height>232</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
-                    </control>
-                    <control type="label">
-                        <left>4</left><top>237</top>
-                        <width>190</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <shadowcolor>FF000000</shadowcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </focusedlayout>
-            </control>
-
-            <!-- Spacer + divider after row 0 -->
-            <control type="image">
-                <left>0</left><top>0</top>
-                <width>1920</width><height>18</height>
-                <texture colordiffuse="FF0D0D0D">white.png</texture>
-            </control>
-
-            <!-- ── Row 1: Film — altri canali ── -->
-            <control type="group">
+                <!-- border -->
+                <control type="image">
+                    <left>2</left><top>0</top>
+                    <width>266</width><height>350</height>
+                    <texture colordiffuse="F2FFFFFF">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                </control>
+                <!-- red top stripe -->
+                <control type="image">
+                    <left>2</left><top>0</top>
+                    <width>266</width><height>4</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                </control>
+                <!-- poster with zoom -->
+                <control type="image">
+                    <left>4</left><top>2</top>
+                    <width>262</width><height>340</height>
+                    <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                    <aspectratio>scale</aspectratio>
+                    <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                    <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                </control>
+                <!-- title -->
                 <control type="label">
-                    <left>48</left><top>0</top>
-                    <width>800</width><height>27</height>
+                    <left>4</left><top>350</top>
+                    <width>262</width><height>22</height>
                     <font>font10</font>
-                    <textcolor>FFAAAAAA</textcolor>
-                    <label>[B]FILM — ALTRI CANALI[/B]</label>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <align>center</align>
+                    <truncated>true</truncated>
                 </control>
-                <control type="label" id="151">
-                    <left>48</left><top>0</top>
-                    <width>1800</width><height>27</height>
-                    <font>font10</font>
-                    <textcolor>FF666666</textcolor>
-                    <label></label>
-                    <align>right</align>
-                </control>
-            </control>
+            </focusedlayout>
+        </control>
 
-            <control type="wraplist" id="161">
-                <left>0</left><top>0</top>
-                <width>1920</width><height>261</height>
-                <viewtype>wrap</viewtype>
-                <orientation>horizontal</orientation>
-                <scrolltime tween="cubic" easing="out">210</scrolltime>
-                <onup>160</onup>
-                <ondown>162</ondown>
-                <itemlayout height="261" width="198">
-                    <control type="image">
-                        <left>10</left><top>5</top>
-                        <width>178</width><height>231</height>
-                        <texture colordiffuse="18000000">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>12</left><top>7</top>
-                        <width>175</width><height>228</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                    </control>
-                    <!-- source channel badge (bottom-right corner) -->
-                    <control type="image">
-                        <left>120</left><top>200</top>
-                        <width>66</width><height>30</height>
-                        <texture colordiffuse="AA000000">white.png</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>120</left><top>200</top>
-                        <width>66</width><height>30</height>
-                        <font>font10</font>
-                        <textcolor>FFCCCCCC</textcolor>
-                        <label>$INFO[ListItem.Property(channel_badge)]</label>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>8</left><top>238</top>
-                        <width>182</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFAAAAAA</textcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </itemlayout>
-                <focusedlayout height="261" width="198">
-                    <control type="image">
-                        <left>1</left><top>1</top>
-                        <width>196</width><height>258</height>
-                        <texture colordiffuse="66000000">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>255</height>
-                        <texture colordiffuse="F2FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>4</left><top>2</top>
-                        <width>190</width><height>232</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
-                    </control>
-                    <!-- source badge (focused) -->
-                    <control type="image">
-                        <left>126</left><top>204</top>
-                        <width>66</width><height>30</height>
-                        <texture colordiffuse="AA000000">white.png</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>126</left><top>204</top>
-                        <width>66</width><height>30</height>
-                        <font>font10</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <label>$INFO[ListItem.Property(channel_badge)]</label>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>4</left><top>237</top>
-                        <width>190</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <shadowcolor>FF000000</shadowcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </focusedlayout>
-            </control>
 
-            <!-- Spacer after row 1 -->
-            <control type="image">
-                <left>0</left><top>0</top>
-                <width>1920</width><height>18</height>
-                <texture colordiffuse="FF0D0D0D">white.png</texture>
-            </control>
-
-            <!-- ── Row 2: Serie TV — altri canali ── -->
-            <control type="group">
-                <control type="label">
-                    <left>48</left><top>0</top>
-                    <width>800</width><height>27</height>
-                    <font>font10</font>
-                    <textcolor>FFAAAAAA</textcolor>
-                    <label>[B]SERIE TV — ALTRI CANALI[/B]</label>
-                </control>
-                <control type="label" id="152">
-                    <left>48</left><top>0</top>
-                    <width>1800</width><height>27</height>
-                    <font>font10</font>
-                    <textcolor>FF666666</textcolor>
-                    <label></label>
-                    <align>right</align>
-                </control>
-            </control>
-
-            <control type="wraplist" id="162">
-                <left>0</left><top>0</top>
-                <width>1920</width><height>261</height>
-                <viewtype>wrap</viewtype>
-                <orientation>horizontal</orientation>
-                <scrolltime tween="cubic" easing="out">210</scrolltime>
-                <onup>161</onup>
-                <ondown>122</ondown>
-                <itemlayout height="261" width="198">
-                    <control type="image">
-                        <left>10</left><top>5</top>
-                        <width>178</width><height>231</height>
-                        <texture colordiffuse="18000000">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>12</left><top>7</top>
-                        <width>175</width><height>228</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                    </control>
-                    <control type="image">
-                        <left>120</left><top>200</top>
-                        <width>66</width><height>30</height>
-                        <texture colordiffuse="AA000000">white.png</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>120</left><top>200</top>
-                        <width>66</width><height>30</height>
-                        <font>font10</font>
-                        <textcolor>FFCCCCCC</textcolor>
-                        <label>$INFO[ListItem.Property(channel_badge)]</label>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>8</left><top>238</top>
-                        <width>182</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFAAAAAA</textcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </itemlayout>
-                <focusedlayout height="261" width="198">
-                    <control type="image">
-                        <left>1</left><top>1</top>
-                        <width>196</width><height>258</height>
-                        <texture colordiffuse="66000000">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>255</height>
-                        <texture colordiffuse="F2FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>194</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>4</left><top>2</top>
-                        <width>190</width><height>232</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
-                        <aspectratio>scale</aspectratio>
-                        <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
-                    </control>
-                    <control type="image">
-                        <left>126</left><top>204</top>
-                        <width>66</width><height>30</height>
-                        <texture colordiffuse="AA000000">white.png</texture>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>126</left><top>204</top>
-                        <width>66</width><height>30</height>
-                        <font>font10</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <label>$INFO[ListItem.Property(channel_badge)]</label>
-                        <align>center</align>
-                        <aligny>center</aligny>
-                        <visible>!String.IsEmpty(ListItem.Property(channel_badge))</visible>
-                    </control>
-                    <control type="label">
-                        <left>4</left><top>237</top>
-                        <width>190</width><height>21</height>
-                        <font>font10</font>
-                        <textcolor>FFFFFFFF</textcolor>
-                        <shadowcolor>FF000000</shadowcolor>
-                        <label>$INFO[ListItem.Label]</label>
-                        <align>center</align>
-                        <truncated>true</truncated>
-                    </control>
-                </focusedlayout>
-            </control>
-
-        </control> <!-- end grouplist 9010 -->
 
         <!-- ═══════════════════════════════════════════════════════════
              NO RESULTS overlay (id=171)

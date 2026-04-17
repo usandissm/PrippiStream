@@ -70,6 +70,23 @@
             <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
+        <!-- Search button (id=109) -->
+        <control type="button" id="109">
+            <left>440</left><top>11</top>
+            <width>320</width><height>28</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+            <label>[COLOR FFAAAAAA][ Ricerca... ][/COLOR]</label>
+            <font>font10</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>left</align>
+            <aligny>center</aligny>
+            <textoffsetx>12</textoffsetx>
+            <onright>108</onright>
+            <ondown>2000</ondown>
+        </control>
+
         <!-- EXIT button -->
         <control type="button" id="108">
             <left>1192</left><top>11</top>
@@ -81,6 +98,7 @@
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
+            <onleft>109</onleft>
             <animation effect="zoom" start="100" end="110" center="auto" time="120" tween="sine" easing="out">Focus</animation>
             <animation effect="zoom" start="110" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
         </control>
@@ -195,6 +213,7 @@
             <orientation>vertical</orientation>
             <defaultcontrol>2000</defaultcontrol>
             <scrolltime tween="cubic" easing="out">220</scrolltime>
+            <onup>109</onup>
 
             <!-- _______________________ ROW 00 _______________________ -->
             <control type="group">

@@ -1,8 +1,9 @@
 import zipfile
 import os
 
-src = r'c:\Users\USand\Desktop\PROGETTI\PrippiStream\docs\repository.prippistream'
-out = r'c:\Users\USand\Desktop\PROGETTI\PrippiStream\docs\repository.prippistream.zip'
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+src = os.path.join(root_dir, 'docs', 'repository.prippistream')
+out = os.path.join(root_dir, 'docs', 'repository.prippistream.zip')
 
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
     for root, dirs, files in os.walk(src):
