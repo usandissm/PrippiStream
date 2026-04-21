@@ -622,6 +622,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             wl = self.getControl(wl_id)
             wl.reset()
+            # On Android TV/ARM, wl.reset() is asynchronous — the Kodi UI thread
+            # may not finish clearing items before addItems() is called, causing
+            # existing items to persist and duplicates to appear.
+            # Poll until the wraplist is actually empty (max ~300ms).
+            for _ in range(6):
+                xbmc.sleep(50)
+                try:
+                    if wl.size() == 0:
+                        break
+                except Exception:
+                    break
             wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
             self._populated.add(i)
@@ -1498,6 +1509,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         wl = self.getControl(wl_id)
                         cur_pos = int(wl.getSelectedPosition() or 0)
                         wl.reset()
+                        # Same async-reset guard as _populate_single_row (fixes duplication on TV/Android)
+                        for _ in range(6):
+                            xbmc.sleep(50)
+                            try:
+                                if wl.size() == 0:
+                                    break
+                            except Exception:
+                                break
                         wl.addItems([_item_to_li(it) for it in row_items])
                         if cur_pos > 0:
                             try:
