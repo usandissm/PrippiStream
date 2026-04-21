@@ -6,7 +6,12 @@
 
 from core import httptools, support, config, jsontools
 
-host = support.config.get_channel_url()
+def findhost(url):
+    # url is animeworlditalia.com which lists current official domains
+    data = httptools.downloadpage(url).data
+    return support.match(data, patron=r'href="(https://www\.animeworld\.[^/"]+)').match.rstrip('/')
+
+host = config.get_channel_url(findhost)
 __channel__ = 'animeworld'
 cookie = support.config.get_setting('cookie', __channel__)
 headers = [['Cookie', cookie]]

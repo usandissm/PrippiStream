@@ -5,10 +5,17 @@
 
 import cloudscraper, json, copy, inspect
 from core import jsontools, support, httptools, scrapertools
-from platformcode import autorenumber, logger
+from platformcode import autorenumber, logger, config
 
 # support.dbg()
-host = support.config.get_channel_url()
+
+def findhost(url):
+    # url is a stable redirector (e.g. animeunity.to) that HTTP-redirects to current domain
+    resp = httptools.downloadpage(url, follow_redirects=False, only_headers=True)
+    location = resp.headers.get('location', '').rstrip('/')
+    return location if location else url.rstrip('/')
+
+host = config.get_channel_url(findhost)
 response = httptools.downloadpage(host + '/archivio')
 csrf_token = support.match(response.data, patron='name="csrf-token" content="([^"]+)"').match
 headers = {'content-type': 'application/json;charset=UTF-8',

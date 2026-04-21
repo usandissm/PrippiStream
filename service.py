@@ -336,6 +336,38 @@ def join_threads():
             logger.error(traceback.format_exc())
 
 
+def _update_channels_json():
+    """
+    Downloads channels.json from the GitHub repo and updates the local copy if changed.
+    Runs once at Kodi startup and then every 24h via schedule.
+    When the file changes, invalidates the in-memory cache in config.py so that
+    the next call to get_channel_url() uses the fresh domains.
+    """
+    REMOTE_URL = 'https://raw.githubusercontent.com/usandissm/PrippiStream/main/channels.json'
+    local_path = os.path.join(config.get_runtime_path(), 'channels.json')
+    try:
+        try:
+            import urllib.request as _urllib
+        except ImportError:
+            import urllib as _urllib
+        remote_data = _urllib.urlopen(REMOTE_URL, timeout=10).read().decode('utf-8')
+        try:
+            with open(local_path, 'r', encoding='utf-8') as f:
+                local_data = f.read()
+        except Exception:
+            local_data = ''
+        if remote_data.strip() != local_data.strip():
+            with open(local_path, 'w', encoding='utf-8') as f:
+                f.write(remote_data)
+            # Invalidate in-memory cache so next call re-reads the file
+            config.channels_data = dict()
+            logger.info('[channels_update] channels.json aggiornato dal repository')
+        else:
+            logger.debug('[channels_update] channels.json già aggiornato')
+    except Exception as e:
+        logger.error('[channels_update] errore aggiornamento channels.json: %s' % str(e))
+
+
 class AddonMonitor(xbmc.Monitor):
     def __init__(self):
         self.settings_pre = config.get_all_settings_addon()
@@ -535,6 +567,11 @@ if __name__ == "__main__":
     # check if the user has any connection problems
     from platformcode.checkhost import test_conn
     run_threaded(test_conn, (True, not config.get_setting('resolver_dns'), True, [], [], True))
+
+    # Schedule daily channels.json update from GitHub (domain list refresh)
+    schedule.every().day.do(run_threaded, _update_channels_json, ()).tag('channels_update')
+    # Also run once at startup (in background, non-blocking)
+    run_threaded(_update_channels_json, ())
 
     monitor = AddonMonitor()
 
