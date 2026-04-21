@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.4" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.6" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -22,7 +22,7 @@
   </extension>
   <extension point="xbmc.addon.metadata">
     <summary lang="en">PrippiStream is a Kodi add-on to search and watch contents on the web.</summary>
-    <summary lang="it">PrippiStream è un addon per Kodi per cercare e guardare contenuti sul web.</summary>
+    <summary lang="it">PrippiStream ├¿ un addon per Kodi per cercare e guardare contenuti sul web.</summary>
     <assets>
       <icon>resources/media/logo.png</icon>
       <fanart>resources/media/fanart.jpg</fanart>
@@ -34,7 +34,7 @@
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
-    [COLOR yellow]Kodi © is a registered trademark of the XBMC Foundation. We are not connected to or in any other way affiliated with Kodi, Team Kodi, or the XBMC Foundation. Furthermore, any software, addons, or products offered by us will receive no support in official Kodi channels, including the Kodi forums and various social networks.[/COLOR]</disclaimer>
+    [COLOR yellow]Kodi ┬® is a registered trademark of the XBMC Foundation. We are not connected to or in any other way affiliated with Kodi, Team Kodi, or the XBMC Foundation. Furthermore, any software, addons, or products offered by us will receive no support in official Kodi channels, including the Kodi forums and various social networks.[/COLOR]</disclaimer>
     <platform>all</platform>
     <license>GNU GPL v3</license>
     <website>https://github.com/usandissm/PrippiStream</website>
