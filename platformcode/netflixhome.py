@@ -1011,16 +1011,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
             self.show()
-            # On Android TV/ARM the window transition after doModal() takes longer.
-            # Retry until setFocusId succeeds (up to ~1.5 s) so the wraplist position
-            # is reliably restored even on slow devices.
-            for _attempt in range(10):
-                xbmc.sleep(150)
-                try:
-                    self.setFocusId(CLOSE_BTN)
-                    break
-                except Exception:
-                    pass
+            # On Android TV/ARM, setFocusId() silently does nothing when the window
+            # is not yet fully active after doModal() returns — it never raises.
+            # A fixed 600 ms wait gives the window compositor time to settle on
+            # all devices before we try to restore focus and position.
+            xbmc.sleep(600)
+            try:
+                self.setFocusId(CLOSE_BTN)
+            except Exception:
+                pass
             xbmc.sleep(100)
             try:
                 self.getControl(wl_id).selectItem(saved_pos)
@@ -1064,14 +1063,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 # even when wl_id was already the focused control before playback
                 # (a no-op setFocusId never fires onFocus, so _cw_refresh_pending
                 # would stay stuck and _refresh_cw_row would never run).
-                # Retry on Android TV/ARM where the window transition is slower.
-                for _attempt in range(10):
-                    xbmc.sleep(150)
-                    try:
-                        self.setFocusId(CLOSE_BTN)
-                        break
-                    except Exception:
-                        pass
+                # Fixed 600 ms wait: setFocusId() silently does nothing when the
+                # window is not yet active — it never raises, so retry loops are
+                # useless. 600 ms is enough for the compositor on Android TV/ARM.
+                xbmc.sleep(600)
+                self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
                 self.getControl(wl_id).selectItem(self._last_focused_pos)
                 xbmc.sleep(50)
