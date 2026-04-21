@@ -1538,9 +1538,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         i, row_label, n_matched, n_cleared, i in self._populated))
                 if changed and i in self._populated:
                     # Re-render the wraplist for this row to update bar steps.
-                    # Strategy: if this row has focus, move focus away first so Kodi
-                    # doesn't hold a lock on the wraplist during reset().
+                    # SKIP if a position restore is pending: the reset() would zero out
+                    # the wraplist's internal scroll position, fighting the restore.
+                    # The updated item data is already in rows_data[i]; the re-render
+                    # will happen naturally next time the user focuses that row.
                     wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                    if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+                        logger.info('[CW] row %d re-render SKIPPED (position restore pending)' % i)
+                        self._populated.discard(i)  # force re-render next time row is focused
+                        continue
                     try:
                         currently_focused = (self.getFocusId() == wl_id)
                         if currently_focused:
