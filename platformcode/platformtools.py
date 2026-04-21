@@ -1121,7 +1121,26 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         set_infolabels(xlistitem, item, True)
 
         # if it is a video in mpd format, the listitem is configured to play it ith the inpustreamaddon addon implemented in Kodi 17
-        
+
+        # ── Determine preferred audio language for inputstream.adaptive ──
+        # Read addon setting audiolang_{key}; this is set by DetailWindow._show_audio_sub_dialog.
+        # Must be done BEFORE setProperty calls so we can add audio_language immediately.
+        _preferred_isa_audio = None
+        try:
+            import re as _re
+            import xbmcaddon as _xbmcaddon
+            _addon = _xbmcaddon.Addon()
+            _tmdb_id = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
+            _key = _tmdb_id or _re.sub(r'[^a-z0-9]', '',
+                                       (getattr(item, 'fulltitle', '') or
+                                        getattr(item, 'show', '') or '').lower())
+            if _key:
+                _ap = _addon.getSetting('audiolang_%s' % _key) or ''
+                if _ap and _ap != u'Originale (non cambiare)':
+                    _preferred_isa_audio = 'ita' if 'Italiano' in _ap else 'eng'
+        except Exception:
+            pass
+
         if mpd or item.manifest =='mpd':
             if not install_inputstream():
                 return
@@ -1137,6 +1156,9 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
             else:
                 xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(headers))
                 xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(headers))
+            if _preferred_isa_audio:
+                xlistitem.setProperty('inputstream.adaptive.audio_language', _preferred_isa_audio)
+                logger.info('[ISA] audio_language=%s (mpd)' % _preferred_isa_audio)
 
         elif hls or item.manifest == 'hls':# or (mediaurl.split('|')[0].endswith('m3u8') and mediaurl.startswith('http')):
             if not install_inputstream():
@@ -1150,6 +1172,9 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
                 xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(headers))
                 xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(headers))
                 xlistitem.setProperty('inputstream.adaptive.license_key', '|' + urllib.urlencode(headers) +'|')
+            if _preferred_isa_audio:
+                xlistitem.setProperty('inputstream.adaptive.audio_language', _preferred_isa_audio)
+                logger.info('[ISA] audio_language=%s (hls)' % _preferred_isa_audio)
 
         if force_direct: item.play_from = 'window'
 
@@ -1530,9 +1555,6 @@ def set_player(item, xlistitem, mediaurl, view, strm):
             playlist = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
             playlist.clear()
             playlist.add(mediaurl, xlistitem)
-            # Imposta lingua audio/sottotitoli di Kodi PRIMA del play
-            from platformcode import xbmc_videolibrary as _xvl
-            item._original_lang_prefs = _xvl._set_kodi_lang_prefs(item)
             # Reproduce
             xbmc_player.play(playlist, xlistitem)
             add_next_to_playlist(item)

@@ -103,6 +103,162 @@ _app_monitor = _AppShutdownMonitor()
 # SC rows cache: populated on first home load, reused on subsequent opens without refetch.
 _sc_rows_cache = None
 
+
+class _AvReadyPlayer(xbmc.Player):
+    """xbmc.Player subclass that signals via threading.Event when onAVStarted fires.
+    onAVStarted is called by Kodi exactly once per stream, after the A/V pipeline is
+    fully initialised and all audio/subtitle tracks are enumerated — the correct and
+    earliest moment to safely call setAudioStream() / setSubtitleStream().
+    """
+    def __init__(self):
+        super(_AvReadyPlayer, self).__init__()
+        self.av_started = threading.Event()
+
+    def onAVStarted(self):
+        self.av_started.set()
+
+
+def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20):
+    """Wait for Kodi's onAVStarted (meaning the stream is playing and the right
+    audio/sub track has already been chosen by Kodi using the temporary global
+    settings), then immediately restore those settings to their original values.
+    This keeps the global-settings pollution window to only ~1-2 seconds.
+    The restore is GUARANTEED — it runs even on timeout or exception."""
+    try:
+        import time as _time
+
+        def _rpc_set(setting, value):
+            if value is None:
+                return
+            xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
+                '"params":{"setting":"%s","value":"%s"},"id":1}'
+                % (setting, str(value).replace('"', '')))
+
+        # onAVStarted via a lightweight Monitor subclass
+        class _AVWatcher(xbmc.Monitor):
+            def __init__(self):
+                xbmc.Monitor.__init__(self)
+                self.fired = False
+            def onAVStarted(self):
+                self.fired = True
+
+        watcher = _AVWatcher()
+        t0 = _time.time()
+        while not watcher.fired:
+            if watcher.abortRequested() or (_time.time() - t0) > timeout:
+                break
+            _time.sleep(0.1)
+
+    except Exception as exc:
+        logger.error('[CW] _restore_lang_after_av_started (wait): %s' % str(exc))
+
+    # Restore global settings — always, outside the try so it's guaranteed
+    try:
+        def _rpc_set(setting, value):
+            if value is None:
+                return
+            xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
+                '"params":{"setting":"%s","value":"%s"},"id":1}'
+                % (setting, str(value).replace('"', '')))
+
+        if orig_audio is not None:
+            _rpc_set('locale.audiolanguage', orig_audio)
+            logger.info('[CW] restored locale.audiolanguage -> %s' % orig_audio)
+        if orig_sub is not None:
+            _rpc_set('locale.subtitlelanguage', orig_sub)
+            logger.info('[CW] restored locale.subtitlelanguage -> %s' % orig_sub)
+    except Exception as exc:
+        logger.error('[CW] _restore_lang_after_av_started (restore): %s' % str(exc))
+
+
+def _pre_play_set_lang(item):
+    """Read audio/sub preference for *item* and temporarily set the Kodi global
+    locale settings so ISA picks the right track from frame 0.
+    Starts a background thread that restores the originals after onAVStarted fires.
+    Safe to call for any item — does nothing if no preference is saved."""
+    try:
+        import json as _json
+        addon   = xbmcaddon.Addon()
+        infolabels = getattr(item, 'infoLabels', None) or {}
+        tmdb    = str(infolabels.get('tmdb_id') or '').strip()
+        key     = tmdb or re.sub(r'[^a-z0-9]', '',
+                                 (getattr(item, 'fulltitle', '') or
+                                  getattr(item, 'show', '') or '').lower())
+        if not key:
+            return
+
+        ap = addon.getSetting('audiolang_%s' % key) or ''
+        sp = addon.getSetting('sublang_%s'   % key) or ''
+        logger.info('[CW] pre-play key=%r tmdb=%r ap=%r sp=%r' % (key, tmdb, ap, sp))
+
+        if not ap and not sp:
+            return  # no preference → nothing to do
+
+        def _rpc_get(setting):
+            r = xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.GetSettingValue",'
+                '"params":{"setting":"%s"},"id":1}' % setting)
+            return _json.loads(r).get('result', {}).get('value', '')
+
+        def _rpc_set(setting, value):
+            xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
+                '"params":{"setting":"%s","value":"%s"},"id":1}'
+                % (setting, str(value).replace('"', '')))
+
+        def _disk_get(setting):
+            try:
+                import re as _re2
+                gui = xbmc.translatePath('special://userdata/guisettings.xml')
+                with open(gui, 'r', encoding='utf-8') as _f:
+                    txt = _f.read()
+                m = _re2.search(r'<setting id="%s">([^<]*)</setting>' % setting, txt)
+                return m.group(1) if m else ''
+            except Exception:
+                return ''
+
+        _safe_defaults = {'locale.audiolanguage': 'Italian',
+                          'locale.subtitlelanguage': 'default'}
+
+        def _get_orig(setting):
+            v = _disk_get(setting)
+            if not v:
+                v = _rpc_get(setting)
+            # Sanity: avoid perpetuating a previously contaminated value
+            if setting == 'locale.audiolanguage' and v in ('English', 'en', 'eng'):
+                return _safe_defaults[setting]
+            if setting == 'locale.subtitlelanguage' and v in ('Italian', 'it', 'ita'):
+                return _safe_defaults[setting]
+            return v or _safe_defaults.get(setting, '')
+
+        orig_audio = None
+        orig_sub   = None
+
+        if ap and ap != u'Originale (non cambiare)':
+            orig_audio = _get_orig('locale.audiolanguage')
+            lang = 'Italian' if 'Italiano' in ap else 'English'
+            _rpc_set('locale.audiolanguage', lang)
+            logger.info('[CW] pre-play audio: %s → %s' % (orig_audio, lang))
+
+        if sp and sp not in (u'Nessun sottotitolo', ''):
+            orig_sub = _get_orig('locale.subtitlelanguage')
+            slang = 'Italian' if ('Italiano' in sp or 'Come audio' in sp) else 'English'
+            _rpc_set('locale.subtitlelanguage', slang)
+            logger.info('[CW] pre-play sub: %s → %s' % (orig_sub, slang))
+
+        if orig_audio is not None or orig_sub is not None:
+            t = threading.Thread(
+                target=_restore_lang_after_av_started,
+                args=(orig_audio, orig_sub))
+            t.daemon = True
+            t.start()
+
+    except Exception as exc:
+        logger.error('[CW] _pre_play_set_lang: %s' % str(exc))
+
+
 # Label for the Continue Watching row (must match what _refresh_cw_row checks).
 _CW_ROW_LABEL = u'\u25b6  Continua a guardare'
 
@@ -793,10 +949,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
     def _launch(self, item):
         if item.action == 'findvideos':
             # Pre-clear any Kodi bookmark for this episode BEFORE RunPlugin.
-            # Kodi reads the videoDB bookmark at play start to decide whether to show
-            # "Resume from X?" — if we delete it before Kodi queries, no dialog appears.
-            # Run in a daemon BG thread so it doesn't block the GUI thread; the DB op
-            # completes in ms, long before Kodi's C++ player resolves the stream URL.
             _purl = ''
             try:
                 _purl = (watch_history.get(_cw_key(item)) or {}).get('played_url', '')
@@ -806,9 +958,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 _t_pre = threading.Thread(target=_clear_kodi_resume, args=(_purl,))
                 _t_pre.daemon = True
                 _t_pre.start()
+
+            # Set locale.audiolanguage/subtitlelanguage before RunPlugin so Kodi
+            # picks the right track from frame 0 (restored immediately after onAVStarted).
+            _pre_play_set_lang(item)
+
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
-            # After RunPlugin the video player may hide this dialog.
-            # A background thread waits for playback to end then restores it.
             t = threading.Thread(target=self._wait_and_restore, args=(item,))
             t.daemon = True
             t.start()
@@ -840,12 +995,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._bg_ui_pause.set()
 
         # Restore focus to the exact row + item position.
-        # selectItem BEFORE setFocusId: setFocusId can snap the wraplist back to 0
-        # if called first; selectItem must already be set when focus lands there.
+        # When the DetailWindow was hosting a trailer (YouTube player), self.close()
+        # was called from a background thread; the window transition may not be
+        # complete by the time doModal() returns.  Mirror _restore_home()'s approach:
+        # self.show() to bring the window to front, a brief wait, then bounce focus
+        # through CLOSE_BTN before landing on the wraplist — this guarantees a real
+        # focus change even if the wraplist was already focused before the dialog.
         try:
             wl_id = ROW_WRAPLIST_BASE + saved_row * ROW_STEP
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
+            self.show()
+            xbmc.sleep(200)
+            self.setFocusId(CLOSE_BTN)
+            xbmc.sleep(50)
             self.getControl(wl_id).selectItem(saved_pos)
             xbmc.sleep(50)
             self.setFocusId(wl_id)
@@ -898,8 +1061,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
     def _wait_and_restore(self, item=None, next_ep_ctx=None):
         """Wait for playback to start/end, track progress for CW, then restore home."""
-        player  = xbmc.Player()
+        player  = _AvReadyPlayer()
         monitor = xbmc.Monitor()
+
+        # ── Start audio/sub preference thread IMMEDIATELY ──
+        # Must be launched BEFORE we wait for isPlaying() so the thread is already
+        # blocking on av_started.wait() when onAVStarted fires (~1-2s into startup).
+        # If called after isPlaying() is True, onAVStarted has already fired and
+        # the event would never be received (15s timeout → silent failure).
+        t_audio = threading.Thread(
+            target=_apply_audio_sub_pref,
+            args=(player, item),
+            kwargs={'av_started_event': player.av_started})
+        t_audio.daemon = True
+        t_audio.start()
 
         # ── Wait up to 20 s for playback to actually start ──
         for _ in range(40):
@@ -932,6 +1107,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                     (entry.get('title', ''), resume_t))
                     except Exception as exc:
                         logger.error('[CW] seekTime: %s' % str(exc))
+                    # After seek, getTotalTime() briefly returns a small value
+                    # (only the buffered range), which can falsely trigger the
+                    # 97%-completed check and delete the CW entry.  Wait up to
+                    # 6 s for total_time to stabilise at the real episode length.
+                    for _ in range(12):
+                        xbmc.sleep(500)
+                        if not player.isPlaying():
+                            break
+                        try:
+                            _tt = player.getTotalTime()
+                        except Exception:
+                            _tt = 0
+                        if _tt > resume_t + 30:
+                            break   # total_time looks reliable
 
         # ── Reconstruct next_ep_ctx for episodes resumed from CW ──
         # _rebuild_ctx_from_cw makes 2 HTTP calls; runs here in the background thread
@@ -939,8 +1128,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if next_ep_ctx is None and item is not None:
             next_ep_ctx = _rebuild_ctx_from_cw(item)
 
-        # ── Apply saved audio / subtitle preference ──
-        _apply_audio_sub_pref(player, item)
+        logger.info('[UpNext] next_ep_ctx=%s  cw_show_url=%r  url=%r' % (
+            'OK' if next_ep_ctx else 'None',
+            getattr(item, '_cw_show_url', '') if item else '',
+            getattr(item, 'url', '') if item else ''))
 
         # ── Track progress while playing ──
         actual_time            = 0.0
@@ -990,9 +1181,22 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                 logger.info('[CW] series fully watched, removed key %s' % cw_key)
                             cw_key = None
                         else:
-                            # Movie or episode with no next-ep context
-                            watch_history.remove(cw_key)
-                            cw_key = None
+                            # Movie, OR episode where we couldn't determine
+                            # next-ep context (e.g. show_url missing).
+                            # For movies: remove since there's no next episode.
+                            # For episodes without context: DON'T remove — keep
+                            # the entry so the user can resume if needed.
+                            ct = getattr(item, 'contentType', '') or ''
+                            if ct != 'episode':
+                                watch_history.remove(cw_key)
+                                cw_key = None
+                            else:
+                                # No next-ep context: advance to time=0 just as
+                                # a marker that this ep was completed, but keep
+                                # the entry until context is rebuilt on next launch.
+                                _save_cw(item, cw_key, total_time, total_time,
+                                         played_url=_played_url)
+                                cw_key = None
                     else:
                         _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
 
@@ -1002,6 +1206,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     and actual_time > 60):
                 remaining = (total_time - actual_time) if total_time > 60 else float('inf')
                 if 0 < remaining <= UPNEXT_COUNTDOWN:
+                    logger.info('[UpNext] triggering at %.0fs / %.0fs (%.0fs left)' % (
+                        actual_time, total_time, remaining))
                     _upnext_triggered = True
                     np_item, np_ctx = _build_next_ep(next_ep_ctx)
                     if np_item is not None:
@@ -1044,6 +1250,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                 xbmc.sleep(600)
                         except Exception:
                             pass
+                        _pre_play_set_lang(_overlay_np_item)
                         xbmc.executebuiltin(
                             'RunPlugin(plugin://plugin.video.prippistream/?%s)'
                             % _overlay_np_item.tourl())
@@ -1080,6 +1287,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                 xbmc.sleep(600)
                         except Exception:
                             pass
+                        _pre_play_set_lang(_overlay_np_item)
                         xbmc.executebuiltin(
                             'RunPlugin(plugin://plugin.video.prippistream/?%s)'
                             % _overlay_np_item.tourl())
@@ -1115,6 +1323,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 if not self._alive or monitor.abortRequested():
                     return
                 xbmc.sleep(800)
+                _pre_play_set_lang(_overlay_np_item)
                 xbmc.executebuiltin(
                     'RunPlugin(plugin://plugin.video.prippistream/?%s)'
                     % _overlay_np_item.tourl())
@@ -1182,6 +1391,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     logger.error('[UpNext] fallback overlay: %s' % str(exc))
                     result = 'play'  # default to play on error
                 if result == 'play':
+                    _pre_play_set_lang(np_item)
                     xbmc.executebuiltin(
                         'RunPlugin(plugin://plugin.video.prippistream/?%s)'
                         % np_item.tourl())
@@ -1394,6 +1604,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, ep['id'])
             )
             ep_item._cw_show_url = item.url   # preserve show URL for overlay when resumed from CW
+            _pre_play_set_lang(ep_item)
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
             t2 = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
                                   kwargs={'next_ep_ctx': next_ep_ctx})
@@ -1442,7 +1653,7 @@ def _rebuild_ctx_from_cw(item):
     """
     try:
         show_url = getattr(item, '_cw_show_url', '') or ''
-        if not show_url or getattr(item, 'contentType', '') != 'episode':
+        if getattr(item, 'contentType', '') != 'episode':
             return None
         cur_s = int(getattr(item, 'contentSeason', 0) or 0)
         cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
@@ -1451,6 +1662,28 @@ def _rebuild_ctx_from_cw(item):
         if not m:
             return None
         title_id = m.group(1)
+
+        # If show_url is missing, reconstruct it from the iframe URL + SC host.
+        # show_url is like  https://streamingcommunityz.ooo/it/titles/1243-new-girl
+        # SC REQUIRES the slug — /it/titles/1243 alone returns no data-page.
+        # We build the slug from item.show / item.fulltitle (e.g. "New Girl" → "new-girl").
+        if not show_url:
+            try:
+                import channels.streamingcommunity as _sc_mod
+                _sc_host = _sc_mod.host
+            except Exception:
+                _m = re.match(r'(https?://[^/]+)', url)
+                _sc_host = _m.group(1) if _m else ''
+            show_name = (getattr(item, 'show', '') or
+                         getattr(item, 'contentSerieName', '') or
+                         getattr(item, 'fulltitle', '') or '')
+            slug = re.sub(r'[^a-z0-9]+', '-',
+                          show_name.lower().strip()).strip('-') if show_name else ''
+            if _sc_host and slug:
+                show_url = '%s/it/titles/%s-%s' % (_sc_host, title_id, slug)
+                logger.info('[UpNext] _rebuild_ctx: guessed show_url=%s' % show_url)
+        if not show_url:
+            return None
 
         # Fetch seasons list
         data    = _get_data(show_url)
@@ -1633,11 +1866,12 @@ def _build_next_ep(ctx):
 
 # ── Module-level helpers ────────────────────────────────────────────────────────
 
-def _apply_audio_sub_pref(player, item):
+def _apply_audio_sub_pref(player, item, av_started_event=None):
     """
-    Apply the user's saved audio/subtitle preference for this content.
-    Called from _wait_and_restore after seeking resumes; runs in background thread.
-    Preferences are saved by DetailWindow._show_audio_sub_dialog() in addon settings.
+    Apply the user's saved subtitle preference for this content after onAVStarted.
+    Audio track selection is now handled by setting locale.audiolanguage BEFORE
+    RunPlugin (see _launch), so Kodi picks the right track from frame 0 with no skip.
+    This function only handles subtitles (on/off/language).
     """
     try:
         if item is None:
@@ -1651,77 +1885,50 @@ def _apply_audio_sub_pref(player, item):
 
         audio_pref = addon.getSetting('audiolang_%s' % key) or ''
         sub_pref   = addon.getSetting('sublang_%s'   % key) or ''
-        if not audio_pref and not sub_pref:
-            return   # no preference saved → leave streams as-is
+        if not sub_pref:
+            return   # no subtitle preference → leave as-is
 
-        # Wait up to 5 s for tracks to be available
-        for _ in range(50):
-            xbmc.sleep(100)
-            if not player.isPlaying():
-                return
-            if player.getAvailableAudioStreams():
-                break
+        # Wait for A/V pipeline ready before touching subtitle tracks
+        if av_started_event is not None:
+            av_started_event.wait(timeout=15)
+        else:
+            for _ in range(50):
+                xbmc.sleep(100)
+                if not player.isPlaying():
+                    return
+                if player.getAvailableAudioStreams():
+                    break
 
-        # Extra 2-second buffer: on HLS/DASH streams the inputstream.adaptive
-        # demuxer keeps enumerating tracks for a while after the first are
-        # detected.  Calling setAudioStream() too early stalls the audio pipeline.
-        xbmc.sleep(2000)
         if not player.isPlaying():
             return
 
-        # ── Audio ──
-        if audio_pref and audio_pref != u'Originale (non cambiare)':
-            target = 'ital' if 'Italiano' in audio_pref else 'engl'
-            # Check whether the current audio track is already the preferred one
-            cur_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage').lower()
-            already_set = (
-                (target == 'ital' and ('ital' in cur_lang or cur_lang in ('it', 'ita', 'it-it'))) or
-                (target == 'engl' and ('engl' in cur_lang or cur_lang in ('en', 'eng', 'en-us', 'en-gb')))
-            )
-            if not already_set:
-                streams = player.getAvailableAudioStreams()
-                logger.info('[CW] audio_pref=%r  current=%r  available=%s' % (
-                    audio_pref, cur_lang, streams))
-                for idx, s in enumerate(streams):
-                    sl = s.lower()
-                    if target in sl or (target == 'ital' and sl in ('it', 'ita', 'it-it')) \
-                            or (target == 'engl' and sl in ('en', 'eng', 'en-us', 'en-gb')):
-                        try:
-                            player.setAudioStream(idx)
-                        except Exception as exc:
-                            logger.error('[CW] setAudioStream(%d): %s' % (idx, exc))
-                        break
-
         # ── Subtitles ──
-        if sub_pref:
-            if sub_pref == u'Nessun sottotitolo':
-                player.showSubtitles(False)
-            else:
-                target_sub = None
-                if 'Italiano' in sub_pref:
+        if sub_pref == u'Nessun sottotitolo':
+            player.showSubtitles(False)
+        else:
+            target_sub = None
+            if 'Italiano' in sub_pref:
+                target_sub = 'ital'
+            elif 'Inglese' in sub_pref:
+                target_sub = 'engl'
+            elif 'Come audio' in sub_pref:
+                if audio_pref and 'Italiano' in audio_pref:
                     target_sub = 'ital'
-                elif 'Inglese' in sub_pref:
+                elif audio_pref and 'Inglese' in audio_pref:
                     target_sub = 'engl'
-                elif 'Come audio' in sub_pref:
-                    # same as chosen audio language
-                    if audio_pref and 'Italiano' in audio_pref:
-                        target_sub = 'ital'
-                    elif audio_pref and 'Inglese' in audio_pref:
-                        target_sub = 'engl'
-                if target_sub:
-                    sub_streams = player.getAvailableSubtitleStreams()
-                    chosen = None
-                    for idx, s in enumerate(sub_streams):
-                        sl = s.lower()
-                        if target_sub in sl or \
-                                (target_sub == 'ital' and sl in ('it', 'ita')) or \
-                                (target_sub == 'engl' and sl in ('en', 'eng')):
-                            chosen = idx
-                            break
-                    if chosen is not None:
-                        player.setSubtitleStream(chosen)
-                        player.showSubtitles(True)
-                    # If no matching sub track found, leave stream as-is
+            if target_sub:
+                sub_streams = player.getAvailableSubtitleStreams()
+                chosen = None
+                for idx, s in enumerate(sub_streams):
+                    sl = s.lower()
+                    if target_sub in sl or \
+                            (target_sub == 'ital' and sl in ('it', 'ita')) or \
+                            (target_sub == 'engl' and sl in ('en', 'eng')):
+                        chosen = idx
+                        break
+                if chosen is not None:
+                    player.setSubtitleStream(chosen)
+                    player.showSubtitles(True)
     except Exception as exc:
         logger.error('[CW] _apply_audio_sub_pref: %s' % str(exc))
 
