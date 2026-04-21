@@ -715,6 +715,18 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if self._cw_refresh_pending:
             self._cw_refresh_pending = False
             self._refresh_cw_row()
+            # After CW refresh (which may take 100-300ms and re-render rows),
+            # re-apply the pending position so any scroll caused by the refresh
+            # is overwritten.
+            if self._pending_select_pos is not None:
+                pending_wl_id, pending_pos = self._pending_select_pos
+                self._pending_select_pos = None
+                xbmc.sleep(50)
+                try:
+                    self.getControl(pending_wl_id).selectItem(pending_pos)
+                except Exception:
+                    pass
+            return  # onFocus will fire again from the selectItem call above
 
         # Restore saved wraplist position exactly when the wraplist gains focus —
         # this fires before any skin scroll animation, making it reliable on all
