@@ -471,6 +471,11 @@ if __name__ == "__main__":
     # Test if all the required directories are created
     config.verify_directories_created()
 
+    # Force mandatory settings on every startup (new install, update, or existing).
+    # These are always overwritten so the user never has to set them manually.
+    config.set_setting('autostart', True)       # launch at Kodi start
+    config.set_setting('default_action', 2)     # video quality = High (0=Ask, 1=Low, 2=High)
+
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
