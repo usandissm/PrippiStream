@@ -6,6 +6,7 @@
 
 import re
 import sys
+import time
 import threading
 import xbmc
 import xbmcaddon
@@ -427,6 +428,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # selectItem(pos) every time that wl_id gains focus, until attempts run out.
         # This defeats the skin's post-animation focus reset on Android TV.
         self._pending_select_pos = None
+        # Lock to prevent concurrent _enforce_scroll_pos threads.
+        self._scroll_lock = threading.Lock()
 
     def onInit(self):
         try:
@@ -1060,6 +1063,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 self.setFocusId(wl_id)
             except Exception:
                 pass
+            # Background thread enforces position for 1.5s.
+            t = threading.Thread(
+                target=self._enforce_scroll_pos,
+                args=(wl_id, saved_pos))
+            t.daemon = True
+            t.start()
         except Exception:
             pass
         if result == 'play':
@@ -1081,6 +1090,19 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception as exc:
                 logger.error('[NetflixHome] MY LIST: %s' % str(exc))
 
+    def _enforce_scroll_pos(self, wl_id, pos):
+        """Background thread: hammer selectItem every 80ms for 1.5s to defeat skin scroll animations."""
+        with self._scroll_lock:
+            deadline = time.time() + 1.5
+            while self._alive and time.time() < deadline:
+                try:
+                    cur = self.getControl(wl_id).getSelectedPosition()
+                    if cur != pos:
+                        self.getControl(wl_id).selectItem(pos)
+                except Exception:
+                    break
+                xbmc.sleep(80)
+
     def _restore_home(self):
         """Bring this dialog back to front and restore keyboard focus to the last row+position."""
         try:
@@ -1088,21 +1110,19 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             row   = self._last_focused_row
             wl_id = ROW_WRAPLIST_BASE + row * ROW_STEP
             try:
-                # Always park focus on CLOSE_BTN first, then move to the wraplist.
-                # This guarantees a REAL focus change so Kodi fires onFocus(wl_id)
-                # even when wl_id was already the focused control before playback
-                # (a no-op setFocusId never fires onFocus, so _cw_refresh_pending
-                # would stay stuck and _refresh_cw_row would never run).
-                # Fixed 600 ms wait: setFocusId() silently does nothing when the
-                # window is not yet active — it never raises, so retry loops are
-                # useless. 600 ms is enough for the compositor on Android TV/ARM.
                 xbmc.sleep(600)
-                # Set pending position before setFocusId so onFocus applies it
-                # at exactly the right moment (before skin scroll animation).
-                self._pending_select_pos = (wl_id, self._last_focused_pos, 5)  # 5 attempts to defeat skin reset
+                # Give focus to wraplist so CW refresh triggers via onFocus.
+                self._pending_select_pos = (wl_id, self._last_focused_pos, 5)
                 self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
                 self.setFocusId(wl_id)
+                # Also launch background thread that keeps enforcing the position
+                # for 1.5s — defeats any skin animation that resets scroll to 0.
+                t = threading.Thread(
+                    target=self._enforce_scroll_pos,
+                    args=(wl_id, self._last_focused_pos))
+                t.daemon = True
+                t.start()
             except Exception:
                 try:
                     self.setFocusId(CLOSE_BTN)
