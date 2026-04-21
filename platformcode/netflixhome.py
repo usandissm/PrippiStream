@@ -1011,12 +1011,26 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
             self.show()
-            xbmc.sleep(200)
-            self.setFocusId(CLOSE_BTN)
+            # On Android TV/ARM the window transition after doModal() takes longer.
+            # Retry until setFocusId succeeds (up to ~1.5 s) so the wraplist position
+            # is reliably restored even on slow devices.
+            for _attempt in range(10):
+                xbmc.sleep(150)
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                    break
+                except Exception:
+                    pass
+            xbmc.sleep(100)
+            try:
+                self.getControl(wl_id).selectItem(saved_pos)
+            except Exception:
+                pass
             xbmc.sleep(50)
-            self.getControl(wl_id).selectItem(saved_pos)
-            xbmc.sleep(50)
-            self.setFocusId(wl_id)
+            try:
+                self.setFocusId(wl_id)
+            except Exception:
+                pass
         except Exception:
             pass
         if result == 'play':
@@ -1042,7 +1056,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         """Bring this dialog back to front and restore keyboard focus to the last row+position."""
         try:
             self.show()
-            xbmc.sleep(300)
             row   = self._last_focused_row
             wl_id = ROW_WRAPLIST_BASE + row * ROW_STEP
             try:
@@ -1051,8 +1064,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 # even when wl_id was already the focused control before playback
                 # (a no-op setFocusId never fires onFocus, so _cw_refresh_pending
                 # would stay stuck and _refresh_cw_row would never run).
-                self.setFocusId(CLOSE_BTN)
-                xbmc.sleep(50)
+                # Retry on Android TV/ARM where the window transition is slower.
+                for _attempt in range(10):
+                    xbmc.sleep(150)
+                    try:
+                        self.setFocusId(CLOSE_BTN)
+                        break
+                    except Exception:
+                        pass
+                xbmc.sleep(100)
                 self.getControl(wl_id).selectItem(self._last_focused_pos)
                 xbmc.sleep(50)
                 self.setFocusId(wl_id)
