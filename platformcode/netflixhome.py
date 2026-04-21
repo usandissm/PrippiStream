@@ -1484,7 +1484,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             with self._rows_lock:
                 self.rows_data[0] = (_CW_ROW_LABEL, cw_items)
 
-            # Refresh CW row itself
+            # Refresh CW row itself.
+            # Must reset() the wraplist explicitly here because _populate_single_row
+            # no longer calls reset() (removing it fixed the scroll-to-top bug on TV).
+            wl_cw_id = ROW_WRAPLIST_BASE  # row 0 → base id, no offset
+            try:
+                self.getControl(wl_cw_id).reset()
+                xbmc.sleep(100)
+            except Exception:
+                pass
             self._populated.discard(0)
             self._populate_single_row(0)
 
