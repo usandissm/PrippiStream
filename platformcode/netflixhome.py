@@ -619,24 +619,18 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
             self._populated.add(i)
             return
+        # Mark populated BEFORE any xbmc.sleep() so that onFocus re-entrant calls
+        # (which fire during sleep on the GUI thread) see this row as already done
+        # and skip it — preventing double/triple addItems() on Android TV.
+        self._populated.add(i)
         try:
             wl = self.getControl(wl_id)
             wl.reset()
-            # On Android TV/ARM, wl.reset() is asynchronous — the Kodi UI thread
-            # may not finish clearing items before addItems() is called, causing
-            # existing items to persist and duplicates to appear.
-            # Poll until the wraplist is actually empty (max ~300ms).
-            for _ in range(6):
-                xbmc.sleep(50)
-                try:
-                    if wl.size() == 0:
-                        break
-                except Exception:
-                    break
+            xbmc.sleep(100)  # let the UI flush on slow ARM devices before addItems
             wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
-            self._populated.add(i)
         except Exception as exc:
+            self._populated.discard(i)  # allow retry on error
             logger.error('[NetflixHome] populate row %d wraplist: %s' % (i, str(exc)))
         try:
             lbl = self.getControl(lbl_id)
@@ -1509,14 +1503,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         wl = self.getControl(wl_id)
                         cur_pos = int(wl.getSelectedPosition() or 0)
                         wl.reset()
-                        # Same async-reset guard as _populate_single_row (fixes duplication on TV/Android)
-                        for _ in range(6):
-                            xbmc.sleep(50)
-                            try:
-                                if wl.size() == 0:
-                                    break
-                            except Exception:
-                                break
+                        xbmc.sleep(100)  # let the UI flush on slow ARM devices before addItems
                         wl.addItems([_item_to_li(it) for it in row_items])
                         if cur_pos > 0:
                             try:
