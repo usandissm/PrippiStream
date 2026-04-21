@@ -423,6 +423,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # Set by background threads to request a CW row refresh on the GUI thread.
         # Checked (and drained) in onFocus, which always runs on the GUI thread.
         self._cw_refresh_pending = False
+        # When set to (wl_id, pos), onFocus will call selectItem(pos) the moment
+        # the wraplist with that id gains focus — before any skin scroll animation.
+        self._pending_select_pos = None
 
     def onInit(self):
         try:
@@ -712,6 +715,18 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if self._cw_refresh_pending:
             self._cw_refresh_pending = False
             self._refresh_cw_row()
+
+        # Restore saved wraplist position exactly when the wraplist gains focus —
+        # this fires before any skin scroll animation, making it reliable on all
+        # devices (PC and Android TV).
+        if self._pending_select_pos is not None:
+            pending_wl_id, pending_pos = self._pending_select_pos
+            if control_id == pending_wl_id:
+                self._pending_select_pos = None
+                try:
+                    self.getControl(pending_wl_id).selectItem(pending_pos)
+                except Exception:
+                    pass
 
         i = self._row_from_fid(control_id)
         if i >= 0:
@@ -1013,26 +1028,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._last_focused_pos = saved_pos
             self.show()
             xbmc.sleep(600)
+            # Set the pending position BEFORE setFocusId so that onFocus fires
+            # with the flag already set and calls selectItem at exactly the right
+            # moment — before any skin scroll animation can override it.
+            self._pending_select_pos = (wl_id, saved_pos)
             try:
                 self.setFocusId(CLOSE_BTN)
             except Exception:
                 pass
             xbmc.sleep(100)
-            # Pre-position the wraplist BEFORE giving it focus, so the skin's
-            # focus animation starts from the right position instead of 0.
-            try:
-                self.getControl(wl_id).selectItem(saved_pos)
-            except Exception:
-                pass
-            xbmc.sleep(50)
             try:
                 self.setFocusId(wl_id)
-            except Exception:
-                pass
-            # Re-apply after focus settles in case the skin scrolled during animation.
-            xbmc.sleep(300)
-            try:
-                self.getControl(wl_id).selectItem(saved_pos)
             except Exception:
                 pass
         except Exception:
@@ -1072,15 +1078,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 # window is not yet active — it never raises, so retry loops are
                 # useless. 600 ms is enough for the compositor on Android TV/ARM.
                 xbmc.sleep(600)
+                # Set pending position before setFocusId so onFocus applies it
+                # at exactly the right moment (before skin scroll animation).
+                self._pending_select_pos = (wl_id, self._last_focused_pos)
                 self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
-                # Pre-position before focus so skin animation starts from right item.
-                self.getControl(wl_id).selectItem(self._last_focused_pos)
-                xbmc.sleep(50)
                 self.setFocusId(wl_id)
-                # Re-apply after focus settles in case the skin scrolled during animation.
-                xbmc.sleep(300)
-                self.getControl(wl_id).selectItem(self._last_focused_pos)
             except Exception:
                 try:
                     self.setFocusId(CLOSE_BTN)
