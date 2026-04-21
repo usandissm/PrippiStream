@@ -1012,10 +1012,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
             self.show()
-            # On Android TV/ARM, setFocusId() silently does nothing when the window
-            # is not yet fully active after doModal() returns — it never raises.
-            # A fixed 600 ms wait gives the window compositor time to settle on
-            # all devices before we try to restore focus and position.
             xbmc.sleep(600)
             try:
                 self.setFocusId(CLOSE_BTN)
@@ -1023,12 +1019,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
             xbmc.sleep(100)
             try:
-                self.getControl(wl_id).selectItem(saved_pos)
+                self.setFocusId(wl_id)
             except Exception:
                 pass
-            xbmc.sleep(50)
+            # selectItem AFTER focus lands on the wraplist so the skin's
+            # focus animation (which scrolls to pos 0) does not overwrite it.
+            xbmc.sleep(200)
             try:
-                self.setFocusId(wl_id)
+                self.getControl(wl_id).selectItem(saved_pos)
             except Exception:
                 pass
         except Exception:
@@ -1070,9 +1068,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 xbmc.sleep(600)
                 self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
-                self.getControl(wl_id).selectItem(self._last_focused_pos)
-                xbmc.sleep(50)
                 self.setFocusId(wl_id)
+                # selectItem AFTER focus lands on the wraplist so the skin's
+                # focus animation (which scrolls to pos 0) does not overwrite it.
+                xbmc.sleep(200)
+                self.getControl(wl_id).selectItem(self._last_focused_pos)
             except Exception:
                 try:
                     self.setFocusId(CLOSE_BTN)
