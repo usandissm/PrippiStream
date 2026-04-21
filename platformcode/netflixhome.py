@@ -1048,27 +1048,22 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             wl_id = ROW_WRAPLIST_BASE + saved_row * ROW_STEP
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
-            self.show()
-            xbmc.sleep(600)
-            # Set the pending position BEFORE setFocusId so that onFocus fires
-            # with the flag already set and calls selectItem at exactly the right
-            # moment — before any skin scroll animation can override it.
-            self._pending_select_pos = (wl_id, saved_pos, 5)  # 5 attempts to defeat skin reset
+            # Do NOT call self.show() here — the NetflixHome window never went away
+            # (DetailWindow was a dialog on top). On Android TV, self.show() re-activates
+            # the window and triggers the XML <defaultcontrol>2000</defaultcontrol> which
+            # resets focus to row 0, overwriting everything we do afterwards.
+            # Instead, just wait briefly for the dialog transition to finish and set focus.
+            xbmc.sleep(300)
+            self._pending_select_pos = (wl_id, saved_pos, 5)
             try:
                 self.setFocusId(CLOSE_BTN)
             except Exception:
                 pass
-            xbmc.sleep(100)
+            xbmc.sleep(80)
             try:
                 self.setFocusId(wl_id)
             except Exception:
                 pass
-            # Background thread enforces position for 1.5s.
-            t = threading.Thread(
-                target=self._enforce_scroll_pos,
-                args=(wl_id, saved_pos))
-            t.daemon = True
-            t.start()
         except Exception:
             pass
         if result == 'play':
