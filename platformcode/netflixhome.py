@@ -1018,13 +1018,19 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
             xbmc.sleep(100)
+            # Pre-position the wraplist BEFORE giving it focus, so the skin's
+            # focus animation starts from the right position instead of 0.
+            try:
+                self.getControl(wl_id).selectItem(saved_pos)
+            except Exception:
+                pass
+            xbmc.sleep(50)
             try:
                 self.setFocusId(wl_id)
             except Exception:
                 pass
-            # selectItem AFTER focus lands on the wraplist so the skin's
-            # focus animation (which scrolls to pos 0) does not overwrite it.
-            xbmc.sleep(200)
+            # Re-apply after focus settles in case the skin scrolled during animation.
+            xbmc.sleep(300)
             try:
                 self.getControl(wl_id).selectItem(saved_pos)
             except Exception:
@@ -1068,10 +1074,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 xbmc.sleep(600)
                 self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
+                # Pre-position before focus so skin animation starts from right item.
+                self.getControl(wl_id).selectItem(self._last_focused_pos)
+                xbmc.sleep(50)
                 self.setFocusId(wl_id)
-                # selectItem AFTER focus lands on the wraplist so the skin's
-                # focus animation (which scrolls to pos 0) does not overwrite it.
-                xbmc.sleep(200)
+                # Re-apply after focus settles in case the skin scrolled during animation.
+                xbmc.sleep(300)
                 self.getControl(wl_id).selectItem(self._last_focused_pos)
             except Exception:
                 try:
