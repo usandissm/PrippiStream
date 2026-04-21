@@ -29,6 +29,8 @@ def start():
             pass
 
 
+
+
 def run(item=None):
     logger.debug()
     # Extract item from sys.argv
@@ -61,15 +63,12 @@ def run(item=None):
             elif item.action == 'filterchannels': # Action for channel listing on channelselector
                 itemlist = channelselector.filterchannels(item.channel_type)
             elif item.action == 'open_netflix_home': # Netflix-style StreamingCommunity home
-                # item.folder=False → Kodi uses play pipeline (no 5-s GetDirectory timeout).
-                # setResolvedUrl(False) dismisses the Kodi spinner; process stays alive.
-                # doModal() then blocks until the user closes the window.
-                try:
-                    import xbmcplugin
-                    import xbmcgui as _xg
-                    xbmcplugin.setResolvedUrl(int(sys.argv[1]), False, _xg.ListItem())
-                except Exception:
-                    pass
+                # Render the main menu into the container FIRST so it's ready when skin closes.
+                import channelselector as _cs
+                _mainlist = _cs.getmainlist()
+                _parent = Item(channel='channelselector', action='getmainlist', viewmode='movie')
+                platformtools.render_items(_mainlist, _parent)
+                # Now open the skin (blocking until user closes it).
                 from platformcode import netflixhome
                 netflixhome.open_netflix_home()
                 return
@@ -294,9 +293,18 @@ def makeItem():
                 if val.lower() == 'false': val = False
                 elif val.lower() == 'true': val = True
                 item.__setattr__(key, urllib.parse.unquote(val) if isinstance(val,str) else val)
-    # If no item, this is mainlist
+    # If no item, decide whether to open the skin or the normal menu.
+    # Use a Kodi Window property as a session flag: it persists while Kodi is running
+    # but resets on restart — so the skin opens on first access per session, then
+    # subsequent back-navigations land on the normal menu instead of looping.
     else:
-        item = Item(channel='channelselector', action='getmainlist', viewmode='movie')
+        import xbmcgui as _xg
+        _home = _xg.Window(10000)
+        if not _home.getProperty('prippistream_skin_shown'):
+            _home.setProperty('prippistream_skin_shown', '1')
+            item = Item(channel='channelselector', action='open_netflix_home', viewmode='movie')
+        else:
+            item = Item(channel='channelselector', action='getmainlist', viewmode='movie')
 
     return item
 

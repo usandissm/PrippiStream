@@ -273,6 +273,7 @@ HERO_TITLE         = 103
 HERO_META          = 104
 HERO_PLOT          = 105
 CLOSE_BTN          = 108
+SETTINGS_BTN       = 107   # ⚙ settings button in top bar
 BTN_PLAY           = 110   # PLAY CTA button in hero
 BTN_INFO           = 111   # MORE INFO CTA button in hero
 BTN_LIST           = 112   # MY LIST CTA button in hero
@@ -934,6 +935,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if control_id == CLOSE_BTN:
             self._alive = False
             self.close()
+            return
+
+        # ── Settings button → open addon settings dialog ──
+        if control_id == SETTINGS_BTN:
+            xbmcaddon.Addon().openSettings()
             return
 
         # ── Search button → open Netflix-style search overlay ──

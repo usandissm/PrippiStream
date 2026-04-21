@@ -89,6 +89,22 @@
             <align>left</align>
             <aligny>center</aligny>
             <textoffsetx>18</textoffsetx>
+            <onright>107</onright>
+            <ondown>2000</ondown>
+        </control>
+
+        <!-- Settings button -->
+        <control type="button" id="107">
+            <left>1677</left><top>18</top>
+            <width>93</width><height>42</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
+            <label>[B]⚙ SET[/B]</label>
+            <font>font10</font>
+            <textcolor>FFAAAAAA</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onleft>109</onleft>
             <onright>108</onright>
             <ondown>2000</ondown>
         </control>
@@ -104,6 +120,7 @@
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
+            <onleft>107</onleft>
             <ondown>2000</ondown>
         </control>
 
