@@ -619,14 +619,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
             self._populated.add(i)
             return
-        # Mark populated BEFORE any xbmc.sleep() so that onFocus re-entrant calls
-        # (which fire during sleep on the GUI thread) see this row as already done
-        # and skip it — preventing double/triple addItems() on Android TV.
+        # Mark populated BEFORE addItems so that onFocus re-entrant calls
+        # see this row as already done and skip it.
         self._populated.add(i)
         try:
             wl = self.getControl(wl_id)
-            wl.reset()
-            xbmc.sleep(100)  # let the UI flush on slow ARM devices before addItems
+            # No reset() here: this is FIRST-TIME population — the wraplist is
+            # already empty, so reset() + sleep would waste time and cause the
+            # skin to scroll back to the top. The sleep is only needed when
+            # RE-rendering an already-populated wraplist (done in _refresh_cw_row).
             wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
         except Exception as exc:
