@@ -18,41 +18,9 @@ if sys.version_info[0] >= 3:
 else:
     from concurrent_py2 import futures
 
-
-def findhost(url):
-    # url = 'https://streamingcommunity.codes' (stable redirector)
-    # That page uses parklogic router internally — we replicate that POST directly
-    try:
-        payload = json.dumps({
-            'parameters': {
-                'domainApex': 'streamingcommunity.codes',
-                'domainFull': 'streamingcommunity.codes',
-                'protocol': 'https',
-                'tenant': 'shared',
-                'path': '/domain.js',
-                'adBlockingDetected': False,
-                'webdriver': False,
-                'gpu': None
-            }
-        })
-        resp = httptools.downloadpage(
-            'https://router.parklogic.com/domain.js',
-            post=payload,
-            headers={
-                'Content-Type': 'application/json',
-                'Origin': 'https://streamingcommunity.codes',
-                'Referer': 'https://streamingcommunity.codes/'
-            }
-        )
-        data = (resp.data or '').strip()
-        if data.startswith('http'):
-            return data.rstrip('/')
-    except Exception:
-        pass
-    return url.rstrip('/')
-
-
-host = config.get_channel_url(findhost)
+# streamingcommunity.codes blocca connessioni non-browser, redirect via JS puro.
+# Il dominio viene aggiornato automaticamente tramite daily sync di channels.json.
+host = config.get_channel_url()
 
 # def getHeaders(forced=False):
 #     global headers

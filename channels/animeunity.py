@@ -10,10 +10,11 @@ from platformcode import autorenumber, logger, config
 # support.dbg()
 
 def findhost(url):
-    # url is a stable redirector (e.g. animeunity.to) that HTTP-redirects to current domain
-    resp = httptools.downloadpage(url, follow_redirects=False, only_headers=True)
-    location = resp.headers.get('location', '').rstrip('/')
-    return location if location else url.rstrip('/')
+    # url is a stable redirector (e.g. animeunity.to) that redirects to current domain
+    # follow_redirects=True so we get the final URL after all hops
+    resp = httptools.downloadpage(url, follow_redirects=True)
+    final = getattr(resp, 'url', '') or ''
+    return final.rstrip('/') if final and not final.startswith('https://animeunity.to') else url.rstrip('/')
 
 host = config.get_channel_url(findhost)
 response = httptools.downloadpage(host + '/archivio')
