@@ -196,10 +196,10 @@ def findvideos(item):
 
     def load_links(itemlist, re_txt, desc_txt, quality=""):
         streaming = scrapertools.find_single_match(data, re_txt).replace('"', '')
-        logger.debug('STREAMING=', streaming)
+        logger.info('CB01 load_links [%s] streaming_snippet=%r' % (desc_txt, streaming[:300] if streaming else ''))
         matches = support.match(streaming, patron = r'<td><a.*?href=([^ ]+) [^>]+>([^<]+)<').matches
         for scrapedurl, scrapedtitle in matches:
-            logger.debug("##### findvideos %s ## %s ## %s ##" % (desc_txt, scrapedurl, scrapedtitle))
+            logger.info("CB01 findvideos %s ## url=%s ## title=%s ##" % (desc_txt, scrapedurl, scrapedtitle))
             itemlist.append(item.clone(action="play", title=scrapedtitle, url=scrapedurl, server=scrapedtitle, quality=quality))
 
     logger.debug()
@@ -209,6 +209,7 @@ def findvideos(item):
     # Carica la pagina
     data = httptools.downloadpage(item.url).data
     data = re.sub('\n|\t', '', data)
+    logger.info('cineblog01.findvideos url=%r data_len=%d' % (item.url, len(data) if data else 0))
 
     # Estrae i contenuti - Streaming
     load_links(itemlist, '<strong>Streamin?g:</strong>(.*?)cbtable', "Streaming", "SD")

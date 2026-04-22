@@ -3,87 +3,94 @@ if sys.version_info[0] >= 3:
     import urllib.parse as urlparse
 else:
     import urlparse
-from core import httptools, scrapertools, support
+from core import httptools, scrapertools
 from platformcode import logger, config
 
-# Cache iframe_url between test_video_exists and get_video_url (keyed by page_url)
+# Cache between test_video_exists and get_video_url
 _cache = {}
 
-def _get_iframe_url(page_url):
+
+def _resolve_watchfree_url(page_url):
     """
-    Resolve /uprots/ID to /emhuih/MOVIE_ID.
-
-    Strategy (most-to-least reliable):
-      1. Parse the response HTML for any /emhuih/<digits> path (works when we
-         landed on the watchfree page after redirect).
-      2. Extract MOVIE_ID from resp.url (the final URL after all redirects).
-      3. Look for a /watchfree/ path in the HTML (meta-refresh / JS redirect).
-      4. Fall back to Location header (only set when follow_redirects=False,
-         kept here as belt-and-suspenders for older httptools variants).
+    Resolve /uprots/TOKEN via 302 Location header to /watchfree/MOVIE_ID/...
+    Returns the watchfree URL, or None.
     """
-    resp1 = httptools.downloadpage(page_url, follow_redirects=True)
-    data = getattr(resp1, 'data', '') or ''
-
-    # ── Strategy 1: /emhuih/<id> anywhere in the response body ──────────────
-    emhuih = scrapertools.find_single_match(data, r'[/"\']emhuih[/"\']?(\d+)')
-    if not emhuih:
-        emhuih = scrapertools.find_single_match(data, r'/emhuih/(\d+)')
-    if emhuih:
-        logger.debug('maxstream._get_iframe_url: found emhuih id=%s in HTML' % emhuih)
-        return 'https://maxstream.video/emhuih/' + emhuih
-
-    # ── Strategy 2: MOVIE_ID from resp.url (final URL after redirect) ────────
-    final_url = getattr(resp1, 'url', '') or ''
-    if final_url and final_url.rstrip('/') != page_url.rstrip('/') and '/watchfree/' in final_url:
-        parts = [p for p in final_url.split('?')[0].rstrip('/').split('/') if p]
-        if len(parts) >= 2 and parts[-2].isdigit():
-            logger.debug('maxstream._get_iframe_url: movie_id=%s from resp.url' % parts[-2])
-            return 'https://maxstream.video/emhuih/' + parts[-2]
-
-    # ── Strategy 3: /watchfree/ path in HTML (meta-refresh / JS window.location) ─
-    wf_match = scrapertools.find_single_match(data, r'["\']([^"\']+/watchfree/[^"\']+)["\']')
-    if wf_match:
-        parts = [p for p in wf_match.split('?')[0].rstrip('/').split('/') if p]
-        if len(parts) >= 2 and parts[-2].isdigit():
-            logger.debug('maxstream._get_iframe_url: movie_id=%s from HTML watchfree ref' % parts[-2])
-            return 'https://maxstream.video/emhuih/' + parts[-2]
-
-    # ── Strategy 4: Location header (legacy / non-CF proxy path) ─────────────
-    headers1 = getattr(resp1, 'headers', None) or {}
-    loc = headers1.get('Location', '').strip()
+    resp = httptools.downloadpage(page_url, follow_redirects=False,
+                                  headers={'Referer': 'https://uprot.net/'})
+    loc = (getattr(resp, 'headers', None) or {}).get('Location', '').strip()
+    logger.info('maxstream._resolve_watchfree code=%r loc=%r' % (getattr(resp, 'code', '?'), loc))
     if loc and '/watchfree/' in loc:
-        parts = [p for p in loc.split('?')[0].rstrip('/').split('/') if p]
-        if len(parts) >= 2 and parts[-2].isdigit():
-            logger.debug('maxstream._get_iframe_url: movie_id=%s from Location header' % parts[-2])
-            return 'https://maxstream.video/emhuih/' + parts[-2]
+        return loc
+    # Fallback: follow redirects and search body
+    resp2 = httptools.downloadpage(page_url, follow_redirects=True,
+                                   headers={'Referer': 'https://uprot.net/'})
+    data = getattr(resp2, 'data', '') or ''
+    wf = scrapertools.find_single_match(data, r'https?://[^\s"\']+/watchfree/[^\s"\']+')
+    logger.info('maxstream._resolve_watchfree fallback wf=%r snippet=%r' % (wf, data[:200]))
+    return wf or None
 
-    logger.debug('maxstream._get_iframe_url: could not extract iframe_url. resp.url=%r data_snippet=%r' % (
-        final_url, data[:200] if data else ''))
+
+def _movie_id_from_watchfree(wf_url):
+    """Extract MOVIE_ID (first path segment after /watchfree/) from a watchfree URL."""
+    try:
+        path = urlparse.urlparse(wf_url).path
+        parts = [p for p in path.split('/') if p]
+        if len(parts) >= 2 and parts[0] == 'watchfree':
+            return parts[1]
+    except Exception:
+        pass
     return None
 
 
 def test_video_exists(page_url):
-    logger.debug("(page_url='%s')" % page_url)
-    iframe_url = _get_iframe_url(page_url)
-    if not iframe_url:
+    logger.info("maxstream.test_video_exists page_url='%s'" % page_url)
+    wf_url = _resolve_watchfree_url(page_url)
+    if not wf_url:
         return False, config.get_localized_string(70449) % "Maxstream"
-    _cache[page_url] = iframe_url
+    movie_id = _movie_id_from_watchfree(wf_url)
+    if not movie_id:
+        return False, config.get_localized_string(70449) % "Maxstream"
+    emhuih_url = 'https://maxstream.video/emhuih/' + movie_id
+    # Verify the file is actually available (not expired/deleted)
+    html = httptools.downloadpage(emhuih_url, headers={'Referer': page_url}).data or ''
+    logger.info("maxstream.test_video_exists emhuih_url=%r snippet=%r" % (emhuih_url, html[:200]))
+    if 'not longer available' in html or 'expired or has been deleted' in html:
+        logger.info("maxstream.test_video_exists: file expired/deleted")
+        return False, config.get_localized_string(70449) % "Maxstream"
+    _cache[page_url] = (emhuih_url, html)
     return True, ""
 
 
 def get_video_url(page_url, premium=False, user="", password="", video_password=""):
     video_urls = []
+    cached = _cache.pop(page_url, None)
+    if cached:
+        emhuih_url, html = cached
+    else:
+        wf_url = _resolve_watchfree_url(page_url)
+        if not wf_url:
+            return video_urls
+        movie_id = _movie_id_from_watchfree(wf_url)
+        if not movie_id:
+            return video_urls
+        emhuih_url = 'https://maxstream.video/emhuih/' + movie_id
+        html = httptools.downloadpage(emhuih_url, headers={'Referer': page_url}).data or ''
 
-    # Retrieve iframe_url (preferably from cache set by test_video_exists)
-    iframe_url = _cache.pop(page_url, None)
-    if not iframe_url:
-        iframe_url = _get_iframe_url(page_url)
-    if not iframe_url:
-        return video_urls
+    logger.info("maxstream.get_video_url emhuih_url=%r" % emhuih_url)
+    logger.info("maxstream.get_video_url emhuih html_snippet=%r" % html[:300])
 
-    # Step 3: Download the embed page and extract HLS m3u8
-    html = httptools.downloadpage(iframe_url, headers={'Referer': page_url}).data
+    cdn_url = scrapertools.find_single_match(html, r'href="(https://[^"]+/cdn-cgi/content[^"]+)"')
+    if cdn_url:
+        logger.info("maxstream.get_video_url cdn_url=%r" % cdn_url)
+        html2 = httptools.downloadpage(cdn_url, headers={'Referer': emhuih_url}).data or ''
+        logger.info("maxstream.get_video_url cdn html_snippet=%r" % html2[:300])
+        m3u8 = scrapertools.find_single_match(html2, r'(https?://[^\s"\']+\.m3u8[^\s"\']*)')
+        if m3u8:
+            video_urls.append(["[Maxstream]", m3u8])
+            return video_urls
+
     m3u8 = scrapertools.find_single_match(html, r'(https?://[^\s"\']+\.m3u8[^\s"\']*)')
     if m3u8:
         video_urls.append(["[Maxstream]", m3u8])
+
     return video_urls
