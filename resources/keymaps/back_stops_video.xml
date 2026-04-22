@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<keymap>
+  <!-- Remap Back/Backspace to Stop in fullscreen video so pressing Back
+       stops playback instead of returning to home with video still running. -->
+  <FullscreenVideo>
+    <keyboard>
+      <backspace>Stop</backspace>
+    </keyboard>
+    <remote>
+      <back>Stop</back>
+    </remote>
+    <joystick name="Xbox 360 Wireless Receiver (XBOX)">
+      <button id="5">Stop</button>
+    </joystick>
+  </FullscreenVideo>
+</keymap>

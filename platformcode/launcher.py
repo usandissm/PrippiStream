@@ -342,8 +342,20 @@ def play(item):
         itemlist = channel.play(item)
         # Play should return a list of playable URLS
         if len(itemlist) > 0 and isinstance(itemlist[0], Item):
-            item = itemlist[0]
-            platformtools.play_video(item)
+            resolved_item = itemlist[0]
+            if not platformtools.play_video(resolved_item):
+                # Video was dead or unresolvable; try the next server from the stored list
+                from core import db as _db
+                stored = list(_db['player'].get('itemlist', []))
+                remaining = [i for i in stored if i.url != item.url]
+                if remaining:
+                    _db['player']['itemlist'] = remaining
+                    _db.close()
+                    play(remaining[0])
+                    return
+                # All servers exhausted – notify the user
+                platformtools.dialog_notification(
+                    config.get_localized_string(20000), config.get_localized_string(60347))
 
         # Allow several qualities from Play in El Channel
         elif len(itemlist) > 0 and isinstance(itemlist[0], list):
@@ -400,7 +412,13 @@ def findvideos(item, itemlist=[]):
         db.close()
         play(itemlist[0].clone(no_return=True))
     else:
-        platformtools.serverWindow(item, itemlist)
+        # Multiple servers: sort HD-first, store full list, auto-play best – retry silently on failure
+        from core import db
+        from core.servertools import sort_servers
+        sorted_list = sort_servers(serverlist)
+        db['player']['itemlist'] = sorted_list
+        db.close()
+        play(sorted_list[0].clone(no_return=True))
 
 
 def search(item):

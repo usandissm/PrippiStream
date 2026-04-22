@@ -720,8 +720,12 @@ class UnshortenIt(object):
 
     def _unshorten_uprot(self, uri):
         html = httptools.downloadpage(uri, cloudscraper=False).data
-        link = scrapertools.find_single_match(html, r'--></button></[a|div]?>.+?<a[^>]+href="([^"]+)">')
-        if link != uri:
+        # Real link is in the <button id="buttok"> anchor
+        link = scrapertools.find_single_match(html, r'href="(https://[^"]+)"><button[^>]*id="buttok"')
+        if not link:
+            # Fallback: blank anchor (older format)
+            link = scrapertools.find_single_match(html, r'<a[^>]+href="(https://[^"]+)">\s*</a>')
+        if link and link != uri:
             return link, 200
         return uri, 200
 

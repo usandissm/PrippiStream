@@ -503,6 +503,23 @@ if __name__ == "__main__":
     # Test if all the required directories are created
     config.verify_directories_created()
 
+    # Install keymap: copy back_stops_video.xml to userdata/keymaps/ so that
+    # pressing Back in fullscreen video stops playback on every device.
+    try:
+        _keymap_src = filetools.join(config.get_runtime_path(), 'resources', 'keymaps', 'back_stops_video.xml')
+        _keymap_dst_dir = xbmc.translatePath('special://userdata/keymaps/')
+        _keymap_dst = filetools.join(_keymap_dst_dir, 'back_stops_video.xml')
+        if not filetools.isdir(_keymap_dst_dir):
+            filetools.mkdir(_keymap_dst_dir)
+        # Only write if missing or content differs (idempotent)
+        _src_data = filetools.read(_keymap_src)
+        if not filetools.isfile(_keymap_dst) or filetools.read(_keymap_dst) != _src_data:
+            filetools.write(_keymap_dst, _src_data)
+            xbmc.executebuiltin('Action(reloadkeymaps)')
+            logger.info('Keymap back_stops_video installed/updated')
+    except:
+        logger.error('Could not install keymap: ' + traceback.format_exc())
+
     # Force mandatory settings on every startup (new install, update, or existing).
     # These are always overwritten so the user never has to set them manually.
     config.set_setting('autostart', True)       # launch at Kodi start

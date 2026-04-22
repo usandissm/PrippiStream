@@ -1181,10 +1181,12 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         set_player(item, xlistitem, mediaurl, view, strm)
         return True
 
-    if not play():
+    result = play()
+    if not result:
         # close db to ensure his thread will stop
         from core import db
         db.close()
+    return result
 
 
 def stop_video():
@@ -1402,16 +1404,22 @@ def get_dialogo_opciones(item, default_action, strm, autoplay):
     # If you can't see the video it informs you
     elif puedes == False:
         if not autoplay:
-            if item.server != "":
-                if "<br/>" in motivo:
-                    ret = dialog_yesno(config.get_localized_string(60362) % item.server, motivo.split("<br/>")[0] + '\n' + motivo.split("<br/>")[1], nolabel='ok', yeslabel=config.get_localized_string(70739))
+            # Suppress error dialog if there are alternative servers to retry automatically
+            from core import db as _db
+            _stored = list(_db['player'].get('itemlist', []))
+            _has_alternatives = any(getattr(i, 'server', '') and i.url != item.url for i in _stored)
+
+            if not _has_alternatives:
+                if item.server != "":
+                    if "<br/>" in motivo:
+                        ret = dialog_yesno(config.get_localized_string(60362) % item.server, motivo.split("<br/>")[0] + '\n' + motivo.split("<br/>")[1], nolabel='ok', yeslabel=config.get_localized_string(70739))
+                    else:
+                        ret = dialog_yesno(config.get_localized_string(60362) % item.server, motivo, nolabel='ok', yeslabel=config.get_localized_string(70739))
                 else:
-                    ret = dialog_yesno(config.get_localized_string(60362) % item.server, motivo, nolabel='ok', yeslabel=config.get_localized_string(70739))
-            else:
-                ret = dialog_yesno(config.get_localized_string(60362) % item.server, config.get_localized_string(60363) + '\n' + config.get_localized_string(60364), nolabel='ok', yeslabel=config.get_localized_string(70739))
-            if ret:
-                xbmc.executebuiltin("Container.Update (%s?%s)" %
-                                    (sys.argv[0], Item(action="open_browser", url=item.url).tourl()))
+                    ret = dialog_yesno(config.get_localized_string(60362) % item.server, config.get_localized_string(60363) + '\n' + config.get_localized_string(60364), nolabel='ok', yeslabel=config.get_localized_string(70739))
+                if ret:
+                    xbmc.executebuiltin("Container.Update (%s?%s)" %
+                                        (sys.argv[0], Item(action="open_browser", url=item.url).tourl()))
             if item.channel == "favorites":
                 # "Remove from favorites"
                 opciones.append(config.get_localized_string(30154))
