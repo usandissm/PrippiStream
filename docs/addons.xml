@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
 <addon id="plugin.video.prippistream" name="PrippiStream"  provider-name="usandissm">
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.34" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.35" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
