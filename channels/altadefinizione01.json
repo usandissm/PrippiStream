@@ -1,10 +1,18 @@
 {
-    "id": "altadefinizione01",
-    "name": "Altadefinizione01",
-    "language": ["ita", "sub-ita"],
-    "active": true,
-    "thumbnail": "altadefinizione01.png",
-    "banner": "altadefinizione01.png",
-    "categories": ["tvshow","movie", "vos"],
-    "settings": []
+  "id": "altadefinizione01",
+  "name": "Altadefinizione01",
+  "language": [
+    "ita",
+    "sub-ita"
+  ],
+  "active": true,
+  "thumbnail": "altadefinizione01.png",
+  "banner": "altadefinizione01.png",
+  "categories": [
+    "tvshow",
+    "movie",
+    "vos"
+  ],
+  "settings": [],
+  "include_in_global_search": true
 }

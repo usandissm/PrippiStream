@@ -1,10 +1,21 @@
 {
-    "id": "ilgeniodellostreaming",
-    "name": "IlGenioDelloStreaming",
-    "active": false,
-    "language": ["ita", "sub-ita"],
-    "thumbnail": "ilgeniodellostreaming.png",
-    "banner": "ilgeniodellostreaming.png",
-    "categories": ["movie", "tvshow", "anime", "vos"],
-    "settings": ["include_in_newest_anime"]
+  "id": "ilgeniodellostreaming",
+  "name": "IlGenioDelloStreaming",
+  "active": false,
+  "language": [
+    "ita",
+    "sub-ita"
+  ],
+  "thumbnail": "ilgeniodellostreaming.png",
+  "banner": "ilgeniodellostreaming.png",
+  "categories": [
+    "movie",
+    "tvshow",
+    "anime",
+    "vos"
+  ],
+  "settings": [
+    "include_in_newest_anime"
+  ],
+  "include_in_global_search": true
 }

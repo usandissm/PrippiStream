@@ -2,9 +2,17 @@
   "id": "filmpertutti",
   "name": "Filmpertutti",
   "active": false,
-  "language": ["ita", "sub-ita"],
+  "language": [
+    "ita",
+    "sub-ita"
+  ],
   "thumbnail": "filmpertutti.png",
   "banner": "filmpertutti.png",
-  "categories": ["anime", "tvshow","movie"],
-  "settings": []
+  "categories": [
+    "anime",
+    "tvshow",
+    "movie"
+  ],
+  "settings": [],
+  "include_in_global_search": true
 }

@@ -1,10 +1,19 @@
 {
-	"id": "cineblog01",
-	"name": "CB01",
-	"language": ["ita", "sub-ita"],
-	"active": true,
-	"thumbnail": "cb01.png",
-	"banner": "cb01.png",
-	"categories": ["tvshow", "movie", "vos", "documentary"],
-	"settings": []
+  "id": "cineblog01",
+  "name": "CB01",
+  "language": [
+    "ita",
+    "sub-ita"
+  ],
+  "active": true,
+  "thumbnail": "cb01.png",
+  "banner": "cb01.png",
+  "categories": [
+    "tvshow",
+    "movie",
+    "vos",
+    "documentary"
+  ],
+  "settings": [],
+  "include_in_global_search": true
 }

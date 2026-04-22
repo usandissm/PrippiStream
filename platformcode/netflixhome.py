@@ -3839,15 +3839,20 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  Nessun risultato SC · cercando altri canali...')
 
         # ── Step 2: Other channels (parallel) ──────────────────────────
-        # FIX: must pass mode='all' — Item().mode is "" which matches no category in get_channels.
+        # Read channels directly from JSON flags — avoids the double check (JSON flag + Kodi
+        # settings) that previously caused get_channels() to always return [].
         try:
-            from specials import search as _gsearch
-            from core.item import Item as _Item
-            channels, _titles = _gsearch.get_channels(_Item(mode='all'))
-            # Exclude SC — already searched above; avoid double results.
-            channels = [c for c in channels if c != 'streamingcommunity']
+            from core import channeltools, channelselector
+            _all_chs = channelselector.filterchannels('all')
+            channels = []
+            for _ch in _all_chs:
+                if _ch.channel == 'streamingcommunity':
+                    continue  # already searched above
+                _cp = channeltools.get_channel_parameters(_ch.channel)
+                if _cp.get('active', False) and _cp.get('include_in_global_search', False):
+                    channels.append(_ch.channel)
         except Exception as exc:
-            logger.error('[NetflixSearch] get_channels error: %s' % str(exc))
+            logger.error('[NetflixSearch] channels detection error: %s' % str(exc))
             channels = []
 
         logger.info('[NetflixSearch] global search: %d other channels' % len(channels))
