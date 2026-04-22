@@ -77,8 +77,8 @@ def newest(categoria):
 
 def search(item, text):
     logger.info("search", text)
-    if item.contentType == 'tvshow': item.url = host + '/serietv'
-    else: item.url = host
+    if item.contentType == 'tvshow': item.url = host.rstrip('/') + '/serietv'
+    else: item.url = host.rstrip('/')
     try:
         item.url = item.url + "/search/" + text.replace(' ', '+')
         return peliculas(item)
