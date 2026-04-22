@@ -11,17 +11,23 @@ _cache = {}
 
 def _get_iframe_url(page_url):
     """
-    Resolve /uprots/ID  →  302 Location: .../watchfree/RAND/MOVIE_ID/TOKEN
+    Resolve /uprots/ID  →  (via redirect chain)  .../watchfree/RAND/MOVIE_ID/TOKEN
     Extract MOVIE_ID (2nd-to-last path segment) and build /emhuih/MOVIE_ID.
-    Avoids parsing watchfree HTML body entirely (doesn't work via CF proxy).
+
+    We follow redirects and read the final URL from resp.url, because Cloudflare
+    often intercepts 302s and returns a 200 response, making the Location header
+    unavailable when follow_redirects=False.
     """
-    resp1 = httptools.downloadpage(page_url, follow_redirects=False)
-    headers1 = getattr(resp1, 'headers', None) or {}
-    location = headers1.get('Location', '').strip()
-    if not location:
+    resp1 = httptools.downloadpage(page_url, follow_redirects=True)
+    final_url = getattr(resp1, 'url', '') or ''
+    # Try Location header as fallback (in case the response is a bare 302)
+    if not final_url or final_url.rstrip('/') == page_url.rstrip('/'):
+        headers1 = getattr(resp1, 'headers', None) or {}
+        final_url = headers1.get('Location', '').strip()
+    if not final_url:
         return None
     # e.g. https://maxsun435.online/watchfree/RAND/MOVIE_ID/TOKEN
-    parts = [p for p in location.split('?')[0].rstrip('/').split('/') if p]
+    parts = [p for p in final_url.split('?')[0].rstrip('/').split('/') if p]
     if len(parts) < 2:
         return None
     movie_id = parts[-2]
