@@ -1000,6 +1000,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
     def _launch(self, item):
         if item.action == 'findvideos':
+            # SC movie or episode: direct play via RunPlugin.
             # Pre-clear any Kodi bookmark for this episode BEFORE RunPlugin.
             _purl = ''
             try:
@@ -1019,10 +1020,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t = threading.Thread(target=self._wait_and_restore, args=(item,))
             t.daemon = True
             t.start()
-        else:
-            # TV show: show inline season/episode selector without leaving
+        elif item.action == 'episodios':
+            # SC TV show: show inline season/episode selector without leaving
             # the Netflix home (avoids all container/window navigation issues).
+            # _select_episode is SC-specific; only call it for SC items.
             t = threading.Thread(target=self._select_episode, args=(item,))
+            t.daemon = True
+            t.start()
+        else:
+            # Non-SC item or any other action (e.g. 'check' from altadefinizione,
+            # cineblog01, etc.): dispatch via RunPlugin → launcher.actions/findvideos
+            # which handles all custom actions correctly without opening a container.
+            _pre_play_set_lang(item)
+            xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+            t = threading.Thread(target=self._wait_and_restore, args=(item,))
             t.daemon = True
             t.start()
 
