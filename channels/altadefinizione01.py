@@ -184,8 +184,8 @@ def findvideos(item):
         urls = support.match(data, patron=r'data-link="([^"]+)').matches
         return support.server(item, urls)
 
-    # Per i film
-    data = httptools.downloadpage(item.url).data
+    # Per i film - riutilizza item.data se già scaricato da check(), evita double-fetch
+    data = getattr(item, 'data', None) or httptools.downloadpage(item.url).data
     urls = []
 
     # Trova tutti gli iframe
