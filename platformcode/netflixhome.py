@@ -120,36 +120,39 @@ class _AvReadyPlayer(xbmc.Player):
 
 
 def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20):
-    """Wait for Kodi's onAVStarted (meaning the stream is playing and the right
-    audio/sub track has already been chosen by Kodi using the temporary global
-    settings), then immediately restore those settings to their original values.
-    This keeps the global-settings pollution window to only ~1-2 seconds.
-    The restore is GUARANTEED — it runs even on timeout or exception."""
+    """Keep the temporary locale settings active for the ENTIRE playback duration,
+    then restore the originals.
+
+    Previous approach used xbmc.Monitor.onAVStarted() — which does NOT exist on
+    Monitor (only on xbmc.Player) — so it always timed out after 20 s and restored
+    'Italian'.  On Android, inputstream.adaptive re-reads locale.audiolanguage on
+    every ABR quality-switch (bitrate adaptation); with 'Italian' already restored
+    at t=20 s, any quality switch at t=60-120 s would silently switch the audio to
+    Italian.
+
+    New approach:
+      Phase 1 — wait up to *timeout* seconds for the new item to START playing
+                (the previous trailer/content is already stopped by the time this
+                function is called from _pre_play_set_lang → _launch).
+      Phase 2 — wait until playback ENDS.
+      Restore  — always restore, even on timeout or exception.
+    """
     try:
         import time as _time
+        player  = xbmc.Player()
+        monitor = xbmc.Monitor()
 
-        def _rpc_set(setting, value):
-            if value is None:
-                return
-            xbmc.executeJSONRPC(
-                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
-                '"params":{"setting":"%s","value":"%s"},"id":1}'
-                % (setting, str(value).replace('"', '')))
-
-        # onAVStarted via a lightweight Monitor subclass
-        class _AVWatcher(xbmc.Monitor):
-            def __init__(self):
-                xbmc.Monitor.__init__(self)
-                self.fired = False
-            def onAVStarted(self):
-                self.fired = True
-
-        watcher = _AVWatcher()
+        # Phase 1: wait for the new content to start playing (up to 'timeout' s).
         t0 = _time.time()
-        while not watcher.fired:
-            if watcher.abortRequested() or (_time.time() - t0) > timeout:
+        while not player.isPlaying():
+            if monitor.abortRequested() or (_time.time() - t0) > timeout:
                 break
-            _time.sleep(0.1)
+            _time.sleep(0.2)
+
+        # Phase 2: wait for playback to END — locale.audiolanguage stays at the
+        # preferred language so every ISA ABR re-init picks the right track.
+        while player.isPlaying() and not monitor.abortRequested():
+            _time.sleep(0.5)
 
     except Exception as exc:
         logger.error('[CW] _restore_lang_after_av_started (wait): %s' % str(exc))
