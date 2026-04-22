@@ -11,27 +11,55 @@ _cache = {}
 
 def _get_iframe_url(page_url):
     """
-    Resolve /uprots/ID  →  (via redirect chain)  .../watchfree/RAND/MOVIE_ID/TOKEN
-    Extract MOVIE_ID (2nd-to-last path segment) and build /emhuih/MOVIE_ID.
+    Resolve /uprots/ID to /emhuih/MOVIE_ID.
 
-    We follow redirects and read the final URL from resp.url, because Cloudflare
-    often intercepts 302s and returns a 200 response, making the Location header
-    unavailable when follow_redirects=False.
+    Strategy (most-to-least reliable):
+      1. Parse the response HTML for any /emhuih/<digits> path (works when we
+         landed on the watchfree page after redirect).
+      2. Extract MOVIE_ID from resp.url (the final URL after all redirects).
+      3. Look for a /watchfree/ path in the HTML (meta-refresh / JS redirect).
+      4. Fall back to Location header (only set when follow_redirects=False,
+         kept here as belt-and-suspenders for older httptools variants).
     """
     resp1 = httptools.downloadpage(page_url, follow_redirects=True)
+    data = getattr(resp1, 'data', '') or ''
+
+    # ── Strategy 1: /emhuih/<id> anywhere in the response body ──────────────
+    emhuih = scrapertools.find_single_match(data, r'[/"\']emhuih[/"\']?(\d+)')
+    if not emhuih:
+        emhuih = scrapertools.find_single_match(data, r'/emhuih/(\d+)')
+    if emhuih:
+        logger.debug('maxstream._get_iframe_url: found emhuih id=%s in HTML' % emhuih)
+        return 'https://maxstream.video/emhuih/' + emhuih
+
+    # ── Strategy 2: MOVIE_ID from resp.url (final URL after redirect) ────────
     final_url = getattr(resp1, 'url', '') or ''
-    # Try Location header as fallback (in case the response is a bare 302)
-    if not final_url or final_url.rstrip('/') == page_url.rstrip('/'):
-        headers1 = getattr(resp1, 'headers', None) or {}
-        final_url = headers1.get('Location', '').strip()
-    if not final_url:
-        return None
-    # e.g. https://maxsun435.online/watchfree/RAND/MOVIE_ID/TOKEN
-    parts = [p for p in final_url.split('?')[0].rstrip('/').split('/') if p]
-    if len(parts) < 2:
-        return None
-    movie_id = parts[-2]
-    return 'https://maxstream.video/emhuih/' + movie_id
+    if final_url and final_url.rstrip('/') != page_url.rstrip('/') and '/watchfree/' in final_url:
+        parts = [p for p in final_url.split('?')[0].rstrip('/').split('/') if p]
+        if len(parts) >= 2 and parts[-2].isdigit():
+            logger.debug('maxstream._get_iframe_url: movie_id=%s from resp.url' % parts[-2])
+            return 'https://maxstream.video/emhuih/' + parts[-2]
+
+    # ── Strategy 3: /watchfree/ path in HTML (meta-refresh / JS window.location) ─
+    wf_match = scrapertools.find_single_match(data, r'["\']([^"\']+/watchfree/[^"\']+)["\']')
+    if wf_match:
+        parts = [p for p in wf_match.split('?')[0].rstrip('/').split('/') if p]
+        if len(parts) >= 2 and parts[-2].isdigit():
+            logger.debug('maxstream._get_iframe_url: movie_id=%s from HTML watchfree ref' % parts[-2])
+            return 'https://maxstream.video/emhuih/' + parts[-2]
+
+    # ── Strategy 4: Location header (legacy / non-CF proxy path) ─────────────
+    headers1 = getattr(resp1, 'headers', None) or {}
+    loc = headers1.get('Location', '').strip()
+    if loc and '/watchfree/' in loc:
+        parts = [p for p in loc.split('?')[0].rstrip('/').split('/') if p]
+        if len(parts) >= 2 and parts[-2].isdigit():
+            logger.debug('maxstream._get_iframe_url: movie_id=%s from Location header' % parts[-2])
+            return 'https://maxstream.video/emhuih/' + parts[-2]
+
+    logger.debug('maxstream._get_iframe_url: could not extract iframe_url. resp.url=%r data_snippet=%r' % (
+        final_url, data[:200] if data else ''))
+    return None
 
 
 def test_video_exists(page_url):
