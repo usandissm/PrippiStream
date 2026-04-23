@@ -261,7 +261,19 @@ def mark_auto_as_watched(item):
         if (marked and total_time < 20) or not marked:
             platformtools.set_played_time(item.clone(played_time=actual_time))
             item.disableAutoplay=True
-            platformtools.serverWindow(item, itemlist)
+            # NetflixHome sets suppress_server_popup before launching so that
+            # the "choose another server" popup never appears after CW playback.
+            _suppress = False
+            try:
+                from core import db as _db_vl
+                _suppress = bool(_db_vl['player'].get('suppress_server_popup', False))
+                if _suppress:
+                    _db_vl['player']['suppress_server_popup'] = False
+                _db_vl.close()
+            except Exception:
+                pass
+            if not _suppress:
+                platformtools.serverWindow(item, itemlist)
 
         if next_episode and next_episode.next_ep and config.get_setting('next_ep') < 3:
             from platformcode.launcher import run

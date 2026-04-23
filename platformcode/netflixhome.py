@@ -999,6 +999,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 break
 
     def _launch(self, item):
+        # Suppress the server-selection popup that mark_auto_as_watched would
+        # otherwise show after playback ends.  We manage resume/next-ep ourselves.
+        try:
+            from core import db as _db_launch
+            _db_launch['player']['suppress_server_popup'] = True
+            _db_launch.close()
+        except Exception:
+            pass
+
         if item.action == 'findvideos':
             # SC movie or episode: direct play via RunPlugin.
             # Pre-clear any Kodi bookmark for this episode BEFORE RunPlugin.
@@ -1187,7 +1196,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if entry:
                 resume_t = float(entry.get('time_watched', 0))
                 if resume_t > 10:
-                    xbmc.sleep(2000)   # wait for buffer/demux
+                    # Wait for the A/V pipeline to be fully ready (onAVStarted) before
+                    # seeking.  This is more reliable than a fixed 2 s sleep because it
+                    # fires exactly when the decoder has enumerated all tracks — the
+                    # earliest moment seekTime() is guaranteed to work.
+                    # Fall back to 8 s timeout for streams that never raise onAVStarted
+                    # (e.g. non-adaptive streams or old Kodi versions).
+                    player.av_started.wait(timeout=8)
+                    xbmc.sleep(500)   # brief settling pause after pipeline init
                     try:
                         player.seekTime(resume_t)
                         logger.info('[CW] resumed "%s" at %.0fs' %
@@ -3633,7 +3649,11 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         self._hero_item = None           # item currently shown in hero
         self._search_done = threading.Event()
         self._lock      = threading.Lock()
-        self._cancelled = threading.Event()
+        self._cancelled    = threading.Event()   # UI-close signal (stops search thread)
+        self._pf_cancelled = threading.Event()   # prefetch-stop signal (set only on back/close)
+        # Pre-fetch: background link testing for non-SC results
+        self._prefetch_results = {}  # id(item) → (server_item, [label, url]) or None
+        self._prefetch_events  = {}  # id(item) → threading.Event (set when prefetch done)
 
     # ── Kodi WindowXML lifecycle ──────────────────────────────────────────
 
@@ -3657,6 +3677,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         aid = action.getId()
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._cancelled.set()
+            self._pf_cancelled.set()  # cancel all prefetch workers on back/close
             self.close()
             return
         # UP from grid → search bar; DOWN from top bar → grid
@@ -3670,10 +3691,12 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
     def onClick(self, control_id):
         if control_id in (SEARCH_BTN_BACK, SEARCH_CLOSE):
             self._cancelled.set()
+            self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
             return
         if control_id == SEARCH_QUERY_BTN:
             self._cancelled.set()
+            self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
             _open_search()
             return
@@ -3752,9 +3775,112 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             logger.error('[NetflixSearch] _open_detail: %s' % str(exc))
 
     def _launch_item(self, item):
-        """Play item, delegating to home window for CW tracking and episode selection."""
+        """Play item. For non-SC items waits for pre-tested working URL and plays directly."""
         try:
-            xbmc.log('[NetflixSearch] _launch_item action=%r contentType=%r' % (item.action, getattr(item,'contentType','')), xbmc.LOGINFO)
+            xbmc.log('[NetflixSearch] _launch_item action=%r ch=%s' % (
+                item.action, getattr(item, '_search_channel', '?')), xbmc.LOGINFO)
+
+            # ── Prefetch path: non-SC items ─────────────────────────────────────
+            if getattr(item, '_search_channel', 'sc') != 'sc':
+                _item_id  = id(item)
+                _evt      = self._prefetch_events.get(_item_id)
+                _pw       = self._parent_window
+                _results  = self._prefetch_results
+
+                # If no prefetch was pre-started for this item, start one now on-demand.
+                # sources = [item] itself; _prefetch_links also searches extra channels.
+                if _evt is None and getattr(item, '_search_channel', 'sc') != 'sc':
+                    _evt = threading.Event()
+                    self._prefetch_events[_item_id] = _evt
+                    threading.Thread(
+                        target=self._prefetch_links,
+                        args=(_item_id, [item], _evt),
+                        daemon=True
+                    ).start()
+
+                if _evt is not None:
+                    # Close dialog immediately so the home window becomes responsive
+                    self._cancelled.set()
+                    self.close()
+
+                    def _async_play(evt=_evt, pw=_pw, item=item,
+                                    item_id=_item_id, results=_results):
+                        # Wait up to 20 s for prefetch to complete
+                        evt.wait(timeout=20)
+                        result = results.get(item_id)
+                        if result:
+                            _si, _vu = result           # (server_item, [label, url])
+                            _stream_url = _vu[1]
+                            xbmc.log('[NetflixSearch] direct play: %.80s' % _stream_url,
+                                     xbmc.LOGINFO)
+                            try:
+                                # Append HTTP headers to URL (Kodi pipe format: url|Header=val&...).
+                                # Referer comes from the server item URL (the embed page),
+                                # User-Agent from httptools defaults.
+                                try:
+                                    import urllib.parse as _urlparse
+                                except ImportError:
+                                    import urllib as _urlparse
+                                from core import httptools as _ht
+                                _play_url = _stream_url
+                                if '|' not in _play_url:
+                                    _hdrs = {
+                                        'User-Agent': _ht.default_headers.get('User-Agent', ''),
+                                        'Referer': getattr(_si, 'url', '') or '',
+                                    }
+                                    _play_url = _play_url + '|' + _urlparse.urlencode(_hdrs)
+
+                                # ListItem path = raw URL (no headers) — same as platformtools.py
+                                li = xbmcgui.ListItem(
+                                    item.fulltitle or item.title or '',
+                                    path=_stream_url)
+                                li.setArt({'thumb': item.thumbnail or ''})
+                                try:
+                                    _il = dict(item.infoLabels or {})
+                                    if _il:
+                                        li.setInfo('video', {
+                                            k: v for k, v in _il.items()
+                                            if v is not None and
+                                            isinstance(v, (str, int, float))
+                                        })
+                                except Exception:
+                                    pass
+                                li.setProperty('IsPlayable', 'true')
+                                _pre_play_set_lang(item)
+                                # Same pattern as platformtools.py: add to playlist with
+                                # piped-headers URL, then play the playlist
+                                _pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
+                                _pl.clear()
+                                _pl.add(_play_url, li)
+                                xbmc.Player().play(_pl, li)
+                                if pw:
+                                    t2 = threading.Thread(
+                                        target=pw._wait_and_restore, args=(item,))
+                                    t2.daemon = True
+                                    t2.start()
+                            except Exception as _ex:
+                                logger.error('[NS-prefetch] direct play error: %s' % str(_ex))
+                                if pw:
+                                    pw._launch(item)
+                                else:
+                                    xbmc.executebuiltin(
+                                        'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                                        % item.tourl())
+                        else:
+                            xbmc.log('[NetflixSearch] prefetch: no working URL, fallback',
+                                     xbmc.LOGINFO)
+                            # Do NOT run pw._launch(item) blindly — the channel
+                            # may be broken. Show a dialog instead.
+                            xbmcgui.Dialog().notification(
+                                'PrippiStream',
+                                'Nessun link funzionante trovato per questo film.',
+                                xbmcgui.NOTIFICATION_WARNING, 4000)
+
+                    t = threading.Thread(target=_async_play, name='NS-launch', daemon=True)
+                    t.start()
+                    return
+
+            # ── Normal path (SC item or no prefetch event) ──────────────────────
             if self._parent_window is not None:
                 self._cancelled.set()
                 self.close()
@@ -3842,8 +3968,9 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         # Read channels directly from JSON flags — avoids the double check (JSON flag + Kodi
         # settings) that previously caused get_channels() to always return [].
         try:
-            from core import channeltools, channelselector
-            _all_chs = channelselector.filterchannels('all')
+            from core import channeltools
+            import channelselector as _channelselector
+            _all_chs = _channelselector.filterchannels('all')
             channels = []
             for _ch in _all_chs:
                 if _ch.channel == 'streamingcommunity':
@@ -3860,6 +3987,35 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         done_ch  = [0]
         all_others = []
 
+        # Article-aware title match: used in both _do_channel and Step 4a.
+        # Rule: if the query starts with a leading article ("i", "il", "la", "the"...),
+        # also accept results that match after stripping the article from BOTH sides.
+        # This lets "Pirati della Silicon Valley" match "I pirati della silicon valley".
+        # If the query has NO leading article, be strict so "Un Amore per sempre"
+        # is NOT accepted when searching "Amore per sempre" (different film).
+        _ART_RE = _re.compile(
+            r'^(il |la |lo |i |le |gli |l |un |una |uno |the |a |an )'
+        )
+        _q_norm_raw   = _re.sub(r'[^a-z0-9 ]', '', query_clean).strip()
+        _q_has_art    = bool(_ART_RE.match(_q_norm_raw))
+        _q_stripped   = _ART_RE.sub('', _q_norm_raw, count=1).strip()
+
+        def _title_match_query(r_norm):
+            """Return True if r_norm is a title-match for the current query."""
+            # Direct match (exact, or result is query + quality/year suffix)
+            if (r_norm == _q_norm_raw
+                    or r_norm.startswith(_q_norm_raw + ' ')
+                    or _q_norm_raw.startswith(r_norm + ' ')):
+                return True
+            # Article-aware match: only when query has a leading article
+            if _q_has_art:
+                r_stripped = _ART_RE.sub('', r_norm, count=1).strip()
+                if (r_stripped == _q_stripped
+                        or r_stripped.startswith(_q_stripped + ' ')
+                        or _q_stripped.startswith(r_stripped + ' ')):
+                    return True
+            return False
+
         # FIX: get_channels returns a list of strings (channel names), not dicts.
         def _do_channel(ch_name):
             if self._cancelled.is_set():
@@ -3875,6 +4031,18 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     tmdb = (r.infoLabels or {}).get('tmdb_id') or (r.infoLabels or {}).get('tmdb')
                     if tmdb and str(tmdb) in sc_tmdb_ids:
                         continue   # SC has this exact title — SC version wins
+                    # Title relevance filter: reject results that don't closely match
+                    # the query. "Un Amore per sempre" must not appear when searching
+                    # "Amore per sempre" — it's a different film.
+                    # Use the raw title (no article stripping) for accurate comparison.
+                    _r_raw = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                                     (r.fulltitle or r.title or '')).strip().lower()
+                    _r_norm = _re.sub(r'[^a-z0-9 ]', '', _r_raw)
+                    _r_norm = _re.sub(r'\s+', ' ', _r_norm).strip()
+                    if _q_norm_raw and not _title_match_query(_r_norm):
+                        logger.debug('[NetflixSearch] %s: skip "%s" (no match for "%s")' % (
+                            ch_name, _r_norm[:40], _q_norm_raw))
+                        continue
                     r._search_channel = ch_name
                     filtered.append(r)
                 logger.debug('[NetflixSearch] %s: %d results' % (ch_name, len(filtered)))
@@ -3941,6 +4109,14 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             t = (it.thumbnail or '').strip()
             return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
 
+        # Build sources map: norm_title → all non-SC items (may be from multiple channels)
+        # Used by prefetch to test ALL channels for a title simultaneously.
+        _all_sources_by_title = {}
+        for _si in all_others:
+            _nt2 = _norm_title(_si)
+            if _nt2:
+                _all_sources_by_title.setdefault(_nt2, []).append(_si)
+
         # Dedup: first occurrence (highest priority) wins per tmdb_id;
         # ALSO dedup by normalized title regardless of whether tmdb_id is present.
         seen_tmdb  = set()
@@ -3969,7 +4145,32 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 seen_title.add(nt)
             deduped.append(it)
 
-        # ── Step 4: Reset panel and re-populate with final sorted list ─
+        # ── Step 4a: Start background link pre-testing for non-SC items ────────
+        # Only prefetch the TOP 3 non-SC results that closely match the query —
+        # avoids saturating the network with threads for false-positive results.
+        _pf_started = 0
+        for _it in deduped:
+            if getattr(_it, '_search_channel', 'sc') == 'sc':
+                continue
+            if _pf_started >= 3:
+                break
+            _nt = _norm_title(_it)
+            # Use the same article-aware match as _do_channel.
+            if _q_norm_raw and not _title_match_query(_nt):
+                continue
+            _sources = _all_sources_by_title.get(_nt, [_it])
+            _evt = threading.Event()
+            self._prefetch_events[id(_it)] = _evt
+            _pf_t = threading.Thread(
+                target=self._prefetch_links,
+                args=(id(_it), list(_sources), _evt),
+                name='NS-pf-%s' % (_nt[:20] if _nt else '?'),
+                daemon=True
+            )
+            _pf_t.start()
+            _pf_started += 1
+
+        # ── Step 4b: Reset panel and re-populate with final sorted list ──
         with self._lock:
             self._items = deduped
         try:
@@ -3992,6 +4193,180 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         except Exception:
             pass
         self._search_done.set()
+
+    def _prefetch_links(self, item_id, sources, event):
+        """Background: find first playable HD stream URL across ALL channel sources.
+
+        Strategy:
+          Phase 1 (parallel) — two task types submitted to the SAME thread pool:
+            A) For each known source (channels that returned this film in search):
+               call check()/findvideos() directly on the item URL.
+            B) For each OTHER active+global_search channel NOT already in sources:
+               search the channel for the film title, then call check()/findvideos()
+               on matching results. This covers channels that missed the film during
+               the global search (site slow, different indexing, etc.).
+          Phase 2 (sequential) — sort all collected server items HD-first via
+               sort_servers, resolve URLs one by one, stop at first working one.
+
+        No server names are hardcoded — we test whatever findvideos returns from
+        each channel (mixdrop, streamtape, voe, doodstream, … anything).
+        """
+        import re as _re
+
+        try:
+            _ART_RE = _re.compile(
+                r'^(il |la |lo |i |le |gli |l |un |una |uno |the |a |an )'
+            )
+            from core import servertools, channeltools
+            from core.servertools import sort_servers
+            from core.item import Item as _PFItem
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            import channelselector as _cs
+
+            # ── helpers ────────────────────────────────────────────────────────
+            def _norm(s):
+                s = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', s or '').strip().lower()
+                s = _re.sub(r'[^a-z0-9 ]', '', s)
+                return _re.sub(r'\s+', ' ', s).strip()
+
+            # Title: use original casing for search(), normalized for matching
+            _ref  = sources[0] if sources else None
+            _raw_title = (
+                (getattr(_ref, 'fulltitle', '') or getattr(_ref, 'title', ''))
+                if _ref else ''
+            )
+            # Strip Kodi colour tags from the raw title
+            _raw_title = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', _raw_title).strip()
+            _tq   = _norm(_raw_title)   # normalized version for title-match filtering
+            _known_channels = {getattr(s, 'channel', '') for s in sources}
+
+            def _fetch_servers(src):
+                """Call check()/findvideos() on a known source Item → server items."""
+                ch_name = getattr(src, 'channel', None)
+                if not ch_name or self._pf_cancelled.is_set():
+                    return []
+                try:
+                    ch  = __import__('channels.' + ch_name, fromlist=[ch_name])
+                    act = getattr(src, 'action', 'findvideos')
+                    if act == 'check' and hasattr(ch, 'check'):
+                        sv = ch.check(src)
+                    elif hasattr(ch, act):
+                        sv = getattr(ch, act)(src)
+                    elif hasattr(ch, 'findvideos'):
+                        sv = ch.findvideos(src)
+                    else:
+                        return []
+                    svlist = [i for i in (sv or []) if getattr(i, 'server', None)]
+                    if svlist:
+                        logger.debug('[NS-pf] fetch ch=%s → %d servers' % (ch_name, len(svlist)))
+                    return svlist
+                except Exception as _ex:
+                    logger.debug('[NS-pf] fetch ch=%s: %s' % (ch_name, str(_ex)))
+                    return []
+
+            def _search_and_fetch(ch_name):
+                """Search ch_name for the film title, call findvideos on matches → server items."""
+                if self._pf_cancelled.is_set() or not _raw_title:
+                    return []
+                try:
+                    ch = __import__('channels.' + ch_name, fromlist=[ch_name])
+                    if not hasattr(ch, 'search'):
+                        return []
+                    # Pass original (un-normalised) title so case-sensitive searches work
+                    results = ch.search(_PFItem(channel=ch_name), _raw_title) or []
+                    # Keep only results whose title STARTS WITH the query (after normalisation).
+                    # startswith rejects superset false-positives: "Un Amore per sempre"
+                    # contains all query words but does NOT start with "amore per sempre",
+                    # so it is correctly discarded. Quality/year suffixes are fine:
+                    # "Amore per sempre HD" and "Amore per sempre 2021" both pass.
+                    def _title_matches_ch(r):
+                        if not _tq:
+                            return False
+                        n = _norm(getattr(r, 'title', '') or '')
+                        # exact match OR result is query + suffix (quality/year)
+                        if n == _tq or n.startswith(_tq + ' '):
+                            return True
+                        # article-aware: if _tq starts with leading article, also try stripped
+                        _tq_stripped = _ART_RE.sub('', _tq, count=1).strip() if _ART_RE.match(_tq) else _tq
+                        if _tq_stripped != _tq:
+                            n_stripped = _ART_RE.sub('', n, count=1).strip()
+                            return (n_stripped == _tq_stripped
+                                    or n_stripped.startswith(_tq_stripped + ' ')
+                                    or _tq_stripped.startswith(n_stripped + ' '))
+                        return False
+
+                    matched = [r for r in results if _title_matches_ch(r)]
+                    if not matched:
+                        return []
+                    logger.debug('[NS-pf] search ch=%s → %d matches for "%s"' % (
+                        ch_name, len(matched), _raw_title))
+                    servers = []
+                    for m in matched[:1]:   # max 1 item per channel to avoid noise
+                        if self._pf_cancelled.is_set():
+                            break
+                        servers.extend(_fetch_servers(m))
+                    return servers
+                except Exception as _ex:
+                    logger.debug('[NS-pf] search_fetch ch=%s: %s' % (ch_name, str(_ex)))
+                    return []
+
+            # ── discover extra channels ────────────────────────────────────────
+            extra_channels = []
+            try:
+                for _ch in _cs.filterchannels('all'):
+                    if _ch.channel == 'streamingcommunity':
+                        continue
+                    if _ch.channel in _known_channels:
+                        continue
+                    cp = channeltools.get_channel_parameters(_ch.channel)
+                    if cp.get('active', False) and cp.get('include_in_global_search', False):
+                        extra_channels.append(_ch.channel)
+            except Exception as _ex:
+                logger.debug('[NS-pf] extra channels detection: %s' % str(_ex))
+
+            logger.info('[NS-pf] sources=%d known=%s · extra=%s · title="%s"' % (
+                len(sources), sorted(_known_channels), sorted(extra_channels[:5]), _raw_title))
+
+            # ── Phase 1: all tasks run in the SAME parallel pool ───────────────
+            all_sv = []
+            with ThreadPoolExecutor(max_workers=10) as pool:
+                futs = {}
+                for src in sources:
+                    futs[pool.submit(_fetch_servers, src)] = getattr(src, 'channel', '?')
+                for ch in extra_channels:
+                    futs[pool.submit(_search_and_fetch, ch)] = ch
+                for fut in as_completed(futs):
+                    if self._pf_cancelled.is_set():
+                        break
+                    all_sv.extend(fut.result() or [])
+
+            if not all_sv or self._pf_cancelled.is_set():
+                return
+
+            logger.info('[NS-pf] Phase 1 total server items: %d' % len(all_sv))
+
+            # ── Phase 2: sort HD-first, test sequentially, stop at first working ─
+            for si in sort_servers(all_sv):
+                if self._pf_cancelled.is_set():
+                    break
+                try:
+                    video_urls, ok, _ = servertools.resolve_video_urls_for_playing(
+                        si.server, si.url)
+                    if ok and video_urls:
+                        self._prefetch_results[item_id] = (si, video_urls[0])
+                        logger.info('[NS-pf] FOUND server=%s qual=%s url=%.60s' % (
+                            si.server, getattr(si, 'quality', '?'), video_urls[0][1]))
+                        return  # stop immediately
+                except Exception:
+                    continue
+
+        except Exception as ex:
+            logger.error('[NS-pf] fatal: %s' % str(ex))
+        finally:
+            self._prefetch_results.setdefault(item_id, None)
+            event.set()
+            logger.info('[NS-pf] done item_id=%d found=%s' % (
+                item_id, 'YES' if self._prefetch_results.get(item_id) else 'NO'))
 
     def _set_progress(self, text):
         try:

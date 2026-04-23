@@ -590,6 +590,25 @@ if __name__ == "__main__":
     # Also run once at startup (in background, non-blocking)
     run_threaded(_update_channels_json, ())
 
+    # ── Addon update notification (works on every platform including Android TV) ──
+    # Kodi's own update toast is sometimes suppressed by skins/settings on TV.
+    # We detect the version change ourselves and show a reliable notification.
+    try:
+        current_ver = config.get_addon_version(with_fix=False)
+        last_ver    = config.get_setting('last_notified_version', default='')
+        if current_ver != last_ver:
+            import xbmcgui
+            xbmcgui.Dialog().notification(
+                config.get_localized_string(20000),                     # "PrippiStream"
+                u'Aggiornato alla versione %s' % current_ver,
+                xbmcgui.NOTIFICATION_INFO,
+                5000,   # 5 s
+                True    # sound=True
+            )
+            config.set_setting('last_notified_version', current_ver)
+    except Exception:
+        logger.error(traceback.format_exc())
+
     monitor = AddonMonitor()
 
     # mark as stopped all downloads (if we are here, probably kodi just started)
