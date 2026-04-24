@@ -684,9 +684,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
         # First genre only (TMDB returns slash-separated list)
         genre_str = str(genre).split('/')[0].strip() if genre else ''
-        # Truncate plot to ~220 chars (56px label height in v6 hero = ~4 lines)
-        if len(plot) > 220:
-            plot = plot[:217] + '...'
         try:
             img = fanart or thumb
             if img:
@@ -696,7 +693,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self.getControl(HERO_META).setLabel(meta)
             self.getControl(HERO_CATEG).setLabel(self.rows_data[row_idx][0])
             try:
-                self.getControl(HERO_PLOT).setLabel(plot)
+                self.getControl(HERO_PLOT).setText(plot)
             except Exception:
                 pass
         except Exception as exc:
@@ -712,7 +709,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
     def _hide_hover_box(self, row_idx):
         """Move hover-frame off-screen for the given row."""
         try:
-            self.getControl(HOVER_BOX_BASE + row_idx * ROW_STEP).setPosition(-278, 42)
+            # ROW 00 (CW) uses wider cards (370px) → park further left
+            off_x = -400 if row_idx == 0 else -278
+            self.getControl(HOVER_BOX_BASE + row_idx * ROW_STEP).setPosition(off_x, 54)
         except Exception:
             pass
 
@@ -885,7 +884,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                 if self._hover_box_row >= 0 and self._hover_box_row != i:
                                     self._hide_hover_box(self._hover_box_row)
                                 try:
-                                    self.getControl(HOVER_BOX_BASE + i * ROW_STEP).setPosition(slot * 278, 42)
+                                    self.getControl(HOVER_BOX_BASE + i * ROW_STEP).setPosition(slot * 278, 54)
                                     self._hover_box_row = i
                                 except Exception:
                                     pass
