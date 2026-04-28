@@ -4,6 +4,7 @@
 # v4 — lazy-load extra rows from other VOD channels.
 # ------------------------------------------------------------
 
+import os
 import re
 import sys
 import time
@@ -359,6 +360,44 @@ def _cw_key(item):
         return 'movie_%s' % base
 
 
+def _fix_cw_url_domain(it):
+    """Replace a stale channel domain in a CW item's URL with the current one from channels.json.
+
+    CW items store the full URL at watch-time. When the channel migrates to a new domain
+    (e.g. streamingcommunityz.ooo → streamingcommunityz.organic) the stored URL becomes
+    unreachable. This function rewrites the netloc to match the live channel host so that
+    playback and data-fetching work correctly without the user having to re-add the item.
+    """
+    ch = getattr(it, 'channel', '') or ''
+    if not ch:
+        return
+    try:
+        current_host = config.get_channel_url(name=ch)
+    except Exception:
+        return
+    if not current_host:
+        return
+    try:
+        if PY3:
+            from urllib.parse import urlsplit, urlunsplit
+        else:
+            from urlparse import urlsplit, urlunsplit
+        current_netloc = urlsplit(current_host).netloc
+        for attr in ('url', '_cw_show_url'):
+            old_url = getattr(it, attr, '') or ''
+            if not old_url:
+                continue
+            parsed = urlsplit(old_url)
+            if parsed.netloc and parsed.netloc != current_netloc:
+                logger.info('[CW] domain updated %s → %s (%s)' % (
+                    parsed.netloc, current_netloc, getattr(it, 'fulltitle', '')))
+                new_url = urlunsplit((parsed.scheme, current_netloc,
+                                     parsed.path, parsed.query, parsed.fragment))
+                setattr(it, attr, new_url)
+    except Exception as exc:
+        logger.error('[CW] _fix_cw_url_domain: %s' % str(exc))
+
+
 def _build_cw_items():
     """Build Items from the Continue Watching DB.
     Entries >= 97% watched are treated as completed and auto-removed.
@@ -385,6 +424,7 @@ def _build_cw_items():
             it.cw_time_watched = cw_time
             it.cw_total_time   = cw_total
             it._cw_show_url    = e.get('show_url', '') or ''
+            _fix_cw_url_domain(it)  # update stale domains after migration
             items.append(it)
         except Exception as exc:
             logger.error('[CW] build item: %s' % str(exc))
@@ -449,6 +489,28 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
     def _bg_load(self):
         """Run in background thread: fetch SC rows, prepend CW row, then update UI."""
         global _sc_rows_cache
+        # ── Sync channels.json BEFORE loading rows so domains are always current ──
+        _CHANNELS_REMOTE = 'https://raw.githubusercontent.com/usandissm/PrippiStream/main/channels.json'
+        try:
+            if PY3:
+                import urllib.request as _urllib_req
+            else:
+                import urllib as _urllib_req
+            _remote = _urllib_req.urlopen(_CHANNELS_REMOTE, timeout=6).read().decode('utf-8')
+            _local_path = os.path.join(config.get_runtime_path(), 'channels.json')
+            try:
+                with open(_local_path, 'r', encoding='utf-8') as _f:
+                    _local = _f.read()
+            except Exception:
+                _local = ''
+            if _remote.strip() != _local.strip():
+                with open(_local_path, 'w', encoding='utf-8') as _f:
+                    _f.write(_remote)
+                config.channels_data = dict()
+                logger.info('[NetflixHome] channels.json updated from GitHub')
+        except Exception as _e:
+            logger.error('[NetflixHome] channels.json sync failed: %s' % str(_e))
+
         try:
             sc_rows = _fetch_rows()
             _sc_rows_cache = sc_rows  # keep a copy for fast refresh

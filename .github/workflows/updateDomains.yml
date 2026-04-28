@@ -25,24 +25,30 @@ jobs:
       - name: Update channel domains
         run: python tools/updateDomains.py
 
-      - name: Bump patch version
-        id: version
+      - name: Check for domain changes
+        id: check_changes
         run: |
-          NEW_VER=$(python tools/bump_version.py)
-          echo "version=$NEW_VER" >> $GITHUB_OUTPUT
-          echo "Nuova versione: $NEW_VER"
+          if git diff --quiet channels.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No domain changes — skipping release."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Domain changes detected — will release."
+          fi
 
       - name: Rebuild addon ZIP, addons.xml e repository ZIP
+        if: steps.check_changes.outputs.changed == 'true'
         run: |
           python tools/make_addon_zip.py
           python tools/make_addons_xml.py
           python tools/make_repo_zip.py
 
       - name: Commit & Push changes
+        if: steps.check_changes.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add addon.xml channels.json docs/
+          git add channels.json docs/
           git diff --staged --quiet && echo "Nessuna modifica." || \
-            git commit -m "Daily update: domini + Release v${{ steps.version.outputs.version }} [skip ci]"
+            git commit -m "Aggiornamento domini [skip ci]"
           git push

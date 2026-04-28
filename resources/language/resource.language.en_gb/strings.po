@@ -16,7 +16,7 @@ msgstr ""
 "Language: en_EN\n"
 
 msgctxt "#20000"
-msgid "Stream4Me"
+msgid "PrippiStream"
 msgstr ""
 
 msgctxt "#20001"

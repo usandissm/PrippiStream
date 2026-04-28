@@ -719,40 +719,15 @@ class UnshortenIt(object):
             return httptools.downloadpage(uri, only_headers=True, follow_redirects=False).headers.get('location', uri), 200
 
     def _unshorten_uprot(self, uri):
-        resp = httptools.downloadpage(uri, cloudscraper=False)
-        html = resp.data
-        logger.info('_unshorten_uprot uri=%r code=%r html_len=%d' % (uri, resp.code, len(html) if html else 0))
-
-        # The uprot page has multiple decoy links (hidden divs, empty anchors).
-        # The REAL link is the visible "Continue" button (not inside display:none).
-        # Strategy: strip hidden sections first, then find the visible Continue button.
-        import re as _re
-
-        # Remove <!-- ... --> comments and display:none sections
-        html_clean = _re.sub(r'<!--.*?-->', '', html, flags=_re.DOTALL)
-        html_clean = _re.sub(r'<div[^>]+display\s*:\s*none[^>]*>.*?</div>', '', html_clean, flags=_re.DOTALL | _re.IGNORECASE)
-
-        # Find visible Continue button link (text is "Continue" possibly spaced like "C o n t i n u e")
-        link = scrapertools.find_single_match(html_clean,
-            r'<a[^>]+href="(https://[^"]+)"[^>]*>\s*<button[^>]*>\s*[Cc][\s\-]*[Oo][\s\-]*[Nn][\s\-]*[Tt][\s\-]*[Ii][\s\-]*[Nn][\s\-]*[Uu][\s\-]*[Ee]')
-        if not link:
-            # Fallback: any visible button link (not empty, not in hidden)
-            matches = scrapertools.find_multiple_matches(html_clean,
-                r'<a[^>]+href="(https://[^"]+)"[^>]*>\s*<button[^>]*>\s*([^<]{1,30})\s*<')
-            for m_url, m_text in matches:
-                text = m_text.strip()
-                if text and 'display' not in text.lower():
-                    link = m_url
-                    break
-        if not link:
-            # Legacy fallback: look for id="buttok" or id="butok"
-            link = scrapertools.find_single_match(html, r'href="(https://[^"]+)"><button[^>]*id="butt?ok"')
-        if not link:
-            # Last resort: blank anchor (old format)
-            link = scrapertools.find_single_match(html, r'<a[^>]+href="(https://[^"]+)">\s*</a>')
-
+        html = httptools.downloadpage(uri, cloudscraper=False).data
+        logger.info('_unshorten_uprot uri=%r html_len=%d' % (uri, len(html) if html else 0))
+        # Regex from S4Me upstream — matches the visible Continue button structure.
+        # When uprot shows a CAPTCHA or changes layout, find_single_match returns ''
+        # which is != uri, so the unshorten loop ends with '' and the server resolver
+        # correctly treats the link as unresolvable (no valid video URL).
+        link = scrapertools.find_single_match(html, r'--></button></[a|div]?>.+?<a[^>]+href="([^"]+)">')
         logger.info('_unshorten_uprot extracted link=%r' % link)
-        if link and link != uri:
+        if link != uri:
             return link, 200
         return uri, 200
 
