@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EpisodePicker.xml — 1280x720  PrippiStream  (coords = 1080i x 2/3)
+  id=310 season tabs  |  id=311 episode list  |  id=321 close button
+-->
+<window type="dialog">
+    <allowmouse>true</allowmouse>
+    <defaultcontrol>311</defaultcontrol>
+    <animation type="WindowOpen" reversible="false">
+        <effect type="fade" start="0" end="100" time="160" tween="sine"/>
+    </animation>
+    <animation type="WindowClose" reversible="false">
+        <effect type="fade" start="100" end="0" time="120" tween="sine"/>
+    </animation>
+
+    <controls>
+
+        <control type="image">
+            <left>0</left><top>0</top><width>1280</width><height>720</height>
+            <texture colordiffuse="CC000000">white.png</texture>
+        </control>
+
+        <control type="image">
+            <left>0</left><top>0</top><width>1280</width><height>720</height>
+            <texture colordiffuse="F01A1A1A">white.png</texture>
+        </control>
+
+        <control type="label">
+            <left>28</left><top>12</top><width>300</width><height>24</height>
+            <font>font14</font><textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        </control>
+
+        <control type="label">
+            <left>174</left><top>14</top><width>660</width><height>18</height>
+            <font>font12</font><textcolor>FF555555</textcolor>
+            <label>SELEZIONA EPISODIO</label>
+        </control>
+
+        <!-- Close / Cancel button id=321 -->
+        <control type="button" id="321">
+            <left>1160</left><top>10</top><width>100</width><height>28</height>
+            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
+            <label>[B]&#10005;  CHIUDI[/B]</label>
+            <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <ondown>310</ondown>
+            <animation effect="zoom" start="100" end="108" center="auto" time="120" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="108" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
+        </control>
+
+        <control type="image">
+            <left>0</left><top>43</top><width>1280</width><height>2</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+
+        <!-- Season tabs id=310 (horizontal panel, single row) -->
+        <control type="panel" id="310">
+            <left>0</left><top>46</top><width>1280</width><height>38</height>
+            <scrolltime tween="cubic" easing="out">200</scrolltime>
+            <scrollwrap>false</scrollwrap>
+            <onup>321</onup><ondown>311</ondown>
+            <itemlayout height="38" width="134">
+                <control type="image">
+                    <left>3</left><top>3</top><width>128</width><height>32</height>
+                    <texture colordiffuse="18FFFFFF">white.png</texture>
+                </control>
+                <control type="label">
+                    <left>0</left><top>0</top><width>134</width><height>38</height>
+                    <font>font12</font><textcolor>FF666666</textcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <align>center</align><aligny>center</aligny>
+                </control>
+            </itemlayout>
+            <focusedlayout height="38" width="134">
+                <control type="image">
+                    <left>3</left><top>3</top><width>128</width><height>32</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="150" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                </control>
+                <control type="label">
+                    <left>0</left><top>0</top><width>134</width><height>38</height>
+                    <font>font12</font><textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>CC000000</shadowcolor>
+                    <label>[B]$INFO[ListItem.Label][/B]</label>
+                    <align>center</align><aligny>center</aligny>
+                </control>
+            </focusedlayout>
+        </control>
+
+        <control type="image">
+            <left>0</left><top>86</top><width>1280</width><height>2</height>
+            <texture colordiffuse="20FFFFFF">white.png</texture>
+        </control>
+
+        <!-- Episode list id=311 (vertical) -->
+        <control type="list" id="311">
+            <left>27</left><top>90</top><width>1226</width><height>606</height>
+            <scrolltime tween="cubic" easing="out">200</scrolltime>
+            <onup>310</onup>
+            <itemlayout height="74" width="1226">
+                <control type="image">
+                    <left>0</left><top>3</top><width>124</width><height>68</height>
+                    <texture colordiffuse="22FFFFFF">white.png</texture>
+                </control>
+                <control type="image">
+                    <left>0</left><top>3</top><width>124</width><height>68</height>
+                    <texture>$INFO[ListItem.Art(thumb)]</texture>
+                    <aspectratio>scale</aspectratio>
+                </control>
+                <control type="label">
+                    <left>134</left><top>9</top><width>1072</width><height>18</height>
+                    <font>font12</font><textcolor>FFBBBBBB</textcolor>
+                    <shadowcolor>CC000000</shadowcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <truncated>true</truncated>
+                </control>
+                <control type="label">
+                    <left>134</left><top>31</top><width>947</width><height>14</height>
+                    <font>font10</font><textcolor>FF666666</textcolor>
+                    <label>$INFO[ListItem.Property(overview)]</label>
+                    <truncated>true</truncated>
+                </control>
+                <control type="label">
+                    <left>1094</left><top>31</top><width>130</width><height>13</height>
+                    <font>font10</font><textcolor>FF555555</textcolor>
+                    <label>$INFO[ListItem.Property(runtime)]</label>
+                    <align>right</align>
+                </control>
+                <control type="image">
+                    <left>0</left><top>72</top><width>1226</width><height>2</height>
+                    <texture colordiffuse="10FFFFFF">white.png</texture>
+                </control>
+            </itemlayout>
+            <focusedlayout height="74" width="1226">
+                <control type="image">
+                    <left>0</left><top>0</top><width>1226</width><height>74</height>
+                    <texture colordiffuse="14E50914">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="150" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                </control>
+                <control type="image">
+                    <left>0</left><top>0</top><width>4</width><height>74</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                    <animation effect="fade" start="0" end="100" time="150" tween="sine">Focus</animation>
+                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                </control>
+                <control type="image">
+                    <left>0</left><top>3</top><width>124</width><height>68</height>
+                    <texture colordiffuse="22FFFFFF">white.png</texture>
+                </control>
+                <control type="image">
+                    <left>0</left><top>3</top><width>124</width><height>68</height>
+                    <texture>$INFO[ListItem.Art(thumb)]</texture>
+                    <aspectratio>scale</aspectratio>
+                </control>
+                <control type="label">
+                    <left>134</left><top>9</top><width>1072</width><height>18</height>
+                    <font>font12</font><textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>CC000000</shadowcolor>
+                    <label>$INFO[ListItem.Label]</label>
+                    <truncated>true</truncated>
+                </control>
+                <control type="label">
+                    <left>134</left><top>31</top><width>947</width><height>14</height>
+                    <font>font10</font><textcolor>FFAAAAAA</textcolor>
+                    <label>$INFO[ListItem.Property(overview)]</label>
+                    <truncated>true</truncated>
+                </control>
+                <control type="label">
+                    <left>1094</left><top>31</top><width>130</width><height>13</height>
+                    <font>font10</font><textcolor>FF777777</textcolor>
+                    <label>$INFO[ListItem.Property(runtime)]</label>
+                    <align>right</align>
+                </control>
+                <control type="image">
+                    <left>0</left><top>72</top><width>1226</width><height>2</height>
+                    <texture colordiffuse="10FFFFFF">white.png</texture>
+                </control>
+            </focusedlayout>
+        </control>
+
+    </controls>
+</window>

@@ -1,9 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
-  StreamingUnity Detail Window  1280x720 v1
-  Opens over home on ENTER; shows fanart/trailer, full scrollable plot, PLAY + MY LIST.
-  IDs: fanart=201  videowindow=202  title=204  meta1=205  meta2=206
-       meta3=207  tagline=208  plot-textbox=209  PLAY=210  LIST=211  CLOSE=212
+  DetailWindow.xml — 1920x1080  Cinema Mode  PrippiStream
+  bg rect: top=420, h=660 — fills to y=1080 (no bottom gap)
+  id=223 EpInfo + id=215 EpSel: visible=false, shown by Python for tvshow items
 -->
 <window type="dialog">
     <allowmouse>true</allowmouse>
@@ -17,220 +16,257 @@
 
     <controls>
 
-        <!-- ── Base black ── -->
+        <!-- Base fill -->
         <control type="image">
-            <left>0</left><top>0</top>
-            <width>1920</width><height>1080</height>
+            <left>0</left><top>0</top><width>1920</width><height>1080</height>
             <texture colordiffuse="FF0D0D0D">white.png</texture>
         </control>
 
-        <!-- ── Video window: shows active player output (trailer) ── -->
+        <!-- Trailer videowindow (fullscreen behind everything) -->
         <control type="videowindow" id="202">
-            <left>0</left><top>0</top>
-            <width>1920</width><height>1080</height>
+            <left>0</left><top>0</top><width>1920</width><height>1080</height>
         </control>
 
-        <!-- ── Fanart (background when no / before trailer) ── -->
+        <!-- Fanart (Python hides when trailer starts) -->
         <control type="image" id="201">
-            <left>0</left><top>0</top>
-            <width>1920</width><height>1080</height>
+            <left>0</left><top>0</top><width>1920</width><height>1080</height>
             <texture>-</texture>
             <aspectratio>scale</aspectratio>
         </control>
 
-        <!-- ── Global dim so text/UI are readable over video/fanart ── -->
-        <control type="image">
-            <left>0</left><top>0</top>
-            <width>1920</width><height>1080</height>
-            <texture colordiffuse="A8000000">white.png</texture>
-        </control>
+        <!-- CINEMA MODE GROUP id=230
+             Python: setVisible(False) after 3s -> fade out 800ms
+                     setVisible(True)  on any key -> fade in  300ms -->
+        <control type="group" id="230">
+            <animation type="Hidden">
+                <effect type="fade" start="100" end="0" time="800" tween="sine"/>
+            </animation>
+            <animation type="Visible">
+                <effect type="fade" start="0" end="100" time="300" tween="sine"/>
+            </animation>
 
-        <!-- ── Extra darkening on left column (text area) ── -->
-        <control type="image">
-            <left>0</left><top>78</top>
-            <width>1080</width><height>1002</height>
-            <texture colordiffuse="50000000">white.png</texture>
-        </control>
+            <!-- Top bar tint -->
+            <control type="image">
+                <left>0</left><top>0</top><width>1920</width><height>78</height>
+                <texture colordiffuse="A0000000">white.png</texture>
+            </control>
 
-        <!-- ── Top bar ── -->
-        <control type="image">
-            <left>0</left><top>0</top>
-            <width>1920</width><height>78</height>
-            <texture colordiffuse="D0000000">white.png</texture>
-        </control>
+            <!-- Brand -->
+            <control type="label">
+                <left>42</left><top>18</top><width>450</width><height>36</height>
+                <font>font14</font><textcolor>FFFFFFFF</textcolor>
+                <shadowcolor>CC000000</shadowcolor>
+                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+            </control>
 
-        <!-- ── Bottom bar (buttons area) ── -->
-        <control type="image">
-            <left>0</left><top>900</top>
-            <width>1920</width><height>180</height>
-            <texture colordiffuse="D00D0D0D">white.png</texture>
-        </control>
+            <!-- Red accent line -->
+            <control type="image">
+                <left>0</left><top>72</top><width>1920</width><height>3</height>
+                <texture colordiffuse="FFE50914">white.png</texture>
+            </control>
 
-        <!-- Red accent line on top bar -->
-        <control type="image">
-            <left>0</left><top>75</top>
-            <width>1920</width><height>3</height>
-            <texture colordiffuse="FFE50914">white.png</texture>
-        </control>
+            <!-- CHIUDI id=212 -->
+            <control type="button" id="212">
+                <left>1740</left><top>15</top><width>150</width><height>42</height>
+                <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+                <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
+                <label>[B]&#10005;  CHIUDI[/B]</label>
+                <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+                <align>center</align>
+                <ondown>210</ondown><onleft>213</onleft>
+                <animation effect="zoom" start="100" end="108" center="auto" time="120" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="108" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
+            </control>
 
-        <!-- Brand -->
-        <control type="label">
-            <left>42</left><top>21</top>
-            <width>450</width><height>36</height>
-            <font>font14</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
-            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
-        </control>
+            <!-- ONE background rect fills y=420..1080 — no gap at bottom -->
+            <control type="image">
+                <left>0</left><top>420</top><width>1920</width><height>660</height>
+                <texture colordiffuse="E80D0D0D">white.png</texture>
+            </control>
 
-        <!-- CLOSE button (top right) -->
-        <control type="button" id="212">
-            <left>1740</left><top>18</top>
-            <width>150</width><height>42</height>
-            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
-            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B]CHIUDI[/B]</label>
-            <font>font10</font>
-            <textcolor>FFAAAAAA</textcolor>
-            <focusedcolor>FFFFFFFF</focusedcolor>
-            <align>center</align>
-            <ondown>210</ondown>
-            <onleft>210</onleft>
-            <animation effect="zoom" start="100" end="110" center="auto" time="120" tween="sine" easing="out">Focus</animation>
-            <animation effect="zoom" start="110" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
-        </control>
+            <!-- Title id=204 — narrowed to leave room for EP selector on right -->
+            <control type="label" id="204">
+                <left>72</left><top>430</top><width>620</width><height>54</height>
+                <font>font16</font><textcolor>FFFFFFFF</textcolor>
+                <shadowcolor>D0000000</shadowcolor>
+                <label></label><align>left</align><aligny>center</aligny>
+            </control>
 
-        <!-- ── Title ── -->
-        <control type="label" id="204">
-            <left>48</left><top>96</top>
-            <width>1380</width><height>78</height>
-            <font>font14</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>left</align>
-            <aligny>center</aligny>
-        </control>
+            <!-- STAGIONI & EPISODI button id=215 — right of title, tvshow only -->
+            <control type="button" id="215">
+                <left>730</left><top>428</top><width>580</width><height>58</height>
+                <texturefocus colordiffuse="C8E50914">white.png</texturefocus>
+                <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+                <label>[B]&#9776;  STAGIONI &amp; EPISODI[/B]</label>
+                <font>font12</font><textcolor>FFCCCCCC</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+                <align>center</align>
+                <onup>209</onup><ondown>210</ondown><onleft>212</onleft><onright>211</onright>
+                <visible>!String.IsEmpty(Window.Property(is_tvshow))</visible>
+                <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            </control>
 
-        <!-- ── Meta 1: year · type · lang · rating ── -->
-        <control type="label" id="205">
-            <left>48</left><top>180</top>
-            <width>1380</width><height>36</height>
-            <font>font12</font>
-            <textcolor>FF22C55E</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>left</align>
-        </control>
+            <!-- Ep info label id=223 — below EP button, tvshow only -->
+            <control type="label" id="223">
+                <left>730</left><top>493</top><width>1118</width><height>24</height>
+                <font>font12</font><textcolor>FF888888</textcolor>
+                <shadowcolor>CC000000</shadowcolor>
+                <label></label>
+                <visible>!String.IsEmpty(Window.Property(is_tvshow))</visible>
+            </control>
 
-        <!-- ── Meta 2: genre · runtime · country ── -->
-        <control type="label" id="206">
-            <left>48</left><top>222</top>
-            <width>1824</width><height>30</height>
-            <font>font12</font>
-            <textcolor>FFAAAAAA</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>left</align>
-        </control>
+            <!-- Meta1: year . rating . type . lang (id=205) -->
+            <control type="label" id="205">
+                <left>72</left><top>488</top><width>1776</width><height>24</height>
+                <font>font12</font><textcolor>FFFFFFFF</textcolor>
+                <shadowcolor>CC000000</shadowcolor><label></label>
+            </control>
 
-        <!-- ── Meta 3: director · cast ── -->
-        <control type="label" id="207">
-            <left>48</left><top>258</top>
-            <width>1824</width><height>30</height>
-            <font>font12</font>
-            <textcolor>FF888888</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>left</align>
-        </control>
+            <!-- Meta2: genre . runtime . country (id=206) -->
+            <control type="label" id="206">
+                <left>72</left><top>514</top><width>1776</width><height>20</height>
+                <font>font12</font><textcolor>FF888888</textcolor>
+                <shadowcolor>CC000000</shadowcolor><label></label>
+            </control>
 
-        <!-- ── Tagline ── -->
-        <control type="label" id="208">
-            <left>48</left><top>294</top>
-            <width>1380</width><height>33</height>
-            <font>font12</font>
-            <textcolor>FFE2E2E2</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>left</align>
-        </control>
+            <!-- Meta3: director . cast . studio (id=207) -->
+            <control type="label" id="207">
+                <left>72</left><top>536</top><width>1776</width><height>20</height>
+                <font>font12</font><textcolor>FF666666</textcolor>
+                <shadowcolor>CC000000</shadowcolor><label></label>
+            </control>
 
-        <!-- Divider above plot -->
-        <control type="image">
-            <left>48</left><top>333</top>
-            <width>1824</width><height>2</height>
-            <texture colordiffuse="30FFFFFF">white.png</texture>
-        </control>
+            <!-- Tagline id=208 -->
+            <control type="label" id="208">
+                <left>72</left><top>558</top><width>1440</width><height>18</height>
+                <font>font12</font><textcolor>FF4A4A4A</textcolor>
+                <shadowcolor>CC000000</shadowcolor><label></label>
+            </control>
 
-        <!-- ── Plot textbox (scrollable with UP/DOWN when focused) ── -->
-        <control type="textbox" id="209">
-            <left>48</left><top>339</top>
-            <width>1824</width><height>552</height>
-            <font>font12</font>
-            <textcolor>FFCCCCCC</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <scroll>true</scroll>
-            <autoscroll>false</autoscroll>
-            <onleft>210</onleft>
-            <onright>211</onright>
-            <ondown>210</ondown>
-        </control>
+            <!-- Divider above plot -->
+            <control type="image">
+                <left>72</left><top>578</top><width>1776</width><height>2</height>
+                <texture colordiffuse="20FFFFFF">white.png</texture>
+            </control>
 
-        <!-- ── PLAY button ── -->
-        <control type="button" id="210">
-            <left>48</left><top>918</top>
-            <width>240</width><height>69</height>
-            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
-            <texturenofocus colordiffuse="50E50914">white.png</texturenofocus>
-            <label>[B]PLAY[/B]</label>
-            <font>font12</font>
-            <textcolor>FFDDDDDD</textcolor>
-            <focusedcolor>FFFFFFFF</focusedcolor>
-            <align>center</align>
-            <onup>209</onup>
-            <onleft>212</onleft>
-            <onright>211</onright>
-            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
-            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
-        </control>
+            <!-- Plot id=209 (scrollable, h=130 for more room) -->
+            <control type="textbox" id="209">
+                <left>72</left><top>582</top><width>1776</width><height>130</height>
+                <font>font12</font><textcolor>FFBBBBBB</textcolor>
+                <shadowcolor>CC000000</shadowcolor>
+                <scroll>true</scroll><autoscroll>false</autoscroll>
+                <ondown>215</ondown><onleft>210</onleft><onright>211</onright>
+            </control>
 
-        <!-- ── AUDIO / SUB button (replaces MY LIST) ── -->
-        <control type="button" id="211">
-            <left>315</left><top>918</top>
-            <width>285</width><height>69</height>
-            <texturefocus colordiffuse="C0FFFFFF">white.png</texturefocus>
-            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B]AUDIO / SUB[/B]</label>
-            <font>font12</font>
-            <textcolor>FFAAAAAA</textcolor>
-            <focusedcolor>FF0D0D0D</focusedcolor>
-            <align>center</align>
-            <onup>209</onup>
-            <onleft>210</onleft>
-            <onright>213</onright>
-            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
-            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
-        </control>
+            <!-- Divider above cast/ep section -->
+            <control type="image">
+                <left>72</left><top>714</top><width>1776</width><height>2</height>
+                <texture colordiffuse="14FFFFFF">white.png</texture>
+            </control>
 
-        <!-- ── REMOVE FROM CW button (visible only for CW items, property set by Python) ── -->
-        <control type="button" id="213">
-            <left>627</left><top>918</top>
-            <width>300</width><height>69</height>
-            <texturefocus colordiffuse="C0FF3333">white.png</texturefocus>
-            <texturenofocus colordiffuse="30FF3333">white.png</texturenofocus>
-            <label>[B]TOGLI DAI RECENTI[/B]</label>
-            <font>font12</font>
-            <textcolor>FFAAAAAA</textcolor>
-            <focusedcolor>FFFFFFFF</focusedcolor>
-            <align>center</align>
-            <onup>209</onup>
-            <onleft>211</onleft>
-            <onright>212</onright>
-            <visible>!String.IsEmpty(Window.Property(show_remove_cw))</visible>
-            <animation effect="zoom" start="100" end="108" center="auto" time="130" tween="sine" easing="out">Focus</animation>
-            <animation effect="zoom" start="108" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            <!-- Cast header id=221 (visible=false, shown by Python for movies) -->
+            <control type="label" id="221">
+                <left>72</left><top>718</top><width>300</width><height>20</height>
+                <font>font10</font><textcolor>FF444444</textcolor>
+                <shadowcolor>CC000000</shadowcolor>
+                <label>[B]CAST[/B]</label><visible>false</visible>
+            </control>
+
+            <!-- Cast panel id=220 (visible=false, shown by Python for movies) -->
+            <control type="panel" id="220">
+                <left>0</left><top>740</top><width>1920</width><height>80</height>
+                <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <scrollwrap>false</scrollwrap>
+                <onup>209</onup><ondown>215</ondown><visible>false</visible>
+                <itemlayout height="80" width="120">
+                    <control type="image">
+                        <left>14</left><top>4</top><width>92</width><height>62</height>
+                        <texture colordiffuse="18FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>4</top><width>92</width><height>62</height>
+                        <texture>$INFO[ListItem.Property(actor_thumb)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>0</left><top>68</top><width>120</width><height>16</height>
+                        <font>font10</font><textcolor>FF555555</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align><truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="80" width="120">
+                    <control type="image">
+                        <left>10</left><top>2</top><width>100</width><height>66</height>
+                        <texture colordiffuse="CCE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="150" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>14</left><top>4</top><width>92</width><height>60</height>
+                        <texture>$INFO[ListItem.Property(actor_thumb)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>0</left><top>68</top><width>120</width><height>16</height>
+                        <font>font10</font><textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align><truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
+
+            <!-- Divider above buttons -->
+            <control type="image">
+                <left>0</left><top>876</top><width>1920</width><height>2</height>
+                <texture colordiffuse="20FFFFFF">white.png</texture>
+            </control>
+
+            <!-- GUARDA id=210 -->
+            <control type="button" id="210">
+                <left>72</left><top>882</top><width>264</width><height>50</height>
+                <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+                <texturenofocus colordiffuse="50E50914">white.png</texturenofocus>
+                <label>[B]&#9654;  GUARDA[/B]</label>
+                <font>font12</font><textcolor>FFD8D8D8</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+                <align>center</align>
+                <onup>215</onup><onleft>212</onleft><onright>211</onright>
+                <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            </control>
+
+            <!-- AUDIO / SUB id=211 -->
+            <control type="button" id="211">
+                <left>354</left><top>882</top><width>264</width><height>50</height>
+                <texturefocus colordiffuse="C0FFFFFF">white.png</texturefocus>
+                <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
+                <label>[B]AUDIO / SUB[/B]</label>
+                <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FF0D0D0D</focusedcolor>
+                <align>center</align>
+                <onup>215</onup><onleft>210</onleft><onright>213</onright>
+                <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            </control>
+
+            <!-- TOGLI DAI RECENTI id=213 -->
+            <control type="button" id="213">
+                <left>636</left><top>882</top><width>294</width><height>50</height>
+                <texturefocus colordiffuse="AAFF3333">white.png</texturefocus>
+                <texturenofocus colordiffuse="22FF3333">white.png</texturenofocus>
+                <label>[B]&#10005;  TOGLI DAI RECENTI[/B]</label>
+                <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+                <align>center</align>
+                <onup>215</onup><onleft>211</onleft><onright>212</onright>
+                <visible>!String.IsEmpty(Window.Property(show_remove_cw))</visible>
+                <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            </control>
+
         </control>
+        <!-- end cinema group id=230 -->
 
     </controls>
 </window>

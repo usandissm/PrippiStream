@@ -311,6 +311,16 @@ DW_BTN_AUDIO_SUB = 211   # formerly LIST — now opens audio/subtitle picker
 DW_BTN_CLOSE     = 212
 DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
 DW_BTN_LIST      = 211   # alias kept for any remaining references
+DW_CAST_PANEL    = 220   # horizontal cast cards panel
+DW_CAST_HDR      = 221   # "CAST" section header label
+DW_EP_INFO       = 223   # "▶ Continua S02E05" episode info label (tvshow only)
+DW_BTN_EP_SEL    = 215   # "STAGIONI & EPISODI" selector button (tvshow only)
+DW_OVERLAY_GROUP = 230   # cinema-mode group (fades out when trailer plays)
+
+# ── EpisodePicker dialog control IDs ─────────────────────────────────────────
+EP_SEASON_LIST   = 310   # horizontal panel of season tabs
+EP_EP_LIST       = 311   # vertical list of episode rows
+EP_BTN_CANCEL    = 321   # close / cancel button
 
 ACTION_EXIT         = 10
 ACTION_BACK         = 92
@@ -1122,7 +1132,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             win = DetailWindow('DetailWindow.xml', config.get_runtime_path(), item=item)
             win.doModal()
-            result = win._result
+            result    = win._result
+            sel_s     = getattr(win, '_selected_season',  None)
+            sel_e     = getattr(win, '_selected_episode', None)
             del win
         finally:
             self._bg_ui_pause.set()
@@ -1157,7 +1169,21 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception:
             pass
         if result == 'play':
-            self._launch(item)
+            if sel_s is not None and sel_e is not None:
+                # User picked a specific episode in the EpisodePicker.
+                # Works for SC tvshow items (action='episodios') AND
+                # for CW episode items that have a stored show URL.
+                _show_url = (getattr(item, '_cw_show_url', '') or
+                             (item.url if getattr(item, 'action', '') == 'episodios' else ''))
+                if _show_url:
+                    t_ep = threading.Thread(target=self._play_episode_direct,
+                                            args=(item, sel_s, sel_e))
+                    t_ep.daemon = True
+                    t_ep.start()
+                else:
+                    self._launch(item)
+            else:
+                self._launch(item)
         elif result == 'removed_cw':
             # Item was removed from CW — refresh the CW row immediately
             self._refresh_cw_row()
@@ -1256,6 +1282,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             entry = watch_history.get(cw_key)
             if entry:
                 resume_t = float(entry.get('time_watched', 0))
+                # For TV shows, only resume if the saved episode matches the one playing.
+                # If the user picked a different episode, start from the beginning.
+                if resume_t > 10 and entry.get('season') is not None:
+                    _entry_s = int(entry.get('season', 0))
+                    _entry_e = int(entry.get('episode', 0))
+                    _item_s  = int(getattr(item, 'contentSeason', 0) or 0)
+                    _item_e  = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+                    if (_item_s or _item_e) and (_entry_s != _item_s or _entry_e != _item_e):
+                        resume_t = 0  # different episode → start from the beginning
                 if resume_t > 10:
                     # Wait for the A/V pipeline to be fully ready (onAVStarted) before
                     # seeking.  This is more reliable than a fixed 2 s sleep because it
@@ -1324,6 +1359,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         # Episode completed — advance TV series to next episode,
                         # or remove the CW entry if this was the last episode.
                         ct = getattr(item, 'contentType', '') or ''
+                        # Mark current episode as watched before advancing/removing
+                        if ct == 'episode' and cw_key:
+                            _ep_s = int(getattr(item, 'contentSeason', 0) or 0)
+                            _ep_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+                            if _ep_s and _ep_e:
+                                try:
+                                    watch_history.mark_episode_watched(cw_key, _ep_s, _ep_e)
+                                except Exception:
+                                    pass
                         if ct == 'episode' and next_ep_ctx is not None:
                             # Use already-computed next ep if overlay built it,
                             # otherwise build it now.
@@ -1793,6 +1837,110 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _select_episode: %s' % str(exc))
 
+    def _play_episode_direct(self, item, season_num, ep_num):
+        """Play a specific episode (season_num, ep_num) directly from the show item.
+
+        Mirrors _select_episode but skips the interactive dialogs, using the
+        pre-selected season/episode from EpisodePickerDialog instead.
+        Only works for StreamingCommunity items (action='episodios').
+        """
+        try:
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            # For CW episode items use the stored show URL; fall back to item.url
+            _show_url = getattr(item, '_cw_show_url', '') or item.url
+            try:
+                data = _get_data(_show_url)
+            finally:
+                if busy:
+                    busy.close()
+
+            seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+            if not seasons:
+                xbmcgui.Dialog().notification(
+                    u'Errore', u'Nessuna stagione trovata',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find requested season
+            chosen     = None
+            season_idx = 0
+            for _si, _s in enumerate(seasons):
+                if _s.get('number') == season_num:
+                    chosen     = _s
+                    season_idx = _si
+                    break
+            if not chosen:
+                chosen     = seasons[0]
+                season_idx = 0
+
+            # Fetch episode list for chosen season — use _show_url (show page), NOT item.url
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            try:
+                sdata = _get_data(_show_url + '/season-%d' % chosen['number'])
+            finally:
+                if busy:
+                    busy.close()
+
+            episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            if not episodes:
+                xbmcgui.Dialog().notification(
+                    u'Errore', u'Nessun episodio trovato',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find requested episode
+            ep     = None
+            ep_idx = 0
+            for _ei, _ep in enumerate(episodes):
+                if _ep.get('number') == ep_num:
+                    ep     = _ep
+                    ep_idx = _ei
+                    break
+            if not ep:
+                # Fall back to first episode
+                ep     = episodes[0]
+                ep_idx = 0
+
+            title_id   = str(chosen.get('title_id', ''))
+            next_ep_ctx = {
+                'show_item':  item,
+                'seasons':    seasons,
+                'season_idx': season_idx,
+                'episodes':   episodes,
+                'ep_idx':     ep_idx,
+                'title_id':   title_id,
+            }
+
+            import channels.streamingcommunity as _sc
+            ep_item = item.clone(
+                action='findvideos',
+                contentType='episode',
+                season=chosen['number'],
+                episode=ep['number'],
+                contentSeason=chosen['number'],
+                contentEpisodeNumber=ep['number'],
+                contentTitle='',
+                url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, ep['id'])
+            )
+            ep_item._cw_show_url = _show_url  # show page URL, never the iframe URL
+            _pre_play_set_lang(ep_item)
+            xbmc.executebuiltin(
+                'RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
+            t2 = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                  kwargs={'next_ep_ctx': next_ep_ctx})
+            t2.daemon = True
+            t2.start()
+        except Exception as exc:
+            logger.error('[NetflixHome] _play_episode_direct: %s' % str(exc))
+
 # ── Continue Watching save helper ────────────────────────────────
 
 def _save_cw(item, key, actual_time, total_time, played_url=''):
@@ -1801,12 +1949,17 @@ def _save_cw(item, key, actual_time, total_time, played_url=''):
         title = (getattr(item, 'fulltitle', '') or
                  getattr(item, 'show', '') or
                  getattr(item, 'contentSerieName', '') or '')
-        ct = getattr(item, 'contentType', '') or ''
+        ct    = getattr(item, 'contentType', '') or ''
+        s     = 0
+        e_num = 0
+        ep_title = ''
         if ct == 'episode':
-            s     = getattr(item, 'contentSeason', 0) or 0
-            e_num = getattr(item, 'contentEpisodeNumber', 0) or 0
+            s     = int(getattr(item, 'contentSeason', 0) or 0)
+            e_num = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+            ep_title = (getattr(item, 'contentTitle', '') or
+                        getattr(item, '_upnext_name', '') or '')
             if s or e_num:
-                title = '%s  S%02dE%02d' % (title, int(s), int(e_num))
+                title = '%s  S%02dE%02d' % (title, s, e_num)
         thumb    = getattr(item, 'thumbnail', '') or ''
         fanart   = getattr(item, 'fanart', '') or thumb
         show_url = getattr(item, '_cw_show_url', '') or ''
@@ -1816,6 +1969,9 @@ def _save_cw(item, key, actual_time, total_time, played_url=''):
             item.tourl(),
             show_url=show_url,
             played_url=played_url,
+            season=s if (ct == 'episode' and s) else None,
+            episode=e_num if (ct == 'episode' and e_num) else None,
+            episode_title=ep_title,
         )
     except Exception as exc:
         logger.error('[CW] _save_cw: %s' % str(exc))
@@ -3101,6 +3257,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         self._result          = None   # 'play' | 'list' | None after close
         self._player          = xbmc.Player()
         self._close_requested = False  # Signal background threads to bail out
+        self._selected_season  = None  # int: season selected in EpisodePicker
+        self._selected_episode = None  # int: episode selected in EpisodePicker
 
     def onInit(self):
         item = self._item
@@ -3156,8 +3314,12 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             pass
 
-        # ── Meta 1: year · type · lang · rating ───────────────────────────
-        meta1 = '  \u2022  '.join(p for p in [year, ctype_lbl, lang, rating_str] if p)
+        # ── Meta 1: year · type · lang · ★ rating (green) ───────────────
+        # Rating is highlighted in green (Apple TV+ style) via BBCode
+        rating_display = ('[COLOR FF22C55E][B]' + rating_str + '[/B][/COLOR]'
+                         ) if rating_str else ''
+        meta1 = '  \u2022  '.join(
+            p for p in [year, ctype_lbl, lang, rating_display] if p)
         try:
             self.getControl(DW_META1).setLabel(meta1)
         except Exception:
@@ -3227,6 +3389,78 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 self.getControl(DW_BTN_PLAY).setLabel(btn_label)
         except Exception:
             pass
+
+        # ── TV show: show current episode info + STAGIONI & EPISODI button ──
+        ct = getattr(item, 'contentType', '') or ''
+        xbmc.log('[DetailWindow] onInit ct=%r action=%r tmdb=%r title=%r' % (
+            ct, getattr(item, 'action', ''), item.infoLabels.get('tmdb_id'), item.fulltitle), xbmc.LOGINFO)
+        if ct in ('tvshow', 'episode'):
+            try:
+                self.setProperty('is_tvshow', '1')
+                _tmdb_str = str(item.infoLabels.get('tmdb_id') or '').strip()
+                if _tmdb_str:
+                    _ep_key = 'tv_%s' % _tmdb_str
+                else:
+                    # Fallback: same slug logic as _cw_key for episode items
+                    _slug   = re.sub(r'[^a-z0-9]', '',
+                                     (getattr(item, 'show', '') or
+                                      getattr(item, 'contentSerieName', '') or
+                                      getattr(item, 'fulltitle', '') or '').lower())
+                    _ep_key = ('tv_%s' % _slug) if _slug else None
+                _ep_info  = watch_history.get_episode_info(_ep_key) if _ep_key else None
+                if _ep_info:
+                    # Full episode tracking data available
+                    _s   = _ep_info['season']
+                    _e   = _ep_info['episode']
+                    _et  = _ep_info.get('episode_title', '')
+                    _tw  = float(_ep_info.get('time_watched', 0))
+                    _tt  = float(_ep_info.get('total_time', 0) or 1)
+                    _pct = int(_tw / _tt * 100) if _tw > 0 else 0
+                    _ep_code = u'S%02dE%02d' % (_s, _e)
+                    _ep_lbl  = u'\u25b6  Continua  %s' % _ep_code
+                    if _et:
+                        _ep_lbl += u'  \u2013  ' + _et
+                    if _pct:
+                        _ep_lbl += u'  (%d%%)' % _pct
+                    if _tw > 10:
+                        _mins = int(_tw // 60)
+                        _secs = int(_tw % 60)
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(
+                                u'\u25b6  Continua %s  \u2013  %d:%02d  (%d%%)' % (
+                                    _ep_code, _mins, _secs, _pct))
+                        except Exception:
+                            pass
+                else:
+                    # No episode tracking — check if any CW entry exists for this series
+                    _ep_entry = watch_history.get(_ep_key) if _ep_key else None
+                    if _ep_entry:
+                        # Old CW entry exists but without season/episode fields
+                        _ep_lbl = u'\u25b6  Continua'
+                        _tw2 = float(_ep_entry.get('time_watched', 0))
+                        _tt2 = float(_ep_entry.get('total_time', 1) or 1)
+                        if _tw2 > 10:
+                            _pct2  = int(_tw2 / _tt2 * 100)
+                            _mins2 = int(_tw2 // 60)
+                            _secs2 = int(_tw2 % 60)
+                            try:
+                                self.getControl(DW_BTN_PLAY).setLabel(
+                                    u'\u25b6  Continua a guardare  \u2013  %d:%02d  (%d%%)' % (
+                                        _mins2, _secs2, _pct2))
+                            except Exception:
+                                pass
+                    else:
+                        # Truly new series — no watch history at all
+                        _ep_lbl = u'Nuova serie  \u2013  S01E01'
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(u'\u25b6  GUARDA  S01E01')
+                        except Exception:
+                            pass
+                self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
+                # Visibility is driven by Window.Property(is_tvshow) in the XML,
+                # already set above via setProperty('is_tvshow', '1')
+            except Exception as _exc:
+                logger.error('[DetailWindow] ep info: %s' % str(_exc))
 
         # ── Background media: fanart slideshow for CW items, trailer otherwise ──
         tmdb_id_tr = str(item.infoLabels.get('tmdb_id') or '').strip()
@@ -3333,7 +3567,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         Also updates DW_META1 with number of seasons for TV shows."""
         try:
             from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
-            url  = '%s/%s/%s?api_key=%s' % (_tmdb_host, ctype, tmdb_id, _tmdb_api)
+            url  = '%s/%s/%s?api_key=%s&append_to_response=credits' % (
+                    _tmdb_host, ctype, tmdb_id, _tmdb_api)
             data = _Tmdb.get_json(url)
             path = (data or {}).get('backdrop_path') or ''
             if path:
@@ -3350,8 +3585,30 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         self.getControl(DW_META1).setLabel(new_meta1)
                     except Exception:
                         pass
+            # Populate cast panel from credits
+            cast_list = (data or {}).get('credits', {}).get('cast', [])[:14]
+            if cast_list:
+                self._populate_cast_panel(cast_list)
         except Exception:
             pass
+
+    def _populate_cast_panel(self, cast_list):
+        """Populate the horizontal cast panel (id=220) with actor cards from TMDB credits."""
+        try:
+            list_items = []
+            for actor in cast_list:
+                name = actor.get('name', '')
+                profile = actor.get('profile_path', '')
+                thumb = ('https://image.tmdb.org/t/p/w185' + profile) if profile else ''
+                li = xbmcgui.ListItem(label=name, offscreen=True)
+                li.setProperty('actor_thumb', thumb)
+                list_items.append(li)
+            if list_items and not self._close_requested:
+                self.getControl(DW_CAST_PANEL).addItems(list_items)
+                self.getControl(DW_CAST_PANEL).setVisible(True)
+                self.getControl(DW_CAST_HDR).setVisible(True)
+        except Exception as exc:
+            logger.error('[DetailWindow] cast panel: %s' % str(exc)[:80])
 
     def _start_trailer(self, trailer_url):
         """Delay slightly then fire PlayMedia so the window is fully rendered first."""
@@ -3405,6 +3662,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     self.getControl(DW_BG_FANART).setVisible(False)
                 except Exception:
                     pass
+                # Cinema mode: fade out overlay after 3 s so trailer is (nearly) fullscreen
+                threading.Thread(target=self._enter_cinema_mode, daemon=True).start()
                 # Wait for YouTube plugin to register audio/subtitle tracks
                 for _ in range(50):
                     if self._close_requested:
@@ -3550,6 +3809,61 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception as exc:
             logger.error('[DetailWindow] _remove_from_cw: %s' % str(exc))
 
+    def _open_episode_picker(self):
+        """Open the EpisodePickerDialog (TMDB-based) and update labels on selection."""
+        item = self._item
+        if not item:
+            return
+        try:
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if not tmdb_id:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream',
+                    u'Seleziona stagione/episodio con il tasto GUARDA',
+                    xbmcgui.NOTIFICATION_INFO, 3000)
+                return
+            # Build show key — same logic as onInit
+            show_key = 'tv_%s' % tmdb_id
+            ep_info  = watch_history.get_episode_info(show_key) or {}
+            # If no episode info, check if a plain CW entry exists for current ep
+            if not ep_info:
+                _cw_plain = watch_history.get(show_key) or {}
+                cw_season = int(_cw_plain.get('season', 1) or 1)
+                cw_ep     = int(_cw_plain.get('episode', 1) or 1)
+            else:
+                cw_season = int(ep_info.get('season', 1) or 1)
+                cw_ep     = int(ep_info.get('episode', 1) or 1)
+            picker = EpisodePickerDialog(
+                'EpisodePicker.xml', config.get_runtime_path(),
+                tmdb_id=tmdb_id,
+                show_key=show_key,
+                cw_season=cw_season,
+                cw_ep=cw_ep,
+            )
+            picker.doModal()
+            if picker._selected:
+                sel_s, sel_e, sel_title = picker._selected
+                self._selected_season  = sel_s
+                self._selected_episode = sel_e
+                # Update EP_INFO label
+                _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
+                _ep_lbl  = u'\u25b6  %s' % _ep_code
+                if sel_title:
+                    _ep_lbl += u'  \u2013  ' + sel_title
+                try:
+                    self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
+                except Exception:
+                    pass
+                # Update GUARDA button to show the selected episode
+                try:
+                    self.getControl(DW_BTN_PLAY).setLabel(
+                        u'\u25b6  GUARDA  %s' % _ep_code)
+                except Exception:
+                    pass
+            del picker
+        except Exception as exc:
+            logger.error('[DetailWindow] _open_episode_picker: %s' % str(exc))
+
     def _initiate_close(self, result=None):
         """
         The ONLY way to close DetailWindow. Safe to call from any thread or GUI callback.
@@ -3603,6 +3917,11 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 self.getControl(DW_BG_FANART).setVisible(True)
             except Exception:
                 pass
+            # Restore cinema-mode group so window fade-out looks correct
+            try:
+                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+            except Exception:
+                pass
 
         except Exception:
             pass
@@ -3613,34 +3932,207 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             pass
 
+    def _enter_cinema_mode(self):
+        """Sleep 3 s then fade out the overlay group so the trailer plays fullscreen.
+        If the window is closing or trailer stopped, bail out."""
+        for _ in range(30):  # 3 seconds in 100 ms chunks
+            if self._close_requested:
+                return
+            xbmc.sleep(100)
+        if self._close_requested or not self._player.isPlaying():
+            return
+        try:
+            self.getControl(DW_OVERLAY_GROUP).setVisible(False)
+        except Exception:
+            pass
+
     def onAction(self, action):
         aid = action.getId()
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._initiate_close()
+        else:
+            # Any other key restores the overlay (cinema mode → normal)
+            try:
+                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+            except Exception:
+                pass
 
     def onClick(self, control_id):
+        # Restore overlay first (handles click after cinema mode hides it)
+        try:
+            self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+        except Exception:
+            pass
         if control_id == DW_BTN_CLOSE:
             self._initiate_close()
         elif control_id == DW_BTN_PLAY:
-            self._initiate_close(result='play')
+            item = self._item
+            ct      = getattr(item, 'contentType', '') or ''
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip() if item else ''
+            # For tvshow with TMDB and no pre-selected episode: open picker first
+            if ct == 'tvshow' and tmdb_id and self._selected_season is None:
+                self._open_episode_picker()
+                if self._selected_season is not None:
+                    # Episode chosen — play it
+                    self._initiate_close(result='play')
+                # else: picker was cancelled, stay in DetailWindow
+            else:
+                self._initiate_close(result='play')
         elif control_id == DW_BTN_AUDIO_SUB:
             self._show_audio_sub_dialog()
         elif control_id == DW_BTN_REMOVE_CW:
             self._remove_from_cw()
+        elif control_id == DW_BTN_EP_SEL:
+            self._open_episode_picker()
 
 
-        if aid in (self.ACTION_EXIT, self.ACTION_BACK):
-            self._initiate_close()
+# ─────────────────────────────────────────────────────────────────────────────
+# EpisodePickerDialog — TMDB-based season/episode selector
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
+    """Full-screen episode picker with season tabs (id=310) and episode list (id=311).
+
+    Opened via doModal() from DetailWindow._open_episode_picker.
+    After doModal() returns, check _selected: None or (season, episode, title) tuple.
+    """
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, *args, **kwargs):
+        self._tmdb_id   = kwargs.pop('tmdb_id', '')
+        self._show_key  = kwargs.pop('show_key', '')
+        self._cw_season = int(kwargs.pop('cw_season', 1) or 1)
+        self._cw_ep     = int(kwargs.pop('cw_ep', 1) or 1)
+        self._seasons   = []      # list of season dicts from TMDB
+        self._cur_season_num = self._cw_season
+        self._selected  = None    # (season, episode, title) on confirmation
+
+    def onInit(self):
+        t = threading.Thread(target=self._load_seasons)
+        t.daemon = True
+        t.start()
+
+    def _load_seasons(self):
+        try:
+            from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+            url  = '%s/tv/%s?api_key=%s' % (_tmdb_host, self._tmdb_id, _tmdb_api)
+            data = _Tmdb.get_json(url) or {}
+            raw  = data.get('seasons', [])
+            # Filter out specials (season_number == 0)
+            self._seasons = [s for s in raw if s.get('season_number', 0) > 0]
+            if not self._seasons:
+                return
+            # Build season tab list items
+            items = []
+            sel_idx = 0
+            for i, s in enumerate(self._seasons):
+                n    = s.get('season_number', i + 1)
+                name = s.get('name') or (u'Stagione %d' % n)
+                li   = xbmcgui.ListItem(label=name)
+                li.setProperty('season_number', str(n))
+                items.append(li)
+                if n == self._cw_season:
+                    sel_idx = i
+            try:
+                ctrl = self.getControl(EP_SEASON_LIST)
+                ctrl.addItems(items)
+                ctrl.selectItem(sel_idx)
+            except Exception as exc:
+                logger.error('[EpisodePicker] season tabs: %s' % str(exc))
+            # Load episodes for the current season
+            self._cur_season_num = self._seasons[sel_idx].get('season_number',
+                                                               self._cw_season)
+            self._load_episodes(self._cur_season_num)
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_seasons: %s' % str(exc))
+
+    def _load_episodes(self, season_num):
+        try:
+            from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+            url  = '%s/tv/%s/season/%d?api_key=%s' % (
+                    _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
+            data = _Tmdb.get_json(url) or {}
+            episodes = data.get('episodes', [])
+            watched  = set(
+                tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
+                if len(w) == 2
+            )
+            items    = []
+            sel_pos  = 0
+            for ep in episodes:
+                ep_num   = ep.get('episode_number', 0)
+                ep_title = ep.get('name') or (u'Episodio %d' % ep_num)
+                ep_thumb = ep.get('still_path', '')
+                overview = (ep.get('overview') or '')[:200]
+                runtime  = ep.get('runtime', 0)
+                is_watched = (season_num, ep_num) in watched
+                is_current = (season_num == self._cw_season and ep_num == self._cw_ep)
+                ep_code    = u'S%02dE%02d' % (season_num, ep_num)
+                if is_current:
+                    label = u'[B]\u25b6  %s  \u2013  %s[/B]' % (ep_code, ep_title)
+                    sel_pos = len(items)
+                elif is_watched:
+                    label = (u'[COLOR FF22C55E]\u2713[/COLOR] '
+                             u'[COLOR FF888888]%s  \u2013  %s[/COLOR]' % (ep_code, ep_title))
+                else:
+                    label = u'%s  \u2013  %s' % (ep_code, ep_title)
+                li = xbmcgui.ListItem(label=label, offscreen=True)
+                if ep_thumb:
+                    li.setArt({'thumb': 'https://image.tmdb.org/t/p/w300' + ep_thumb})
+                li.setProperty('ep_num',      str(ep_num))
+                li.setProperty('season_num',  str(season_num))
+                li.setProperty('ep_title',    ep_title)
+                li.setProperty('overview',    overview)
+                li.setProperty('runtime',     ('%d min' % runtime) if runtime else '')
+                items.append(li)
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                ctrl.reset()
+                ctrl.addItems(items)
+                if items:
+                    ctrl.selectItem(sel_pos)
+            except Exception as exc:
+                logger.error('[EpisodePicker] ep list populate: %s' % str(exc))
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_episodes: %s' % str(exc))
+
+    def onAction(self, action):
+        if action.getId() in (self.ACTION_EXIT, self.ACTION_BACK):
+            self.close()
 
     def onClick(self, control_id):
-        if control_id == DW_BTN_CLOSE:
-            self._initiate_close()
-        elif control_id == DW_BTN_PLAY:
-            self._initiate_close(result='play')
-        elif control_id == DW_BTN_AUDIO_SUB:
-            self._show_audio_sub_dialog()
-        elif control_id == DW_BTN_REMOVE_CW:
-            self._remove_from_cw()
+        if control_id == EP_SEASON_LIST:
+            try:
+                ctrl = self.getControl(EP_SEASON_LIST)
+                pos  = int(ctrl.getSelectedPosition() or 0)
+                if 0 <= pos < len(self._seasons):
+                    new_season = self._seasons[pos].get('season_number', 1)
+                    if new_season != self._cur_season_num:
+                        self._cur_season_num = new_season
+                        t = threading.Thread(target=self._load_episodes,
+                                             args=(new_season,))
+                        t.daemon = True
+                        t.start()
+            except Exception as exc:
+                logger.error('[EpisodePicker] onClick season: %s' % str(exc))
+        elif control_id == EP_EP_LIST:
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                pos  = int(ctrl.getSelectedPosition() or 0)
+                li   = ctrl.getListItem(pos)
+                if li:
+                    s     = int(li.getProperty('season_num') or 0)
+                    e     = int(li.getProperty('ep_num')     or 0)
+                    title = li.getProperty('ep_title') or ''
+                    if s and e:
+                        self._selected = (s, e, title)
+                        self.close()
+            except Exception as exc:
+                logger.error('[EpisodePicker] onClick episode: %s' % str(exc))
+        elif control_id == EP_BTN_CANCEL:
+            self.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3741,13 +4233,14 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self._pf_cancelled.set()  # cancel all prefetch workers on back/close
             self.close()
             return
-        # UP from grid → search bar; DOWN from top bar → grid
-        if aid == ACTION_UP and self.getFocusId() == SEARCH_WL_SC:
-            self.setFocusId(SEARCH_QUERY_BTN)
-            return
-        if aid == ACTION_DOWN and self.getFocusId() in (SEARCH_QUERY_BTN, SEARCH_BTN_BACK, SEARCH_CLOSE):
-            self.setFocusId(SEARCH_WL_SC)
-            return
+        # Update hero when navigating within the grid (LEFT/RIGHT/UP/DOWN/scroll wheel)
+        if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
+                   ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+            if self.getFocusId() == SEARCH_WL_SC:
+                threading.Thread(target=self._deferred_hero_update,
+                                 daemon=True).start()
+        # Note: UP from top row → search bar and DOWN from top bar → grid
+        # are handled by <onup>/<ondown> in the XML — no override needed here.
 
     def onClick(self, control_id):
         if control_id in (SEARCH_BTN_BACK, SEARCH_CLOSE):
@@ -3785,6 +4278,20 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     self._update_hero(self._items[pos])
             except Exception:
                 pass
+
+    def _deferred_hero_update(self):
+        """Called from onAction on a background thread to update the hero panel
+        after a navigation key. Waits briefly so the panel can process the key
+        and update getSelectedPosition() before we read it."""
+        xbmc.sleep(80)
+        try:
+            pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._update_hero(items[pos])
+        except Exception:
+            pass
 
     # ── Hero panel ────────────────────────────────────────────────────────
 
@@ -3860,10 +4367,6 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     ).start()
 
                 if _evt is not None:
-                    # Close dialog immediately so the home window becomes responsive
-                    self._cancelled.set()
-                    self.close()
-
                     def _async_play(evt=_evt, pw=_pw, item=item,
                                     item_id=_item_id, results=_results):
                         # Wait up to 20 s for prefetch to complete
@@ -3928,14 +4431,17 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                                         'RunPlugin(plugin://plugin.video.prippistream/?%s)'
                                         % item.tourl())
                         else:
-                            xbmc.log('[NetflixSearch] prefetch: no working URL, fallback',
+                            xbmc.log('[NetflixSearch] prefetch: no working URL, fallback to channel',
                                      xbmc.LOGINFO)
-                            # Do NOT run pw._launch(item) blindly — the channel
-                            # may be broken. Show a dialog instead.
-                            xbmcgui.Dialog().notification(
-                                'PrippiStream',
-                                'Nessun link funzionante trovato per questo film.',
-                                xbmcgui.NOTIFICATION_WARNING, 4000)
+                            # Prefetch found no working direct URL — fall back to the full
+                            # channel flow (opens server-selection dialog / findvideos).
+                            if pw:
+                                pw._launch(item)
+                            else:
+                                xbmcgui.Dialog().notification(
+                                    'PrippiStream',
+                                    'Nessun link funzionante trovato per questo film.',
+                                    xbmcgui.NOTIFICATION_WARNING, 4000)
 
                     t = threading.Thread(target=_async_play, name='NS-launch', daemon=True)
                     t.start()
@@ -3943,8 +4449,6 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
             # ── Normal path (SC item or no prefetch event) ──────────────────────
             if self._parent_window is not None:
-                self._cancelled.set()
-                self.close()
                 self._parent_window._launch(item)
             else:
                 xbmc.executebuiltin(
@@ -4414,6 +4918,15 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     video_urls, ok, _ = servertools.resolve_video_urls_for_playing(
                         si.server, si.url)
                     if ok and video_urls:
+                        _stream_url = video_urls[0][1]
+                        # Skip if the resolved URL is an image (e.g. mixdrop returning
+                        # a CDN thumbnail instead of a real stream).
+                        _IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+                        if any(_stream_url.lower().split('?')[0].endswith(ext)
+                               for ext in _IMAGE_EXT):
+                            logger.info('[NS-pf] SKIP image URL server=%s url=%.60s' % (
+                                si.server, _stream_url))
+                            continue
                         self._prefetch_results[item_id] = (si, video_urls[0])
                         logger.info('[NS-pf] FOUND server=%s qual=%s url=%.60s' % (
                             si.server, getattr(si, 'quality', '?'), video_urls[0][1]))

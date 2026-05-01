@@ -30,37 +30,11 @@
             <aspectratio>scale</aspectratio>
         </control>
 
-        <!-- Hero gradients -->
+        <!-- Hero overlay — single layer behind text panel -->
         <control type="image">
             <left>0</left><top>0</top>
-            <width>1920</width><height>486</height>
-            <texture colordiffuse="20000000">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>0</top>
-            <width>960</width><height>486</height>
+            <width>1050</width><height>486</height>
             <texture colordiffuse="900D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>960</left><top>0</top>
-            <width>210</width><height>486</height>
-            <texture colordiffuse="400D0D0D">white.png</texture>
-        </control>
-        <!-- Bottom fade into rows (multi-step gradient) -->
-        <control type="image">
-            <left>0</left><top>390</top>
-            <width>1920</width><height>50</height>
-            <texture colordiffuse="300D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>440</top>
-            <width>1920</width><height>30</height>
-            <texture colordiffuse="880D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>470</top>
-            <width>1920</width><height>16</height>
-            <texture colordiffuse="DD0D0D0D">white.png</texture>
         </control>
 
         <!-- __ Top bar __ -->

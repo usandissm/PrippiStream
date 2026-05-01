@@ -32,31 +32,11 @@
             <aspectratio>scale</aspectratio>
         </control>
 
-        <!-- Hero overlays -->
+        <!-- Hero overlay — single layer behind text panel -->
         <control type="image">
             <left>0</left><top>0</top>
-            <width>1920</width><height>414</height>
-            <texture colordiffuse="66000000">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>0</top>
-            <width>930</width><height>414</height>
-            <texture colordiffuse="F00D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>930</left><top>0</top>
-            <width>210</width><height>414</height>
+            <width>1050</width><height>348</height>
             <texture colordiffuse="900D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>1140</left><top>0</top>
-            <width>240</width><height>414</height>
-            <texture colordiffuse="480D0D0D">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>348</top>
-            <width>1920</width><height>66</height>
-            <texture colordiffuse="FF0D0D0D">white.png</texture>
         </control>
 
         <!-- Top bar -->
