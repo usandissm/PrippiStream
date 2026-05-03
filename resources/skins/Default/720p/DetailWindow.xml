@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   DetailWindow.xml — 1280x720  Cinema Mode  PrippiStream
-  Coords = 1080i x 2/3  |  bg rect: top=280, h=440 (fills to y=720, no gap)
+  Coords = 1080i x 2/3  |  dark panel: top=380 h=253 (ends y=633) | title y=400 | buttons y=588..622
   id=223 EpInfo + id=215 EpSel: visible=false, shown by Python for tvshow items
 -->
 <window type="dialog">
@@ -64,7 +64,7 @@
                 <left>1160</left><top>10</top><width>100</width><height>28</height>
                 <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
                 <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
-                <label>[B]&#10005;  CHIUDI[/B]</label>
+                <label>[B]CHIUDI[/B]</label>
                 <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
                 <align>center</align>
                 <ondown>210</ondown><onleft>213</onleft>
@@ -72,15 +72,15 @@
                 <animation effect="zoom" start="108" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
             </control>
 
-            <!-- ONE background rect fills y=280..720 — no bottom gap -->
+            <!-- Background rect: y=380..720 (full bottom) -->
             <control type="image">
-                <left>0</left><top>280</top><width>1280</width><height>440</height>
+                <left>0</left><top>380</top><width>1280</width><height>340</height>
                 <texture colordiffuse="E80D0D0D">white.png</texture>
             </control>
 
             <!-- Title id=204 — narrowed to leave room for EP selector on right -->
             <control type="label" id="204">
-                <left>48</left><top>287</top><width>413</width><height>36</height>
+                <left>48</left><top>400</top><width>413</width><height>36</height>
                 <font>font14</font><textcolor>FFFFFFFF</textcolor>
                 <shadowcolor>D0000000</shadowcolor>
                 <label></label><align>left</align><aligny>center</aligny>
@@ -88,10 +88,10 @@
 
             <!-- STAGIONI & EPISODI button id=215 — right of title, tvshow only -->
             <control type="button" id="215">
-                <left>487</left><top>285</top><width>387</width><height>38</height>
+                <left>487</left><top>398</top><width>387</width><height>38</height>
                 <texturefocus colordiffuse="C8E50914">white.png</texturefocus>
                 <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-                <label>[B]&#9776;  STAGIONI &amp; EPISODI[/B]</label>
+                <label>[B]STAGIONI &amp; EPISODI[/B]</label>
                 <font>font12</font><textcolor>FFCCCCCC</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
                 <align>center</align>
                 <onup>209</onup><ondown>210</ondown><onleft>212</onleft><onright>211</onright>
@@ -102,7 +102,7 @@
 
             <!-- Ep info label id=223 — below EP button, tvshow only -->
             <control type="label" id="223">
-                <left>487</left><top>326</top><width>746</width><height>16</height>
+                <left>487</left><top>439</top><width>746</width><height>16</height>
                 <font>font12</font><textcolor>FF888888</textcolor>
                 <shadowcolor>CC000000</shadowcolor>
                 <label></label>
@@ -111,56 +111,56 @@
 
             <!-- Meta1 id=205 -->
             <control type="label" id="205">
-                <left>48</left><top>325</top><width>1184</width><height>16</height>
+                <left>48</left><top>438</top><width>1184</width><height>16</height>
                 <font>font12</font><textcolor>FFFFFFFF</textcolor>
                 <shadowcolor>CC000000</shadowcolor><label></label>
             </control>
 
             <!-- Meta2 id=206 -->
             <control type="label" id="206">
-                <left>48</left><top>343</top><width>1184</width><height>13</height>
+                <left>48</left><top>463</top><width>1184</width><height>13</height>
                 <font>font12</font><textcolor>FF888888</textcolor>
                 <shadowcolor>CC000000</shadowcolor><label></label>
             </control>
 
             <!-- Meta3 id=207 -->
             <control type="label" id="207">
-                <left>48</left><top>358</top><width>1184</width><height>13</height>
+                <left>48</left><top>478</top><width>1184</width><height>13</height>
                 <font>font12</font><textcolor>FF666666</textcolor>
                 <shadowcolor>CC000000</shadowcolor><label></label>
             </control>
 
             <!-- Tagline id=208 -->
             <control type="label" id="208">
-                <left>48</left><top>373</top><width>960</width><height>12</height>
+                <left>48</left><top>493</top><width>960</width><height>12</height>
                 <font>font12</font><textcolor>FF4A4A4A</textcolor>
                 <shadowcolor>CC000000</shadowcolor><label></label>
             </control>
 
             <!-- Divider above plot -->
             <control type="image">
-                <left>48</left><top>387</top><width>1184</width><height>2</height>
+                <left>48</left><top>507</top><width>1184</width><height>2</height>
                 <texture colordiffuse="20FFFFFF">white.png</texture>
             </control>
 
-            <!-- Plot id=209 (scrollable, h=87 — taller than before) -->
+            <!-- Plot id=209 (scrollable, h=153) -->
             <control type="textbox" id="209">
-                <left>48</left><top>390</top><width>1184</width><height>87</height>
+                <left>48</left><top>510</top><width>1184</width><height>153</height>
                 <font>font12</font><textcolor>FFBBBBBB</textcolor>
                 <shadowcolor>CC000000</shadowcolor>
-                <scroll>true</scroll><autoscroll>false</autoscroll>
+                <scroll>true</scroll><autoscroll delay="3000" time="2000">true</autoscroll>
                 <ondown>215</ondown><onleft>210</onleft><onright>211</onright>
             </control>
 
             <!-- Divider above cast/ep section -->
             <control type="image">
-                <left>48</left><top>479</top><width>1184</width><height>2</height>
+                <left>48</left><top>592</top><width>1184</width><height>2</height>
                 <texture colordiffuse="14FFFFFF">white.png</texture>
             </control>
 
             <!-- Cast header id=221 (visible=false) -->
             <control type="label" id="221">
-                <left>48</left><top>483</top><width>200</width><height>14</height>
+                <left>48</left><top>596</top><width>200</width><height>14</height>
                 <font>font10</font><textcolor>FF444444</textcolor>
                 <shadowcolor>CC000000</shadowcolor>
                 <label>[B]CAST[/B]</label><visible>false</visible>
@@ -168,7 +168,7 @@
 
             <!-- Cast panel id=220 (visible=false) -->
             <control type="panel" id="220">
-                <left>0</left><top>499</top><width>1280</width><height>54</height>
+                <left>0</left><top>612</top><width>1280</width><height>54</height>
                 <scrolltime tween="cubic" easing="out">200</scrolltime>
                 <scrollwrap>false</scrollwrap>
                 <onup>209</onup><ondown>215</ondown><visible>false</visible>
@@ -215,16 +215,16 @@
 
             <!-- Divider above buttons -->
             <control type="image">
-                <left>0</left><top>584</top><width>1280</width><height>2</height>
+                <left>0</left><top>678</top><width>1280</width><height>2</height>
                 <texture colordiffuse="20FFFFFF">white.png</texture>
             </control>
 
             <!-- GUARDA id=210 -->
             <control type="button" id="210">
-                <left>48</left><top>588</top><width>176</width><height>34</height>
+                <left>48</left><top>682</top><width>176</width><height>34</height>
                 <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
                 <texturenofocus colordiffuse="50E50914">white.png</texturenofocus>
-                <label>[B]&#9654;  GUARDA[/B]</label>
+                <label>[B]GUARDA[/B]</label>
                 <font>font12</font><textcolor>FFD8D8D8</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
                 <align>center</align>
                 <onup>215</onup><onleft>212</onleft><onright>211</onright>
@@ -234,7 +234,7 @@
 
             <!-- AUDIO / SUB id=211 -->
             <control type="button" id="211">
-                <left>236</left><top>588</top><width>176</width><height>34</height>
+                <left>236</left><top>682</top><width>176</width><height>34</height>
                 <texturefocus colordiffuse="C0FFFFFF">white.png</texturefocus>
                 <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
                 <label>[B]AUDIO / SUB[/B]</label>
@@ -247,10 +247,10 @@
 
             <!-- TOGLI DAI RECENTI id=213 -->
             <control type="button" id="213">
-                <left>424</left><top>588</top><width>196</width><height>34</height>
+                <left>424</left><top>682</top><width>196</width><height>34</height>
                 <texturefocus colordiffuse="AAFF3333">white.png</texturefocus>
                 <texturenofocus colordiffuse="22FF3333">white.png</texturenofocus>
-                <label>[B]&#10005;  TOGLI DAI RECENTI[/B]</label>
+                <label>[B]TOGLI DAI RECENTI[/B]</label>
                 <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
                 <align>center</align>
                 <onup>215</onup><onleft>211</onleft><onright>212</onright>

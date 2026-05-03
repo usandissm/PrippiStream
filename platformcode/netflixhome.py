@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 # ------------------------------------------------------------
 # Netflix-style Home Window for StreamingCommunity + multi-source
 # v4 — lazy-load extra rows from other VOD channels.
@@ -313,7 +313,7 @@ DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
 DW_BTN_LIST      = 211   # alias kept for any remaining references
 DW_CAST_PANEL    = 220   # horizontal cast cards panel
 DW_CAST_HDR      = 221   # "CAST" section header label
-DW_EP_INFO       = 223   # "▶ Continua S02E05" episode info label (tvshow only)
+DW_EP_INFO       = 223   # "Continua S02E05" episode info label (tvshow only)
 DW_BTN_EP_SEL    = 215   # "STAGIONI & EPISODI" selector button (tvshow only)
 DW_OVERLAY_GROUP = 230   # cinema-mode group (fades out when trailer plays)
 
@@ -714,7 +714,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
         except Exception as exc:
-            self._populated.discard(i)  # allow retry on error
+            # Only allow retry for transient errors, NOT for missing XML controls.
+            if 'Non-Existent Control' not in str(exc):
+                self._populated.discard(i)
             logger.error('[NetflixHome] populate row %d wraplist: %s' % (i, str(exc)))
         try:
             lbl = self.getControl(lbl_id)
@@ -874,10 +876,41 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._update_hero(new_row)
             return
         if aid == ACTION_WHEEL_DOWN:
-            new_row = min(self._num_rows - 1, self._last_focused_row + 1)
-            self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
-            self._last_focused_row = new_row
-            self._update_hero(new_row)
+            next_wl_id = ROW_WRAPLIST_BASE + (self._last_focused_row + 1) * ROW_STEP
+            next_xml_exists = False
+            if self._last_focused_row < self._num_rows - 1:
+                try:
+                    self.getControl(next_wl_id)
+                    next_xml_exists = True
+                except Exception:
+                    pass
+            if next_xml_exists:
+                new_row = self._last_focused_row + 1
+                self._populate_single_row(new_row)
+                self.setFocusId(next_wl_id)
+                self._last_focused_row = new_row
+                self._update_hero(new_row)
+            else:
+                # last real row → loop back to first real row via background thread bounce
+                cw_empty = not (self.rows_data and self.rows_data[0][1])
+                new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                    self._populate_single_row(j)
+                self._last_focused_row = new_row
+                self._update_hero(new_row)
+                wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                def _wheel_loop_back(wl_id=wl_id):
+                    try:
+                        self.show()
+                        xbmc.sleep(300)
+                        self.setFocusId(CLOSE_BTN)
+                        xbmc.sleep(100)
+                        self.setFocusId(wl_id)
+                    except Exception:
+                        pass
+                t = threading.Thread(target=_wheel_loop_back)
+                t.daemon = True
+                t.start()
             return
 
         # Full remote-control navigation (onAction replaces XML nav entirely)
@@ -906,20 +939,53 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             fid = self.getFocusId()
             i = self._row_from_fid(fid)
             if i >= 0:
+                # Check both: more rows in data AND next XML slot actually exists
+                next_wl_id = ROW_WRAPLIST_BASE + (i + 1) * ROW_STEP
+                next_xml_exists = False
                 if i < self._num_rows - 1:
+                    try:
+                        self.getControl(next_wl_id)
+                        next_xml_exists = True
+                    except Exception:
+                        pass
+                if next_xml_exists:
                     new_row = i + 1
                     for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
                         self._populate_single_row(j)
-                    self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+                    self.setFocusId(next_wl_id)
                     self._last_focused_row = new_row
                     self._update_hero(new_row)
+                else:
+                    # last real row → loop back to first real row via background thread bounce
+                    cw_empty = not (self.rows_data and self.rows_data[0][1])
+                    new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                        self._populate_single_row(j)
+                    self._last_focused_row = new_row
+                    self._update_hero(new_row)
+                    wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                    def _down_loop_back(wl_id=wl_id):
+                        try:
+                            self.show()
+                            xbmc.sleep(300)
+                            self.setFocusId(CLOSE_BTN)
+                            xbmc.sleep(100)
+                            self.setFocusId(wl_id)
+                        except Exception:
+                            pass
+                    t = threading.Thread(target=_down_loop_back)
+                    t.daemon = True
+                    t.start()
                 return
-            # DOWN from EXIT → first row
+            # DOWN from EXIT → first real row
             if fid == CLOSE_BTN:
-                self._populate_single_row(0)
-                self.setFocusId(ROW_WRAPLIST_BASE)
-                self._last_focused_row = 0
-                self._update_hero(0)
+                cw_empty = not (self.rows_data and self.rows_data[0][1])
+                new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                    self._populate_single_row(j)
+                self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+                self._last_focused_row = new_row
+                self._update_hero(new_row)
                 return
         # Mouse move: compute hovered card slot, update hero + hover frame
         if aid == ACTION_MOUSE_MOVE:
@@ -3204,7 +3270,7 @@ class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
             mins = secs_remaining // 60
             secs = secs_remaining % 60
             timer_txt = (u'Parte in [B]%d:%02d[/B]'
-                         u'  —  [COLOR FFE50914]▶ Guarda subito[/COLOR] per iniziare ora'
+                         u'  —  [COLOR FFE50914]Guarda subito[/COLOR] per iniziare ora'
                          % (mins, secs))
         else:
             timer_txt = u'[B]In partenza...[/B]'
@@ -3303,7 +3369,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             pass
         tmdb_id_hd = str(item.infoLabels.get('tmdb_id') or '').strip()
         if tmdb_id_hd:
-            ctype_hd = 'tv' if getattr(item, 'contentType', '') == 'tvshow' else 'movie'
+            ctype_hd = 'tv' if getattr(item, 'contentType', '') in ('tvshow', 'episode') else 'movie'
             t_hd = threading.Thread(target=self._load_hd_fanart, args=(tmdb_id_hd, ctype_hd))
             t_hd.daemon = True
             t_hd.start()
@@ -3464,7 +3530,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
 
         # ── Background media: fanart slideshow for CW items, trailer otherwise ──
         tmdb_id_tr = str(item.infoLabels.get('tmdb_id') or '').strip()
-        ctype_tr   = 'tv' if getattr(item, 'contentType', '') == 'tvshow' else 'movie'
+        ctype_tr   = 'tv' if getattr(item, 'contentType', '') in ('tvshow', 'episode') else 'movie'
         is_cw_item = bool(watch_history.get(_cw_key(item)))
 
         # Show/hide the "Remove from CW" button via window property
@@ -3664,6 +3730,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     pass
                 # Cinema mode: fade out overlay after 3 s so trailer is (nearly) fullscreen
                 threading.Thread(target=self._enter_cinema_mode, daemon=True).start()
+                # Watcher: restores fanart when trailer ends naturally (not via Back)
+                threading.Thread(target=self._watch_trailer_end, daemon=True).start()
                 # Wait for YouTube plugin to register audio/subtitle tracks
                 for _ in range(50):
                     if self._close_requested:
@@ -3673,6 +3741,39 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     self._maybe_set_subtitles()
         except Exception as exc:
             logger.error('[DetailWindow] trailer start: %s' % str(exc))
+
+    def _watch_trailer_end(self):
+        """Monitor trailer playback and restore fanart/overlay when it ends naturally.
+        Runs in a background thread alongside the trailer. If the user presses Back,
+        _initiate_close sets _close_requested and this thread exits without acting
+        (the close path already handles restoration in _wait_stop_then_close)."""
+        try:
+            # Wait until playback actually starts (up to 10 s)
+            for _ in range(100):
+                if self._close_requested:
+                    return
+                if self._player.isPlaying():
+                    break
+                xbmc.sleep(100)
+            # Poll while playing
+            while self._player.isPlaying() and not self._close_requested:
+                xbmc.sleep(500)
+            # If close was requested, the _wait_stop_then_close path takes care of
+            # restoration — don't interfere.
+            if self._close_requested:
+                return
+            # Trailer ended naturally: restore fanart and overlay
+            xbmc.sleep(300)   # brief pause so the videowindow goes black cleanly
+            try:
+                self.getControl(DW_BG_FANART).setVisible(True)
+            except Exception:
+                pass
+            try:
+                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[DetailWindow] _watch_trailer_end: %s' % str(exc))
 
     def _maybe_set_subtitles(self):
         """Enable Italian subtitles only if the trailer audio is NOT already Italian."""
@@ -3819,7 +3920,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             if not tmdb_id:
                 xbmcgui.Dialog().notification(
                     u'PrippiStream',
-                    u'Seleziona stagione/episodio con il tasto GUARDA',
+                    u'Nessuna informazione episodi disponibile per questo contenuto',
                     xbmcgui.NOTIFICATION_INFO, 3000)
                 return
             # Build show key — same logic as onInit

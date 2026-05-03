@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   NetflixSearch.xml — 1920×1080
   Unified search overlay for PrippiStream.
@@ -95,7 +95,7 @@
             <width>120</width><height>42</height>
             <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
             <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
-            <label>[B]&#8592; BACK[/B]</label>
+            <label>[B]BACK[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -139,7 +139,7 @@
             <width>93</width><height>42</height>
             <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
             <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
-            <label>[B]&#10005; EXIT[/B]</label>
+            <label>[B]EXIT[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -197,7 +197,7 @@
             <width>204</width><height>42</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="CC1A1A1A">white.png</texturenofocus>
-            <label>[B]&#9654;  GUARDA[/B]</label>
+            <label>[B]GUARDA[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>

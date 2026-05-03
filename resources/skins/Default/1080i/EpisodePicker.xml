@@ -23,15 +23,16 @@
             <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
         <control type="label">
-            <left>260</left><top>22</top><width>1000</width><height>28</height>
+            <left>0</left><top>22</top><width>1920</width><height>28</height>
             <font>font12</font><textcolor>FF555555</textcolor>
+            <align>center</align>
             <label>SELEZIONA EPISODIO</label>
         </control>
         <control type="button" id="321">
             <left>1740</left><top>15</top><width>150</width><height>42</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
-            <label>[B]&#10005;  CHIUDI[/B]</label>
+            <label>[B]CHIUDI[/B]</label>
             <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align><ondown>310</ondown>
             <animation effect="zoom" start="100" end="108" center="auto" time="120" tween="sine" easing="out">Focus</animation>

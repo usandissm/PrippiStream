@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   EpisodePicker.xml — 1280x720  PrippiStream  (coords = 1080i x 2/3)
   id=310 season tabs  |  id=311 episode list  |  id=321 close button
@@ -33,8 +33,9 @@
         </control>
 
         <control type="label">
-            <left>174</left><top>14</top><width>660</width><height>18</height>
+            <left>0</left><top>14</top><width>1280</width><height>18</height>
             <font>font12</font><textcolor>FF555555</textcolor>
+            <align>center</align>
             <label>SELEZIONA EPISODIO</label>
         </control>
 
@@ -43,7 +44,7 @@
             <left>1160</left><top>10</top><width>100</width><height>28</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
-            <label>[B]&#10005;  CHIUDI[/B]</label>
+            <label>[B]CHIUDI[/B]</label>
             <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <ondown>310</ondown>

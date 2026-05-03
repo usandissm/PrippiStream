@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PrippiStream Font.xml — 720p
+     Defines only the font names missing from Estuary (font16, font20).
+     All use NotoSans-Regular which has full Unicode coverage. -->
+<fonts>
+    <fontset id="Default">
+        <font>
+            <name>font16</name>
+            <filename>NotoSans-Regular.ttf</filename>
+            <size>26</size>
+            <style>lighten</style>
+        </font>
+        <font>
+            <name>font20</name>
+            <filename>NotoSans-Regular.ttf</filename>
+            <size>30</size>
+            <style>lighten</style>
+        </font>
+    </fontset>
+</fonts>

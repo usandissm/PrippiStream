@@ -62,7 +62,7 @@
             <width>480</width><height>42</height>
             <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
             <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B][COLOR FF666666]&#128269;[/COLOR][/B]  [COLOR FFAAAAAA]Ricerca...[/COLOR]</label>
+            <label>[B][COLOR FF666666][/COLOR][/B]  [COLOR FFAAAAAA]Ricerca...[/COLOR]</label>
             <font>font12</font>
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -79,7 +79,7 @@
             <width>93</width><height>42</height>
             <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
             <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
-            <label>[B]⚙ SET[/B]</label>
+            <label>[B]SET[/B]</label>
             <font>font10</font>
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -95,7 +95,7 @@
             <width>93</width><height>42</height>
             <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
             <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
-            <label>[B]✕ EXIT[/B]</label>
+            <label>[B]EXIT[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -155,7 +155,7 @@
             <textcolor>FFFFFFFF</textcolor>
             <shadowcolor>FF000000</shadowcolor>
             <align>center</align>
-            <label>[B]&#9654;  PLAY[/B]</label>
+            <label>[B]PLAY[/B]</label>
         </control>
 
         <control type="image">
