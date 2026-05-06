@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   StreamingUnity Home 1280x720 v8
   Hero 279px | Rows area 438px | Card 160x210
@@ -3831,6 +3831,1806 @@
                     </control>
                 </control>
                 <control type="button" id="5190">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 20 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3200">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2200">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4200">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2200</onleft>
+                    <onright>2200</onright>
+                </control>
+                <control type="button" id="4201">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2200</onleft>
+                    <onright>2200</onright>
+                </control>
+                <control type="group" id="6200">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5200">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 21 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3210">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2210">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4210">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2210</onleft>
+                    <onright>2210</onright>
+                </control>
+                <control type="button" id="4211">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2210</onleft>
+                    <onright>2210</onright>
+                </control>
+                <control type="group" id="6210">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5210">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 22 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3220">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2220">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4220">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2220</onleft>
+                    <onright>2220</onright>
+                </control>
+                <control type="button" id="4221">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2220</onleft>
+                    <onright>2220</onright>
+                </control>
+                <control type="group" id="6220">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5220">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 23 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3230">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2230">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4230">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2230</onleft>
+                    <onright>2230</onright>
+                </control>
+                <control type="button" id="4231">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2230</onleft>
+                    <onright>2230</onright>
+                </control>
+                <control type="group" id="6230">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5230">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 24 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3240">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2240">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4240">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2240</onleft>
+                    <onright>2240</onright>
+                </control>
+                <control type="button" id="4241">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2240</onleft>
+                    <onright>2240</onright>
+                </control>
+                <control type="group" id="6240">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5240">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 25 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3250">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2250">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4250">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2250</onleft>
+                    <onright>2250</onright>
+                </control>
+                <control type="button" id="4251">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2250</onleft>
+                    <onright>2250</onright>
+                </control>
+                <control type="group" id="6250">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5250">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 26 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3260">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2260">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4260">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2260</onleft>
+                    <onright>2260</onright>
+                </control>
+                <control type="button" id="4261">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2260</onleft>
+                    <onright>2260</onright>
+                </control>
+                <control type="group" id="6260">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5260">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 27 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3270">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2270">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4270">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2270</onleft>
+                    <onright>2270</onright>
+                </control>
+                <control type="button" id="4271">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2270</onleft>
+                    <onright>2270</onright>
+                </control>
+                <control type="group" id="6270">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5270">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 28 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3280">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2280">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4280">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2280</onleft>
+                    <onright>2280</onright>
+                </control>
+                <control type="button" id="4281">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2280</onleft>
+                    <onright>2280</onright>
+                </control>
+                <control type="group" id="6280">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5280">
+                    <left>48</left><top>54</top>
+                    <width>1824</width><height>450</height>
+                    <texturefocus colordiffuse="00000000">-</texturefocus>
+                    <texturenofocus colordiffuse="00000000">-</texturenofocus>
+                    <label></label>
+                </control>
+            </control>
+            <!-- _______________________ ROW 29 _______________________ -->
+            <control type="group">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>522</height>
+                <control type="image">
+                    <left>48</left><top>6</top>
+                    <width>4</width><height>30</height>
+                    <texture colordiffuse="FFE50914">white.png</texture>
+                </control>
+                <control type="label" id="3290">
+                    <left>60</left><top>3</top>
+                    <width>1350</width><height>42</height>
+                    <font>font13</font>
+                    <textcolor>FFFFFFFF</textcolor>
+                    <shadowcolor>FF000000</shadowcolor>
+                    <label></label>
+                    <align>left</align>
+                </control>
+                <control type="wraplist" id="2290">
+                    <left>0</left><top>54</top>
+                    <width>1920</width><height>450</height>
+                    <viewtype>wrap</viewtype>
+                    <orientation>horizontal</orientation>
+                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <itemlayout height="450" width="278">
+                    <control type="image">
+                        <left>6</left><top>3</top>
+                        <width>266</width><height>333</height>
+                        <texture colordiffuse="18000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top>
+                        <width>262</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                    </control>
+                    <control type="label">
+                        <left>6</left><top>342</top>
+                        <width>266</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar - image-based 10-step -->
+                    <control type="image"><left>8</left><top>328</top><width>262</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>52</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>80</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>105</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>132</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>158</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>184</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>210</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>8</left><top>328</top><width>237</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </itemlayout>
+                <focusedlayout height="450" width="278">
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>450</height>
+                        <texture colordiffuse="66000000">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="120" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>106</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>4</left><top>3</top>
+                        <width>268</width><height>330</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>stretch</aspectratio>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                    <control type="label">
+                        <left>4</left><top>344</top>
+                        <width>268</width><height>105</height>
+                        <font>font12</font>
+                        <textcolor>FFFFFFFF</textcolor>
+                        <shadowcolor>FF000000</shadowcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <align>center</align>
+                        <aligny>top</aligny>
+                    </control>
+                    <!-- CW progress bar focused - image-based 10-step -->
+                    <control type="image"><left>4</left><top>328</top><width>268</width><height>8</height><texture colordiffuse="44FFFFFF">white.png</texture><visible>ListItem.Property(has_progress)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>27</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),1)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>54</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),2)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>81</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),3)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>108</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),4)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>135</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),5)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>160</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),6)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>188</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),7)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>214</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),8)</visible></control>
+                    <control type="image"><left>4</left><top>328</top><width>242</width><height>8</height><texture colordiffuse="FFE50914">white.png</texture><visible>String.IsEqual(ListItem.Property(bar_step),9)</visible></control>
+                </focusedlayout>
+                </control>
+                <control type="button" id="4290">
+                    <left>0</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x2039;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2290</onleft>
+                    <onright>2290</onright>
+                </control>
+                <control type="button" id="4291">
+                    <left>1872</left><top>54</top>
+                    <width>48</width><height>450</height>
+                    <texturefocus colordiffuse="C0000000">white.png</texturefocus>
+                    <texturenofocus colordiffuse="70000000">white.png</texturenofocus>
+                    <label>[B]&#x203A;[/B]</label>
+                    <font>font14</font>
+                    <textcolor>CCFFFFFF</textcolor>
+                    <focusedcolor>FFFFFFFF</focusedcolor>
+                    <align>center</align>
+                    <onleft>2290</onleft>
+                    <onright>2290</onright>
+                </control>
+                <control type="group" id="6290">
+                    <left>-278</left><top>54</top>
+                    <width>278</width><height>450</height>
+                    <control type="image">
+                        <left>2</left><top>0</top>
+                        <width>274</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>273</left><top>0</top>
+                        <width>4</width><height>339</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>0</left><top>334</top>
+                        <width>278</width><height>4</height>
+                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>339</top>
+                        <width>274</width><height>111</height>
+                        <texture colordiffuse="D8101010">white.png</texture>
+                    </control>
+                </control>
+                <control type="button" id="5290">
                     <left>48</left><top>54</top>
                     <width>1824</width><height>450</height>
                     <texturefocus colordiffuse="00000000">-</texturefocus>

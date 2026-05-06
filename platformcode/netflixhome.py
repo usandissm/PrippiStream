@@ -75,6 +75,13 @@ _enrich_cache = {}
 # Never expires — trailer links are stable YouTube IDs.
 _trailer_cache = {}
 
+# Italian plot cache: tmdb_id -> Italian overview string.
+# Populated by _load_hd_fanart (DetailWindow) and home hero background fetch.
+# Persists across window opens so already-fetched plots are shown instantly.
+_plot_it_cache = {}
+# Token counter used to cancel stale home-hero plot-fetch threads when focus moves fast.
+_hero_plot_token = 0
+
 # Shutdown event: set by open_netflix_home() the moment the user closes the home screen
 # AND by _AppShutdownMonitor.onAbortRequested() the instant Kodi sends the global abort
 # signal to our invoker.  ALL background network threads check this flag before starting
@@ -265,7 +272,7 @@ def _pre_play_set_lang(item):
 
 
 # Label for the Continue Watching row (must match what _refresh_cw_row checks).
-_CW_ROW_LABEL = u'\u25b6  Continua a guardare'
+_CW_ROW_LABEL = u'Continua a guardare'
 
 # CW lookup tables — populated by _build_cw_items(), used by _apply_cw_to_item().
 _cw_lookup_by_tmdb  = {}   # tmdb_id (str) -> CW Item
@@ -292,7 +299,7 @@ HOVER_BOX_BASE     = 6000   # hover-frame group per row (moved by setPosition)
 ROW_STEP           = 10
 # SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
 # MAX_ROWS: total wraplist slots in the XML (must match generator MAX_ROWS)
-SC_MAX_ROWS        = 20
+SC_MAX_ROWS        = 30
 MAX_ROWS           = 50
 ARROW_PAGE_SIZE    = 1
 UPNEXT_COUNTDOWN   = 60   # seconds before episode end: show Up Next overlay
@@ -726,6 +733,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             logger.error('[NetflixHome] populate row %d label: %s' % (i, str(exc)))
 
     def _update_hero(self, row_idx, pos=None):
+        global _hero_plot_token
         if row_idx >= len(self.rows_data):
             return
         _, items = self.rows_data[row_idx]
@@ -758,6 +766,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
         # First genre only (TMDB returns slash-separated list)
         genre_str = str(genre).split('/')[0].strip() if genre else ''
+
+        # Use cached Italian plot if available (may have been fetched by DetailWindow or earlier focus)
+        tmdb_id_hero = str(it.infoLabels.get('tmdb_id') or '').strip()
+        if tmdb_id_hero and tmdb_id_hero in _plot_it_cache:
+            cached_plot = _plot_it_cache[tmdb_id_hero]
+            if cached_plot:
+                plot = cached_plot
+                it.infoLabels['plot'] = cached_plot
+
         try:
             img = fanart or thumb
             if img:
@@ -772,6 +789,53 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 pass
         except Exception as exc:
             logger.error('[NetflixHome] hero: %s' % str(exc))
+
+        # Background Italian plot fetch (only if not cached/in-progress and item has a TMDB id)
+        if tmdb_id_hero and tmdb_id_hero not in _plot_it_cache and not _shutdown_event.is_set():
+            _hero_plot_token += 1
+            my_token = _hero_plot_token
+            ctype_hero = 'tv' if getattr(it, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+
+            def _bg_fetch_hero_plot(tid, ctype, item, token):
+                # Debounce: wait 600 ms then check if this request is still current.
+                # The sentinel is written AFTER the debounce so that a cancelled thread
+                # (user moved focus before 600ms) doesn't permanently block future fetches.
+                xbmc.sleep(600)
+                if token != _hero_plot_token or _shutdown_event.is_set():
+                    return
+                # Check again after debounce — another thread may have already fetched
+                if tid in _plot_it_cache and _plot_it_cache[tid]:
+                    # Already done: just update the hero if our token is still current
+                    if token == _hero_plot_token:
+                        try:
+                            self.getControl(HERO_PLOT).setText(_plot_it_cache[tid])
+                        except Exception:
+                            pass
+                    return
+                # Reserve slot so parallel threads skip this item
+                _plot_it_cache[tid] = ''
+                try:
+                    it_ov = _get_it_overview(tid, ctype)
+                    if not it_ov or _shutdown_event.is_set():
+                        # Clear the sentinel so the next focus can retry
+                        _plot_it_cache.pop(tid, None)
+                        return
+                    _plot_it_cache[tid] = it_ov
+                    item.infoLabels['plot'] = it_ov
+                    # Only update the hero control if this token is still current
+                    if token == _hero_plot_token:
+                        try:
+                            self.getControl(HERO_PLOT).setText(it_ov)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Clear sentinel on error so next focus can retry
+                    _plot_it_cache.pop(tid, None)
+
+            t = threading.Thread(target=_bg_fetch_hero_plot,
+                                 args=(tmdb_id_hero, ctype_hero, it, my_token),
+                                 daemon=True)
+            t.start()
 
     def _row_from_fid(self, fid):
         """Returns row index if fid is a wraplist or overlay for that row, else -1."""
@@ -2679,6 +2743,62 @@ def _get_data(url):
     return {}
 
 
+def _translate_to_it(text):
+    """Translate text to Italian using Google Translate free endpoint (no API key).
+    Returns Italian text on success, original text on any error.
+    Handles up to 1000 chars; strips leading/trailing whitespace."""
+    if not text or len(text.strip()) < 10:
+        return text
+    try:
+        import urllib.parse as _urlparse
+        import json as _json
+        from core import httptools as _ht
+        q   = _urlparse.quote(text.strip()[:1000])
+        url = ('https://translate.googleapis.com/translate_a/single'
+               '?client=gtx&sl=auto&tl=it&dt=t&q=%s' % q)
+        resp = _ht.downloadpage(url, timeout=6)
+        if not (resp and resp.ok):
+            return text
+        data  = _json.loads(resp.data)
+        parts = data[0] if data else []
+        translated = ''.join(p[0] for p in parts if p and p[0]).strip()
+        return translated if translated else text
+    except Exception:
+        return text
+
+
+def _get_it_overview(tmdb_id, ctype, it_data=None):
+    """Return an Italian overview string for the given TMDB id.
+
+    Strategy:
+      1. Use it_data (already fetched it-IT response) if provided, else fetch it.
+      2. Fetch the en-US overview as reference.
+      3. If it-IT overview is empty OR identical to en-US (TMDB fallback):
+         translate the English text.
+      4. Return the best available Italian string (or '' on failure).
+    """
+    try:
+        from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+        if it_data is None:
+            url_it = '%s/%s/%s?api_key=%s&language=it-IT' % (
+                      _tmdb_host, ctype, tmdb_id, _tmdb_api)
+            it_data = _Tmdb.get_json(url_it) or {}
+        it_ov = (it_data.get('overview') or '').strip()
+        # Always fetch en-US to detect TMDB fallback (it-IT == en-US means no Italian on TMDB)
+        url_en = '%s/%s/%s?api_key=%s&language=en-US' % (
+                  _tmdb_host, ctype, tmdb_id, _tmdb_api)
+        en_data = _Tmdb.get_json(url_en) or {}
+        en_ov   = (en_data.get('overview') or '').strip()
+        # If TMDB returned English as fallback for it-IT, translate it
+        if not it_ov or it_ov == en_ov:
+            if en_ov:
+                return _translate_to_it(en_ov)
+            return ''
+        return it_ov
+    except Exception:
+        return ''
+
+
 def _normalize_title(title):
     """Normalize a title for deduplication: lowercase, ASCII-only, strip articles."""
     import unicodedata
@@ -3156,21 +3276,41 @@ def _fetch_rows():
             except Exception as exc:
                 logger.error('[NetflixHome] page error %s: %s' % (page_url, str(exc)))
 
-        # Fetch genre rows concurrently (each genre archive is a separate HTTP request)
-        if homepage_data and len(rows) < SC_MAX_ROWS:
+        # Fetch curated + genre archive rows — unified ordered thread pool
+        if len(rows) < SC_MAX_ROWS:
             try:
                 import threading as _threading
-                genres_list = (homepage_data.get('props') or {}).get('genres') or []
 
-                def _fetch_genre_row(genre, result_list, lock):
-                    gname = (genre.get('name') or '').strip()
-                    gid   = genre.get('id')
-                    if not gname or not gid:
-                        return
+                # Curated entries come first (pinned order), then SC genres
+                _CURATED = [
+                    ('I Più Votati — Film',              host + '/it/archive?sort=score&type=movie'),
+                    ('I Più Votati — Serie TV',          host + '/it/archive?sort=score&type=tv'),
+                    ('I Più Visti — Film',               host + '/it/archive?sort=views&type=movie'),
+                    ('I Più Visti',                      host + '/it/archive?sort=views'),
+                    ('Serie TV — Aggiornate di Recente', host + '/it/archive?sort=last_air_date&type=tv'),
+                    ('Film — Aggiunti di Recente',       host + '/it/archive?sort=created_at&type=movie'),
+                ]
+                genres_list = (homepage_data.get('props') or {}).get('genres') or [] if homepage_data else []
+                _genre_entries = [
+                    ((g.get('name') or '').strip(), host + '/it/archive?genre[]=' + str(g.get('id')))
+                    for g in genres_list if (g.get('name') or '').strip() and g.get('id')
+                ]
+                all_entries = _CURATED + _genre_entries  # curated first
+
+                remaining = SC_MAX_ROWS - len(rows)
+                entries_to_fetch = all_entries[:remaining]
+
+                # results_map preserves insertion order (curated before genres)
+                results_map = {}
+                alock = _threading.Lock()
+
+                def _fetch_archive_row(idx, label, url, result_dict, lock):
                     try:
-                        gurl  = host + '/it/archive?genre[]=' + str(gid)
-                        gdata = _get_data(gurl)
-                        titles = (gdata.get('props') or {}).get('titles') or {}
+                        adata = _get_data(url)
+                        if not adata:
+                            logger.error('[NetflixHome] archive "%s": empty _get_data' % label)
+                            return
+                        titles = (adata.get('props') or {}).get('titles') or {}
                         if isinstance(titles, dict):
                             raw_titles = titles.get('data', [])
                         elif isinstance(titles, list):
@@ -3178,6 +3318,7 @@ def _fetch_rows():
                         else:
                             raw_titles = []
                         if not raw_titles:
+                            logger.error('[NetflixHome] archive "%s": no titles in props' % label)
                             return
                         items = []
                         for raw in raw_titles[:20]:
@@ -3194,28 +3335,31 @@ def _fetch_rows():
                             except Exception:
                                 pass
                             with lock:
-                                result_list.append((gname, items))
-                                logger.error('[NetflixHome] genre row "%s": %d items' % (gname, len(items)))
+                                result_dict[idx] = (label, items)
+                            logger.error('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
+                        else:
+                            logger.error('[NetflixHome] archive "%s": 0 items after build' % label)
                     except Exception as exc:
-                        logger.error('[NetflixHome] genre "%s" error: %s' % (gname, str(exc)))
+                        logger.error('[NetflixHome] archive "%s" error: %s' % (label, str(exc)))
 
-                remaining    = SC_MAX_ROWS - len(rows)
-                genre_results = []
-                glock = _threading.Lock()
                 threads = []
-                for g in genres_list[:remaining]:
-                    t = _threading.Thread(target=_fetch_genre_row, args=(g, genre_results, glock))
+                for idx, (label, url) in enumerate(entries_to_fetch):
+                    t = _threading.Thread(target=_fetch_archive_row,
+                                          args=(idx, label, url, results_map, alock))
                     t.daemon = True
                     threads.append(t)
                     t.start()
-                _mon_gr = xbmc.Monitor()
+                # Plain join — no abortRequested() check (it falsely triggers in service context)
                 for t in threads:
-                    if _mon_gr.abortRequested() or _shutdown_event.is_set():
+                    if _shutdown_event.is_set():
                         break
                     t.join(timeout=12)
-                rows.extend(genre_results[:remaining])
+                # Collect in original order so curated rows appear before genres
+                for idx in range(len(entries_to_fetch)):
+                    if idx in results_map:
+                        rows.append(results_map[idx])
             except Exception as exc:
-                logger.error('[NetflixHome] genres block: %s' % str(exc))
+                logger.error('[NetflixHome] archive block: %s' % str(exc))
 
     except Exception as exc:
         logger.error('[NetflixHome] import/init: %s' % str(exc))
@@ -3420,13 +3564,17 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             pass
 
         # ── Plot textbox (scrollable) ─────────────────────────────────────
+        # Use Italian plot from cache if already available (fetched by home hero thread)
+        tmdb_id_plot = str(item.infoLabels.get('tmdb_id') or '').strip()
+        cached_it_plot = _plot_it_cache.get(tmdb_id_plot) or '' if tmdb_id_plot else ''
+        plot_display = cached_it_plot if cached_it_plot else plot
         # Build a richer text combining all info with the full plot at the bottom
         plot_lines = []
         if seasons:
             plot_lines.append('Stagioni: ' + seasons)
         if plot_lines:
             plot_lines.append('')
-        plot_lines.append(plot if plot else 'Nessuna trama disponibile.')
+        plot_lines.append(plot_display if plot_display else 'Nessuna trama disponibile.')
         full_plot = '\n'.join(plot_lines)
         try:
             self.getControl(DW_PLOT).setText(full_plot)
@@ -3451,7 +3599,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 pct     = int(t_saved / t_total * 100)
                 mins    = int(t_saved // 60)
                 secs    = int(t_saved % 60)
-                btn_label = u'\u25b6  Continua a guardare  \u2013  %d:%02d  (%d%%)' % (mins, secs, pct)
+                btn_label = u'Continua a guardare  \u2013  %d:%02d  (%d%%)' % (mins, secs, pct)
                 self.getControl(DW_BTN_PLAY).setLabel(btn_label)
         except Exception:
             pass
@@ -3483,7 +3631,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     _tt  = float(_ep_info.get('total_time', 0) or 1)
                     _pct = int(_tw / _tt * 100) if _tw > 0 else 0
                     _ep_code = u'S%02dE%02d' % (_s, _e)
-                    _ep_lbl  = u'\u25b6  Continua  %s' % _ep_code
+                    _ep_lbl  = u'Continua  %s' % _ep_code
                     if _et:
                         _ep_lbl += u'  \u2013  ' + _et
                     if _pct:
@@ -3493,7 +3641,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         _secs = int(_tw % 60)
                         try:
                             self.getControl(DW_BTN_PLAY).setLabel(
-                                u'\u25b6  Continua %s  \u2013  %d:%02d  (%d%%)' % (
+                                u'Continua %s  \u2013  %d:%02d  (%d%%)' % (
                                     _ep_code, _mins, _secs, _pct))
                         except Exception:
                             pass
@@ -3502,7 +3650,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     _ep_entry = watch_history.get(_ep_key) if _ep_key else None
                     if _ep_entry:
                         # Old CW entry exists but without season/episode fields
-                        _ep_lbl = u'\u25b6  Continua'
+                        _ep_lbl = u'Continua'
                         _tw2 = float(_ep_entry.get('time_watched', 0))
                         _tt2 = float(_ep_entry.get('total_time', 1) or 1)
                         if _tw2 > 10:
@@ -3511,7 +3659,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                             _secs2 = int(_tw2 % 60)
                             try:
                                 self.getControl(DW_BTN_PLAY).setLabel(
-                                    u'\u25b6  Continua a guardare  \u2013  %d:%02d  (%d%%)' % (
+                                    u'Continua a guardare  \u2013  %d:%02d  (%d%%)' % (
                                         _mins2, _secs2, _pct2))
                             except Exception:
                                 pass
@@ -3519,7 +3667,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         # Truly new series — no watch history at all
                         _ep_lbl = u'Nuova serie  \u2013  S01E01'
                         try:
-                            self.getControl(DW_BTN_PLAY).setLabel(u'\u25b6  GUARDA  S01E01')
+                            self.getControl(DW_BTN_PLAY).setLabel(u'GUARDA  S01E01')
                         except Exception:
                             pass
                 self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
@@ -3630,19 +3778,21 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
 
     def _load_hd_fanart(self, tmdb_id, ctype):
         """Upgrade background to TMDB /original/ backdrop for maximum resolution.
-        Also updates DW_META1 with number of seasons for TV shows."""
+        Also updates DW_META1 with number of seasons for TV shows.
+        Fetches Italian metadata first; falls back to English + translation for plot."""
         try:
             from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
-            url  = '%s/%s/%s?api_key=%s&append_to_response=credits' % (
-                    _tmdb_host, ctype, tmdb_id, _tmdb_api)
-            data = _Tmdb.get_json(url)
-            path = (data or {}).get('backdrop_path') or ''
+            # Fetch in Italian (includes credits)
+            url_it = '%s/%s/%s?api_key=%s&language=it-IT&append_to_response=credits' % (
+                      _tmdb_host, ctype, tmdb_id, _tmdb_api)
+            data = _Tmdb.get_json(url_it) or {}
+            path = data.get('backdrop_path') or ''
             if path:
                 hq_url = 'https://image.tmdb.org/t/p/original' + path
                 self.getControl(DW_BG_FANART).setImage(hq_url)
             # For TV shows, prepend seasons count to META1
             if ctype == 'tv' and data:
-                n_seasons = int((data or {}).get('number_of_seasons') or 0)
+                n_seasons = int(data.get('number_of_seasons') or 0)
                 if n_seasons > 0:
                     s_lbl = u'%d stagion%s' % (n_seasons, 'e' if n_seasons == 1 else 'i')
                     try:
@@ -3651,8 +3801,30 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         self.getControl(DW_META1).setLabel(new_meta1)
                     except Exception:
                         pass
-            # Populate cast panel from credits
-            cast_list = (data or {}).get('credits', {}).get('cast', [])[:14]
+            # Italian plot: check cache first (may already be fetched by home hero thread)
+            it_overview = _plot_it_cache.get(tmdb_id) or ''
+            if not it_overview:
+                # Mark as in-progress to prevent duplicate fetches from parallel threads
+                _plot_it_cache[tmdb_id] = ''
+                # Use _get_it_overview which detects TMDB English fallback and translates
+                it_overview = _get_it_overview(tmdb_id, ctype, it_data=data)
+                if it_overview:
+                    _plot_it_cache[tmdb_id] = it_overview
+            if it_overview and not self._close_requested:
+                # Persist Italian plot back to the item so home hero shows it after returning
+                try:
+                    self._item.infoLabels['plot'] = it_overview
+                except Exception:
+                    pass
+                try:
+                    self.getControl(DW_PLOT).setText(it_overview)
+                except Exception:
+                    try:
+                        self.getControl(DW_PLOT).setLabel(it_overview)
+                    except Exception:
+                        pass
+            # Populate cast panel from credits (already in the it-IT+credits response)
+            cast_list = (data.get('credits') or {}).get('cast', [])[:14]
             if cast_list:
                 self._populate_cast_panel(cast_list)
         except Exception:
@@ -3948,7 +4120,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 self._selected_episode = sel_e
                 # Update EP_INFO label
                 _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
-                _ep_lbl  = u'\u25b6  %s' % _ep_code
+                _ep_lbl  = u'%s' % _ep_code
                 if sel_title:
                     _ep_lbl += u'  \u2013  ' + sel_title
                 try:
@@ -3958,7 +4130,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 # Update GUARDA button to show the selected episode
                 try:
                     self.getControl(DW_BTN_PLAY).setLabel(
-                        u'\u25b6  GUARDA  %s' % _ep_code)
+                        u'GUARDA  %s' % _ep_code)
                 except Exception:
                     pass
             del picker
@@ -4118,7 +4290,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
     def _load_seasons(self):
         try:
             from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
-            url  = '%s/tv/%s?api_key=%s' % (_tmdb_host, self._tmdb_id, _tmdb_api)
+            url  = '%s/tv/%s?api_key=%s&language=it-IT' % (_tmdb_host, self._tmdb_id, _tmdb_api)
             data = _Tmdb.get_json(url) or {}
             raw  = data.get('seasons', [])
             # Filter out specials (season_number == 0)
@@ -4152,9 +4324,15 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
     def _load_episodes(self, season_num):
         try:
             from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
-            url  = '%s/tv/%s/season/%d?api_key=%s' % (
-                    _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
-            data = _Tmdb.get_json(url) or {}
+            # Fetch season in Italian first
+            url_it = '%s/tv/%s/season/%d?api_key=%s&language=it-IT' % (
+                      _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
+            data = _Tmdb.get_json(url_it) or {}
+            # Also fetch English version to use as translation source for empty overviews
+            url_en = '%s/tv/%s/season/%d?api_key=%s&language=en-US' % (
+                      _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
+            data_en  = _Tmdb.get_json(url_en) or {}
+            eps_en   = {ep.get('episode_number'): ep for ep in data_en.get('episodes', [])}
             episodes = data.get('episodes', [])
             watched  = set(
                 tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
@@ -4166,13 +4344,20 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                 ep_num   = ep.get('episode_number', 0)
                 ep_title = ep.get('name') or (u'Episodio %d' % ep_num)
                 ep_thumb = ep.get('still_path', '')
-                overview = (ep.get('overview') or '')[:200]
+                overview = (ep.get('overview') or '').strip()
+                # If Italian overview is missing, fall back to English then translate
+                if not overview:
+                    en_ep    = eps_en.get(ep_num) or {}
+                    en_ov    = (en_ep.get('overview') or '').strip()
+                    if en_ov:
+                        overview = _translate_to_it(en_ov)
+                overview = overview[:200]
                 runtime  = ep.get('runtime', 0)
                 is_watched = (season_num, ep_num) in watched
                 is_current = (season_num == self._cw_season and ep_num == self._cw_ep)
                 ep_code    = u'S%02dE%02d' % (season_num, ep_num)
                 if is_current:
-                    label = u'[B]\u25b6  %s  \u2013  %s[/B]' % (ep_code, ep_title)
+                    label = u'[B]%s  \u2013  %s[/B]' % (ep_code, ep_title)
                     sel_pos = len(items)
                 elif is_watched:
                     label = (u'[COLOR FF22C55E]\u2713[/COLOR] '
