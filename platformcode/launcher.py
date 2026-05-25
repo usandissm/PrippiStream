@@ -36,8 +36,8 @@ def run(item=None):
     # Extract item from sys.argv
     if not item: item = makeItem()
 
-    # Load or Repare Settings
-    if not config.get_setting('show_once'): showOnce()
+    # Load or Repare Settings (popup first-install disabilitato — non più necessario)
+    config.set_setting('show_once', True)
 
     # Acrions
     logger.debug(item.tostring())

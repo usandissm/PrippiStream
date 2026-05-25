@@ -1675,7 +1675,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
         # ── Final CW save ──
         if cw_key and total_time > 60:
-            if _finished_naturally:
+            if _finished_naturally and not _upnext_user_cancelled:
+                # Only remove CW if user didn't cancel (still has episodes to watch)
                 watch_history.remove(cw_key)
             elif actual_time > 60:
                 _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
@@ -3405,6 +3406,11 @@ class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
             self.getControl(self.PROG_BAR).setPercent(0)
         except Exception:
             pass
+        # Ensure focus starts on "Guarda subito" (non-modal show() needs explicit setFocus)
+        try:
+            self.setFocusId(self.BTN_PLAY)
+        except Exception:
+            pass
 
     def update(self, secs_remaining, pct_elapsed):
         """Update countdown label and progress bar. Called every second from caller thread."""
@@ -3469,6 +3475,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         self._close_requested = False  # Signal background threads to bail out
         self._selected_season  = None  # int: season selected in EpisodePicker
         self._selected_episode = None  # int: episode selected in EpisodePicker
+        self._default_season   = 1     # int: default season (from CW or S01)
+        self._default_episode  = 1     # int: default episode (from CW or E01)
 
     def onInit(self):
         item = self._item
@@ -3630,6 +3638,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                     _tw  = float(_ep_info.get('time_watched', 0))
                     _tt  = float(_ep_info.get('total_time', 0) or 1)
                     _pct = int(_tw / _tt * 100) if _tw > 0 else 0
+                    self._default_season  = _s
+                    self._default_episode = _e
                     _ep_code = u'S%02dE%02d' % (_s, _e)
                     _ep_lbl  = u'Continua  %s' % _ep_code
                     if _et:
@@ -4241,16 +4251,13 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         elif control_id == DW_BTN_PLAY:
             item = self._item
             ct      = getattr(item, 'contentType', '') or ''
-            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip() if item else ''
-            # For tvshow with TMDB and no pre-selected episode: open picker first
-            if ct == 'tvshow' and tmdb_id and self._selected_season is None:
-                self._open_episode_picker()
-                if self._selected_season is not None:
-                    # Episode chosen — play it
-                    self._initiate_close(result='play')
-                # else: picker was cancelled, stay in DetailWindow
-            else:
-                self._initiate_close(result='play')
+            # For tvshow with no pre-selected episode: use default
+            # (CW resume point if exists, otherwise S01E01).
+            # EpisodePicker is only triggered by DW_BTN_EP_SEL.
+            if ct == 'tvshow' and self._selected_season is None:
+                self._selected_season  = self._default_season
+                self._selected_episode = self._default_episode
+            self._initiate_close(result='play')
         elif control_id == DW_BTN_AUDIO_SUB:
             self._show_audio_sub_dialog()
         elif control_id == DW_BTN_REMOVE_CW:
@@ -4622,9 +4629,26 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             )
             dw.doModal()
             result = getattr(dw, '_result', None)
+            sel_s  = getattr(dw, '_selected_season',  None)
+            sel_e  = getattr(dw, '_selected_episode', None)
             del dw
             if result == 'play':
-                self._launch_item(item)
+                if sel_s is not None and sel_e is not None:
+                    # User picked a specific episode in the EpisodePicker.
+                    _show_url = (getattr(item, '_cw_show_url', '') or
+                                 (item.url if getattr(item, 'action', '') == 'episodios' else ''))
+                    if _show_url and self._parent_window is not None:
+                        t_ep = threading.Thread(
+                            target=self._parent_window._play_episode_direct,
+                            args=(item, sel_s, sel_e))
+                        t_ep.daemon = True
+                        t_ep.start()
+                    elif self._parent_window is not None:
+                        self._parent_window._launch(item)
+                    else:
+                        self._launch_item(item)
+                else:
+                    self._launch_item(item)
         except Exception as exc:
             logger.error('[NetflixSearch] _open_detail: %s' % str(exc))
 

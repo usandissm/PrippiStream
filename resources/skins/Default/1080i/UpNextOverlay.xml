@@ -86,7 +86,7 @@
             <left>1305</left><top>171</top>
             <width>282</width><height>57</height>
             <texturefocus   colordiffuse="FFE50914">white.png</texturefocus>
-            <texturenofocus colordiffuse="25FFFFFF">white.png</texturenofocus>
+            <texturenofocus colordiffuse="0AFFFFFF">white.png</texturenofocus>
             <label>[B]&#x25B6;  Guarda subito[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
@@ -105,8 +105,8 @@
         <control type="button" id="9902">
             <left>1599</left><top>171</top>
             <width>282</width><height>57</height>
-            <texturefocus   colordiffuse="44FFFFFF">white.png</texturefocus>
-            <texturenofocus colordiffuse="00000000">white.png</texturenofocus>
+            <texturefocus   colordiffuse="FF333333">white.png</texturefocus>
+            <texturenofocus colordiffuse="08FFFFFF">white.png</texturenofocus>
             <label>Annulla</label>
             <font>font10</font>
             <textcolor>FF8A8A8A</textcolor>
@@ -117,6 +117,8 @@
             <onright>9901</onright>
             <onup>9902</onup>
             <ondown>9902</ondown>
+            <animation effect="zoom" start="100" end="106" center="auto" time="100" tween="sine" easing="out">Focus</animation>
+            <animation effect="zoom" start="106" end="100" center="auto" time="80"  tween="sine" easing="in">Unfocus</animation>
         </control>
 
     </controls>
