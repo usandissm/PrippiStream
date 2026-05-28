@@ -15,6 +15,7 @@ import xbmcgui
 
 from core.item import Item
 from platformcode import config, logger, watch_history, platformtools
+from platformcode import _fourk
 
 PY3 = sys.version_info[0] >= 3
 
@@ -360,6 +361,43 @@ SEARCH_STATUS_LBL  = 172   # "Ricerca in corso..." text inside loading group
 
 # ── Continue Watching helpers ────────────────────────────────
 
+# ── 4K carousel row builder ──────────────────────────────────
+
+def _build_4k_row():
+    """Build a list of Items for the 4K carousel row.
+    Enriches with TMDB metadata so fanart/poster are available for CW."""
+    if not _fourk._ready or not _fourk._index_by_tmdb:
+        return []
+    items = []
+    for tmdb_id, f4k in _fourk._index_by_tmdb.items():
+        try:
+            it = Item(
+                fulltitle=f4k.get('name', ''),
+                thumbnail=f4k.get('poster', ''),
+                fanart=f4k.get('poster', ''),
+                contentType='movie',
+                action='findvideos',
+                infoLabels={
+                    'tmdb_id': int(tmdb_id),
+                    'rating': f4k.get('rating', 0),
+                    'year': f4k.get('year', 0),
+                    'mediatype': 'movie',
+                }
+            )
+            items.append(it)
+        except Exception:
+            pass
+    # Enrich with TMDB metadata (fanart, plot, etc.) — same as SC rows
+    if items:
+        try:
+            from core import tmdb as _tmdb
+            _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
+        except Exception:
+            pass
+    return items
+
+# ── CW helpers ──────────────────────────────────────────────
+
 def _cw_key(item):
     """Return a stable string key that uniquely identifies this content in the CW db.
     TV series (contentType=='episode') share a single series-level key so that all
@@ -502,6 +540,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
         t.start()
+        # Background refresh of 4K index (non-blocking, cache-first)
+        _t4k = threading.Thread(target=_fourk.build_4k_index)
+        _t4k.daemon = True
+        _t4k.start()
 
     def _bg_load(self):
         """Run in background thread: fetch SC rows, prepend CW row, then update UI."""
@@ -541,7 +583,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # CW row is ALWAYS rows_data[0] (even when empty) so that SC rows i>=1
         # always map to the same control IDs (2010, 2020, ...) regardless of CW state.
         cw_items = _build_cw_items()
-        self.rows_data = [(_CW_ROW_LABEL, cw_items)] + list(sc_rows)
+        self.rows_data = [(_CW_ROW_LABEL, cw_items)]
+
+        # ── 4K carousel row (after CW, before SC rows) ────────────────────
+        _4k_items = _build_4k_row()
+        if _4k_items:
+            self.rows_data.append((u'Film in 4K', _4k_items))
+
+        self.rows_data += list(sc_rows)
 
         # Fire-and-forget: nuke stale vixcloud bookmarks from prior sessions
         # so Kodi never shows a "Resume from" dialog for our managed content.
@@ -775,6 +824,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 plot = cached_plot
                 it.infoLabels['plot'] = cached_plot
 
+        # 4K badge for hero
+        if getattr(it, 'contentType', '') == 'movie' and tmdb_id_hero and _fourk.is_4k_available(tmdb_id_hero):
+            ctype_lbl += '  [COLOR FFE50914]4K[/COLOR]'
         try:
             img = fanart or thumb
             if img:
@@ -1208,6 +1260,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             _db_launch.close()
         except Exception:
             pass
+
+        # ── 4K check (movies only) ────────────────────────────────────────
+        ct = getattr(item, 'contentType', '') or ''
+        if ct == 'movie':
+            _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if _tmdb:
+                _f4k = _fourk.lookup_4k(_tmdb)
+                if _f4k:
+                    logger.info('[NetflixHome] 4K HIT: %s → %s' % (
+                        item.fulltitle, _f4k['stream_url'][:80]))
+                    t = threading.Thread(target=self._play_4k_stream, args=(item, _f4k))
+                    t.daemon = True
+                    t.start()
+                    return
 
         if item.action == 'findvideos':
             # SC movie or episode: direct play via RunPlugin.
@@ -1967,6 +2033,32 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
         except Exception as exc:
             logger.error('[NetflixHome] _select_episode: %s' % str(exc))
+
+    def _play_4k_stream(self, item, f4k):
+        """Play a 4K stream directly (bypasses SC entirely).  CW tracking via _wait_and_restore."""
+        try:
+            _pre_play_set_lang(item)
+            # Resolve final CDN URL (follow redirect to get token, avoid Kodi pipe-header issues)
+            _stream_url = _fourk.get_resolved_url(f4k)
+            li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url)
+            li.setArt({'thumb': item.thumbnail or f4k.get('poster', ''),
+                        'fanart': item.fanart or ''})
+            try:
+                _il = dict(item.infoLabels or {})
+                if _il:
+                    li.setInfo('video', {k: v for k, v in _il.items()
+                                         if v is not None and isinstance(v, (str, int, float))})
+            except Exception:
+                pass
+            li.setProperty('IsPlayable', 'true')
+            xbmc.Player().play(_stream_url, li)
+            t = threading.Thread(target=self._wait_and_restore, args=(item,))
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            logger.error('[NetflixHome] _play_4k_stream: %s' % str(exc))
+            # Fallback to SC
+            self._launch(item)
 
     def _play_episode_direct(self, item, season_num, ep_num):
         """Play a specific episode (season_num, ep_num) directly from the show item.
@@ -3538,6 +3630,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                          ) if rating_str else ''
         meta1 = '  \u2022  '.join(
             p for p in [year, ctype_lbl, lang, rating_display] if p)
+        # ── 4K badge ─────────────────────────────────────────────────────
+        _tmdb_4k = str(item.infoLabels.get('tmdb_id') or '').strip()
+        if getattr(item, 'contentType', '') == 'movie' and _tmdb_4k and _fourk.is_4k_available(_tmdb_4k):
+            meta1 += '  •  [COLOR FFE50914][B]4K[/B][/COLOR]'
         try:
             self.getControl(DW_META1).setLabel(meta1)
         except Exception:
@@ -4610,6 +4706,10 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             rating = ('%.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
             media  = info.get('mediatype', '')
             parts  = [p for p in [year, rating, media.upper()] if p]
+            # 4K badge
+            _tmdb_h = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if getattr(item, 'contentType', '') == 'movie' and _tmdb_h and _fourk.is_4k_available(_tmdb_h):
+                parts.append('[COLOR FFE50914]4K[/COLOR]')
             self.getControl(133).setLabel('  ·  '.join(parts))
             # Plot
             plot = str(info.get('plot', ''))[:200]
@@ -4756,6 +4856,37 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     t = threading.Thread(target=_async_play, name='NS-launch', daemon=True)
                     t.start()
                     return
+
+            # ── 4K check (movies only, before normal path) ────────────────
+            ct = getattr(item, 'contentType', '') or ''
+            if ct == 'movie':
+                _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+                if _tmdb:
+                    _f4k = _fourk.lookup_4k(_tmdb)
+                    if _f4k:
+                        logger.info('[NetflixSearch] 4K HIT: %s' % item.fulltitle)
+                        _pw = self._parent_window
+                        if _pw:
+                            t = threading.Thread(target=_pw._play_4k_stream, args=(item, _f4k))
+                            t.daemon = True
+                            t.start()
+                        else:
+                            # No parent window: resolve URL and play directly
+                            _pre_play_set_lang(item)
+                            _stream_url4k = _fourk.get_resolved_url(_f4k)
+                            li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url4k)
+                            li.setArt({'thumb': item.thumbnail or _f4k.get('poster', ''),
+                                        'fanart': item.fanart or ''})
+                            try:
+                                _il2 = dict(item.infoLabels or {})
+                                if _il2:
+                                    li.setInfo('video', {k: v for k, v in _il2.items()
+                                                         if v is not None and isinstance(v, (str, int, float))})
+                            except Exception:
+                                pass
+                            li.setProperty('IsPlayable', 'true')
+                            xbmc.Player().play(_stream_url4k, li)
+                        return
 
             # ── Normal path (SC item or no prefetch event) ──────────────────────
             if self._parent_window is not None:

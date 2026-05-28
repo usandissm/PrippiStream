@@ -1047,6 +1047,91 @@ def get_window():
         return 'ADDON'  # WINDOW_ID's from 14000 to 14099 reserved for Addons
 
 
+def _force_max_hls(mediaurl, headers):
+    """If mediaurl is an M3U8 master playlist, return a local minimal playlist
+    containing only the highest-bandwidth variant (preserving audio/subs).
+    Kodi starts with the first (and only) variant = max quality from frame 1."""
+    try:
+        _base = mediaurl.split('|')[0]
+
+        from core import httptools as _ht
+        resp = _ht.downloadpage(mediaurl, ignore_response_code=True, timeout=5)
+        if not resp or not resp.data:
+            return mediaurl
+
+        body = resp.data
+        if not isinstance(body, str):
+            body = body.decode('utf-8', errors='ignore')
+
+        if not body.strip().startswith('#EXTM3U'):
+            return mediaurl
+        if '#EXT-X-STREAM-INF' not in body:
+            return mediaurl
+
+        import re
+        # Collect #EXT-X-MEDIA lines (audio/subtitle groups)
+        media_lines = []
+        # Find max bandwidth variant (STREAM-INF line + URL)
+        best_variant_line = None
+        best_variant_url  = None
+        best_bw = 0
+        current_bw = 0
+        current_line = None
+
+        for line in body.split('\n'):
+            ls = line.strip()
+            if ls.startswith('#EXT-X-MEDIA:'):
+                media_lines.append(line)
+            elif ls.startswith('#EXT-X-STREAM-INF:'):
+                m = re.search(r'BANDWIDTH=(\d+)', ls, re.IGNORECASE)
+                current_bw = int(m.group(1)) if m else 0
+                current_line = line
+            elif current_line and ls and not ls.startswith('#'):
+                if current_bw > best_bw:
+                    best_bw = current_bw
+                    best_variant_line = current_line
+                    best_variant_url  = line
+                current_bw = 0
+                current_line = None
+
+        if not best_variant_url or best_bw == 0:
+            return mediaurl
+
+        # Make variant URL absolute if needed
+        if not best_variant_url.startswith('http'):
+            from core import scrapertools as _st
+            base = '/'.join(_base.split('/')[:-1]) + '/'
+            best_variant_url = _st.get_header_url(base, best_variant_url)
+
+        # Reconstruct minimal master: header + media groups + best variant only
+        new_lines = ['#EXTM3U']
+        new_lines.extend(media_lines)
+        new_lines.append(best_variant_line.rstrip('\n'))
+        new_lines.append(best_variant_url)
+
+        # Write to temp file — create dir first, then temp file
+        import tempfile, os as _os
+        _tmpdir = _os.path.join(xbmc.translatePath('special://temp'), 'prippi')
+        try:
+            _os.makedirs(_tmpdir, exist_ok=True)
+        except Exception:
+            pass
+        tmp = tempfile.NamedTemporaryFile(
+            mode='w', suffix='.m3u8', delete=False, dir=_tmpdir)
+        tmp.write('\n'.join(new_lines))
+        tmp.close()
+
+        result = tmp.name
+        logger.info('[HLS-max] BANDWIDTH=%d → temp playlist (%d media groups) → %s'
+                     % (best_bw, len(media_lines), result[:80]))
+        return result
+
+    except Exception as exc:
+        logger.error('[HLS-max] error: %s' % str(exc))
+
+    return mediaurl
+
+
 def play_video(item, strm=False, force_direct=False, autoplay=False):
     from core import httptools
     logger.debug()
