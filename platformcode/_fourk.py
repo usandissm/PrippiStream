@@ -41,9 +41,13 @@ _STREAM_BASE = 'http://marek2.myvisio.me:8000/movie/%s/%s' % (_API_USER, _API_PA
 # Resolved stream URL cache: stream_id → final CDN URL (with token)
 _resolved_urls = {}
 
-_CACHE_TTL   = 21600       # 6 hours
-_MAX_WORKERS = 5           # parallel vod_info fetches (keep low to avoid 503)
-_UA          = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+_CACHE_TTL      = 21600       # 6 hours
+_CACHE_VERSION   = 2            # bump to invalidate old caches
+_MAX_WORKERS    = 5           # parallel vod_info fetches (keep low to avoid 503)
+_UA             = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+# Regex: must have a 4K indicator in the name (case-insensitive)
+_RE_4K_NAME = re.compile(r'4[Kk]|2160[pP]|UHD', re.IGNORECASE)
 
 
 # ── Module state ────────────────────────────────────────────────────────
@@ -170,7 +174,8 @@ def build_4k_index():
             if os.path.exists(cache_path):
                 with open(cache_path, 'r', encoding='utf-8') as f:
                     cache = json.load(f)
-                if time.time() - cache.get('ts', 0) < _CACHE_TTL:
+                if (time.time() - cache.get('ts', 0) < _CACHE_TTL
+                        and cache.get('ver') == _CACHE_VERSION):
                     with _lock:
                         _index_by_tmdb = {int(k): v for k, v in cache.get('movies', {}).items()}
                         _ready = True
@@ -231,6 +236,10 @@ def build_4k_index():
             if not tmdb_id:
                 continue  # skip movies without tmdb_id (can't match)
 
+            # Only include movies that actually have a 4K indicator in the name
+            if not _RE_4K_NAME.search(name):
+                continue
+
             clean_name, year = _extract_year(name)
             ext = s.get('container_extension', 'mkv')
             stream_url = '%s/%d.%s' % (_STREAM_BASE, sid, ext)
@@ -249,6 +258,7 @@ def build_4k_index():
         try:
             cache = {
                 'ts':     time.time(),
+                'ver':    _CACHE_VERSION,
                 'movies': {str(k): v for k, v in new_index.items()},
             }
             with open(cache_path, 'w', encoding='utf-8') as f:
