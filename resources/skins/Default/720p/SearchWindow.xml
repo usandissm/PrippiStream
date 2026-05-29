@@ -36,8 +36,13 @@
                 <width>1280</width>
                 <height>720</height>
                 <texture colordiffuse="FF555555"/>
-            </control>
-            <!-- LOADING -->
+            </control>            <!-- Brand -->
+            <control type="image">
+                <left>40</left><top>14</top>
+                <width>185</width><height>38</height>
+                <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
+                <aspectratio>keep</aspectratio>
+            </control>            <!-- LOADING -->
 			<control type="image" id='30011'>
 				<top>355</top>
 				<left>490</left>

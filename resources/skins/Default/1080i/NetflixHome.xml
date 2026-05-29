@@ -45,13 +45,11 @@
         </control>
 
         <!-- Brand -->
-        <control type="label">
-            <left>42</left><top>20</top>
-            <width>300</width><height>36</height>
-            <font>font14</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
-            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        <control type="image">
+            <left>8</left><top>-13</top>
+            <width>480</width><height>100</height>
+            <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
+            <aspectratio>keep</aspectratio>
         </control>
 
         <!-- Search button (id=109) -->
@@ -160,48 +158,47 @@
         <control type="group" id="200">
             <left>0</left><top>0</top>
             <width>1920</width><height>1080</height>
+            <!-- Full dark bg -->
             <control type="image">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>1080</height>
-                <texture colordiffuse="E8000000">white.png</texture>
+                <texture colordiffuse="F0000000">white.png</texture>
             </control>
+            <!-- Soft red glow behind logo -->
             <control type="image">
-                <left>660</left><top>420</top>
-                <width>600</width><height>120</height>
-                <texture colordiffuse="FF151515">white.png</texture>
+                <left>710</left><top>310</top>
+                <width>500</width><height>500</height>
+                <texture colordiffuse="14E50914">white.png</texture>
             </control>
+            <!-- Logo centered (260x260 square display) -->
             <control type="image">
-                <left>660</left><top>420</top>
-                <width>600</width><height>3</height>
-                <texture colordiffuse="FFE50914">white.png</texture>
+                <left>830</left><top>370</top>
+                <width>260</width><height>260</height>
+                <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_prippistream.png</texture>
+                <aspectratio>keep</aspectratio>
             </control>
+            <!-- Caricamento label -->
             <control type="label">
-                <left>660</left><top>444</top>
-                <width>600</width><height>36</height>
-                <font>font14</font>
-                <textcolor>FFFFFFFF</textcolor>
+                <left>560</left><top>645</top>
+                <width>800</width><height>28</height>
+                <font>font10</font>
+                <textcolor>FF444444</textcolor>
                 <align>center</align>
-                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+                <label>[UPPERCASE]Caricamento...[/UPPERCASE]</label>
+                <animation effect="fade" start="15" end="100" time="900" tween="sine" loop="true" reversible="true">Visible</animation>
             </control>
-            <control type="label">
-                <left>660</left><top>492</top>
-                <width>600</width><height>30</height>
-                <font>font12</font>
-                <textcolor>FF7E7E7E</textcolor>
-                <align>center</align>
-                <label>Caricamento...</label>
-                <animation effect="fade" start="20" end="100" time="800" tween="sine" loop="true" reversible="true">Visible</animation>
-            </control>
+            <!-- Progress track -->
             <control type="image">
-                <left>720</left><top>522</top>
-                <width>480</width><height>3</height>
-                <texture colordiffuse="FF252525">white.png</texture>
+                <left>760</left><top>682</top>
+                <width>400</width><height>2</height>
+                <texture colordiffuse="FF1C1C1C">white.png</texture>
             </control>
+            <!-- Progress bar -->
             <control type="image">
-                <left>720</left><top>522</top>
-                <width>180</width><height>3</height>
+                <left>760</left><top>682</top>
+                <width>160</width><height>2</height>
                 <texture colordiffuse="FFE50914">white.png</texture>
-                <animation effect="fade" start="20" end="80" time="500" tween="cubic" loop="true" reversible="true">Visible</animation>
+                <animation effect="fade" start="15" end="75" time="600" tween="cubic" loop="true" reversible="true">Visible</animation>
             </control>
         </control>
 

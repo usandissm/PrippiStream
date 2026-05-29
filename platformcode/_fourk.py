@@ -41,9 +41,9 @@ _STREAM_BASE = 'http://marek2.myvisio.me:8000/movie/%s/%s' % (_API_USER, _API_PA
 # Resolved stream URL cache: stream_id → final CDN URL (with token)
 _resolved_urls = {}
 
-_CACHE_TTL      = 21600       # 6 hours
+_CACHE_TTL      = 86400       # 24 hours
 _CACHE_VERSION   = 2            # bump to invalidate old caches
-_MAX_WORKERS    = 5           # parallel vod_info fetches (keep low to avoid 503)
+_MAX_WORKERS    = 10          # parallel vod_info fetches
 _UA             = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 # Regex: must have a 4K indicator in the name (case-insensitive)

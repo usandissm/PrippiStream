@@ -584,13 +584,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # always map to the same control IDs (2010, 2020, ...) regardless of CW state.
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
+        self.rows_data += list(sc_rows)
 
-        # ── 4K carousel row (after CW, before SC rows) ────────────────────
+        # ── 4K carousel row (3 rows after CW) ─────────────────────────────
         _4k_items = _build_4k_row()
         if _4k_items:
-            self.rows_data.append((u'Film in 4K', _4k_items))
-
-        self.rows_data += list(sc_rows)
+            insert_pos = min(4, len(self.rows_data))
+            self.rows_data.insert(insert_pos, (u'Film in 4K', _4k_items))
 
         # Fire-and-forget: nuke stale vixcloud bookmarks from prior sessions
         # so Kodi never shows a "Resume from" dialog for our managed content.
