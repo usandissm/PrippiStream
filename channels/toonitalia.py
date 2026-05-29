@@ -51,6 +51,21 @@ def peliculas(item):
         return item
     return locals()
 
+def newest(categoria):
+    support.info(categoria)
+    item = support.Item()
+    try:
+        if categoria == 'anime':
+            # Read URL fresh from channels.json (already synced from GitHub)
+            # so any domain change is picked up automatically.
+            item.url = support.config.get_channel_url() + '/category/anime/'
+            return peliculas(item)
+    except:
+        import sys
+        for line in sys.exc_info():
+            support.logger.error('%s' % line)
+    return []
+
 def check(item):
     itemlist = episodios(item)
     if not itemlist:

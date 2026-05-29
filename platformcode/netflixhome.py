@@ -66,6 +66,7 @@ _ENRICH_SOURCE_MAP = {
         ('aniplay',               'anime'),
         ('animeuniverse',         'anime'),
         ('piratestreaming',       'anime'),
+        ('toonitalia',            'anime'),
     ],
 }
 
@@ -396,6 +397,33 @@ def _build_4k_row():
             pass
     return items
 
+
+def _build_anime_row():
+    """Build a list of Items for the Anime carousel row, seeded from ToonItalia.
+    Uses a dedicated cache slot so it does not interfere with the full
+    _fetch_enrich_items('anime') pool used by _bg_enrich_rows.
+    The row is then further enriched in the background with items from the
+    other sources listed in _ENRICH_SOURCE_MAP['anime']."""
+    from time import time
+    cached = _enrich_cache.get('_anime_seed')
+    if cached and (time() - cached['ts']) < _CACHE_TTL:
+        return list(cached['items'])
+    try:
+        import channels.toonitalia as _toonitalia
+        items = _toonitalia.newest('anime') or []
+        if items:
+            try:
+                from core import tmdb as _tmdb
+                _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
+            except Exception:
+                pass
+            _enrich_cache['_anime_seed'] = {'items': items[:40], 'ts': time()}
+            return items[:40]
+    except Exception as exc:
+        logger.error('[NetflixHome] _build_anime_row: %s' % str(exc))
+    return []
+
+
 # ── CW helpers ──────────────────────────────────────────────
 
 def _cw_key(item):
@@ -479,7 +507,11 @@ def _build_cw_items():
             it.cw_time_watched = cw_time
             it.cw_total_time   = cw_total
             it._cw_show_url    = e.get('show_url', '') or ''
+            it._cw_db_key      = e['key']
             _fix_cw_url_domain(it)  # update stale domains after migration
+            # Title fallback from DB entry (items stored before fulltitle was set)
+            if not _extract_item_title(it):
+                it.title = e.get('title', '') or ''
             items.append(it)
         except Exception as exc:
             logger.error('[CW] build item: %s' % str(exc))
@@ -591,6 +623,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if _4k_items:
             insert_pos = min(4, len(self.rows_data))
             self.rows_data.insert(insert_pos, (u'Film in 4K', _4k_items))
+
+        # ── Anime carousel row (ToonItalia seed if available, then enriched  ──
+        # in background from _ENRICH_SOURCE_MAP['anime']; row is ALWAYS       ─
+        # inserted so _bg_enrich_rows() can fill it even when seed is empty)  ─
+        _anime_items = _build_anime_row()
+        self.rows_data.insert(min(5, len(self.rows_data)), (u'Anime', _anime_items))
 
         # Fire-and-forget: nuke stale vixcloud bookmarks from prior sessions
         # so Kodi never shows a "Resume from" dialog for our managed content.
@@ -1297,12 +1335,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t.daemon = True
             t.start()
         elif item.action == 'episodios':
-            # SC TV show: show inline season/episode selector without leaving
-            # the Netflix home (avoids all container/window navigation issues).
-            # _select_episode is SC-specific; only call it for SC items.
-            t = threading.Thread(target=self._select_episode, args=(item,))
-            t.daemon = True
-            t.start()
+            # _select_episode uses SC's JSON API — only for SC items.
+            if getattr(item, 'channel', '') == 'streamingcommunity':
+                t = threading.Thread(target=self._select_episode, args=(item,))
+                t.daemon = True
+                t.start()
+            else:
+                # Non-SC show: open the channel's episode list in Kodi container.
+                # 'return' means pressing Back returns to the Netflix home.
+                xbmc.executebuiltin(
+                    'ActivateWindow(10025,plugin://plugin.video.prippistream/?%s,return)'
+                    % item.tourl())
         else:
             # Non-SC item or any other action (e.g. 'check' from altadefinizione,
             # cineblog01, etc.): dispatch via RunPlugin → launcher.actions/findvideos
@@ -1328,9 +1371,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             win = DetailWindow('DetailWindow.xml', config.get_runtime_path(), item=item)
             win.doModal()
-            result    = win._result
-            sel_s     = getattr(win, '_selected_season',  None)
-            sel_e     = getattr(win, '_selected_episode', None)
+            result      = win._result
+            sel_s       = getattr(win, '_selected_season',  None)
+            sel_e       = getattr(win, '_selected_episode', None)
+            search_item = getattr(win, '_search_item', None)
             del win
         finally:
             self._bg_ui_pause.set()
@@ -1367,11 +1411,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if result == 'play':
             if sel_s is not None and sel_e is not None:
                 # User picked a specific episode in the EpisodePicker.
-                # Works for SC tvshow items (action='episodios') AND
-                # for CW episode items that have a stored show URL.
+                # _play_episode_direct uses SC's JSON API — only for SC items.
+                # CW episode items carry _cw_show_url (always SC).
                 _show_url = (getattr(item, '_cw_show_url', '') or
                              (item.url if getattr(item, 'action', '') == 'episodios' else ''))
-                if _show_url:
+                _is_sc = getattr(item, 'channel', '') == 'streamingcommunity'
+                if _show_url and (_is_sc or getattr(item, '_cw_show_url', '')):
                     t_ep = threading.Thread(target=self._play_episode_direct,
                                             args=(item, sel_s, sel_e))
                     t_ep.daemon = True
@@ -1380,6 +1425,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     self._launch(item)
             else:
                 self._launch(item)
+        elif result == 'open_channel_search':
+            if search_item is not None:
+                xbmc.executebuiltin(
+                    'ActivateWindow(10025,plugin://plugin.video.prippistream/?%s,return)'
+                    % search_item.tourl())
         elif result == 'removed_cw':
             # Item was removed from CW — refresh the CW row immediately
             self._refresh_cw_row()
@@ -3256,6 +3306,10 @@ def _fetch_enrich_items(ctype):
                 if act not in _VALID_ACTIONS:
                     continue
                 if _extract_item_title(it):
+                    # Ensure channel is set so the plugin dispatcher can
+                    # import the right module (e.g. animesaturn, animeunity).
+                    if not getattr(it, 'channel', ''):
+                        it.channel = channel_name
                     valid.append(it)
             if valid:
                 with lock:
@@ -4196,10 +4250,68 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         try:
             tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
             if not tmdb_id:
-                xbmcgui.Dialog().notification(
-                    u'PrippiStream',
-                    u'Nessuna informazione episodi disponibile per questo contenuto',
-                    xbmcgui.NOTIFICATION_INFO, 3000)
+                _channel = getattr(item, 'channel', '') or ''
+                _item_url = getattr(item, 'url', '') or ''
+                logger.info('[EpPicker] channel=%r url=%r' % (_channel, _item_url[:80] if _item_url else ''))
+                # Channel not stored in item (pre-Fix3 entry) — infer from item URL
+                if not _channel:
+                    if _item_url:
+                        try:
+                            import os as _os2
+                            import re as _re_ch
+                            from core import jsontools as _jt
+                            _ch_file = _os2.path.join(config.get_runtime_path(), 'channels.json')
+                            logger.info('[EpPicker] channels.json path: %r' % _ch_file)
+                            with open(_ch_file) as _f:
+                                _ch_data = _jt.load(_f.read())
+                            for _ch_name, _ch_url in _ch_data.get('direct', {}).items():
+                                _norm_ch   = _re_ch.sub(r'^https?://(www\.)?', '', _ch_url.rstrip('/'))
+                                _norm_item = _re_ch.sub(r'^https?://(www\.)?', '', _item_url)
+                                if _norm_item.startswith(_norm_ch):
+                                    _channel = _ch_name
+                                    break
+                            logger.info('[EpPicker] detected channel=%r' % _channel)
+                        except Exception as _e:
+                            logger.error('[EpPicker] channel detect error: %s' % str(_e))
+                # Extract the best available show title from all sources
+                _title = (
+                    str(item.fulltitle or '').strip() or
+                    str(item.show or '').strip() or
+                    str(item.infoLabels.get('tvshowtitle') or '').strip() or
+                    str(item.infoLabels.get('title') or '').strip() or
+                    str(getattr(item, 'title', '') or '').strip()
+                )
+                # Last resort: look up the CW DB entry by the key stored at load time
+                if not _title:
+                    _db_key = getattr(item, '_cw_db_key', '') or ''
+                    if _db_key:
+                        try:
+                            _entry = watch_history.get(_db_key)
+                            _title = (_entry or {}).get('title', '') or ''
+                        except Exception:
+                            pass
+                # Strip episode-number suffix: "One Piece  S01E918" → "One Piece"
+                import re as _re2
+                _title = _re2.sub(r'\s+S\d{1,2}E\d{1,4}.*$', '', _title, flags=_re2.IGNORECASE).strip()
+                _title = _re2.sub(r'\s*[-\u2013]\s*Ep\.?\s*\d+.*$', '', _title, flags=_re2.IGNORECASE).strip()
+                if _channel and _channel != 'streamingcommunity':
+                    # Pre-fill the channel search dialog with the show title
+                    if _title:
+                        try:
+                            from core import channeltools as _cht
+                            _cht.set_channel_setting('Last_searched', _title, 'search')
+                        except Exception:
+                            pass
+                    # Close the DetailWindow first — ActivateWindow is handled in
+                    # _open_detail() after doModal() returns, so it is not blocked
+                    # by the modal dialog.
+                    self._search_item = Item(channel=_channel, action='search', title=_channel)
+                    self._initiate_close(result='open_channel_search')
+                else:
+                    xbmcgui.Dialog().notification(
+                        u'PrippiStream',
+                        u'Nessuna informazione episodi disponibile per questo contenuto',
+                        xbmcgui.NOTIFICATION_INFO, 3000)
                 return
             # Build show key — same logic as onInit
             show_key = 'tv_%s' % tmdb_id
