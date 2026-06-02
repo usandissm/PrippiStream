@@ -1030,16 +1030,21 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._update_hero(new_row)
             return
         if aid == ACTION_WHEEL_DOWN:
-            next_wl_id = ROW_WRAPLIST_BASE + (self._last_focused_row + 1) * ROW_STEP
             next_xml_exists = False
-            if self._last_focused_row < self._num_rows - 1:
+            new_row = self._last_focused_row + 1
+            # Skip empty rows
+            while (new_row < self._num_rows and
+                   new_row < len(self.rows_data) and
+                   not self.rows_data[new_row][1]):
+                new_row += 1
+            next_wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+            if new_row < self._num_rows:
                 try:
                     self.getControl(next_wl_id)
                     next_xml_exists = True
                 except Exception:
                     pass
             if next_xml_exists:
-                new_row = self._last_focused_row + 1
                 self._populate_single_row(new_row)
                 self.setFocusId(next_wl_id)
                 self._last_focused_row = new_row
@@ -1074,8 +1079,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if i >= 0:
                 if i > 0:
                     new_row = i - 1
-                    # Skip row 0 (CW) if it is empty
+                    # Skip empty rows going upward
                     cw_empty = self.rows_data and not self.rows_data[0][1]
+                    while (new_row > 0 and
+                           new_row < len(self.rows_data) and
+                           not self.rows_data[new_row][1]):
+                        new_row -= 1
+                    # Skip row 0 (CW) if it is empty
                     if new_row == 0 and cw_empty:
                         self.setFocusId(CLOSE_BTN)
                         return
@@ -1094,16 +1104,21 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             i = self._row_from_fid(fid)
             if i >= 0:
                 # Check both: more rows in data AND next XML slot actually exists
-                next_wl_id = ROW_WRAPLIST_BASE + (i + 1) * ROW_STEP
                 next_xml_exists = False
-                if i < self._num_rows - 1:
+                new_row = i + 1
+                # Skip empty rows (they can't receive wraplist focus)
+                while (new_row < self._num_rows and
+                       new_row < len(self.rows_data) and
+                       not self.rows_data[new_row][1]):
+                    new_row += 1
+                next_wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                if new_row < self._num_rows:
                     try:
                         self.getControl(next_wl_id)
                         next_xml_exists = True
                     except Exception:
                         pass
                 if next_xml_exists:
-                    new_row = i + 1
                     for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
                         self._populate_single_row(j)
                     self.setFocusId(next_wl_id)
@@ -2859,6 +2874,15 @@ def _get_data(url):
     try:
         resp = httptools.downloadpage(url, ignore_response_code=True)
         raw_html = resp.data if resp else ''
+        if not raw_html:
+            logger.info('[NetflixHome] empty response, trying proxytranslate CF bypass for %s' % url)
+            try:
+                from lib import proxytranslate
+                proxy_result = proxytranslate.process_request_proxy(url)
+                raw_html = proxy_result.get('data', '') if proxy_result else ''
+            except Exception as _pte:
+                logger.error('[NetflixHome] proxytranslate failed: %s' % str(_pte))
+                raw_html = ''
         if not raw_html:
             logger.error('[NetflixHome] empty response for %s' % url)
             return {}

@@ -16,7 +16,22 @@ vttsupport = False if int(xbmc.getInfoLabel('System.BuildVersion').split('.')[0]
 def test_video_exists(page_url):
     global iframeParams
     global urlParams
-    server_url = support.scrapertools.decodeHtmlentities(support.match(page_url, patron=['<iframe [^>]+src="([^"]+)', 'embed_url="([^"]+)']).match)
+    import re as _re
+    _raw_match = support.match(page_url, patron=['<iframe [^>]+src="([^"]+)', 'embed_url="([^"]+)']).match
+    if not _raw_match:
+        logger.info('[SC-WS] direct fetch empty, trying proxytranslate for %s' % page_url)
+        try:
+            from lib import proxytranslate
+            _proxy = proxytranslate.process_request_proxy(page_url)
+            if _proxy and _proxy.get('data'):
+                for _pat in [r'<iframe [^>]+src="([^"]+)"', r'embed_url="([^"]+)"']:
+                    _m = _re.search(_pat, _proxy['data'])
+                    if _m:
+                        _raw_match = _m.group(1)
+                        break
+        except Exception as _pte:
+            logger.error('[SC-WS] proxytranslate failed: %s' % str(_pte))
+    server_url = support.scrapertools.decodeHtmlentities(_raw_match or '')
     iframeParams = support.match(server_url, patron=r'''window\.masterPlaylist\s+=\s+{[^{]+({[^}]+}),\s+url:\s+'([^']+).*?canPlayFHD\s=\s(true|false)''', debug=False).match
 
     if not iframeParams or len(iframeParams) < 2:
