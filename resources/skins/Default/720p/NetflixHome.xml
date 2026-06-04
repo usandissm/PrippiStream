@@ -175,25 +175,24 @@
                 <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_prippistream.png</texture>
                 <aspectratio>keep</aspectratio>
             </control>
-            <control type="label">
+            <control type="label" id="201">
                 <left>340</left><top>438</top>
                 <width>600</width><height>22</height>
                 <font>font10</font>
                 <textcolor>FF444444</textcolor>
                 <align>center</align>
                 <label>[UPPERCASE]Caricamento...[/UPPERCASE]</label>
-                <animation effect="fade" start="15" end="100" time="900" tween="sine" loop="true" reversible="true">Visible</animation>
+                <animation effect="fade" start="40" end="100" time="900" tween="sine" loop="true" reversible="true">Visible</animation>
             </control>
-            <control type="image">
+            <control type="image" id="203">
                 <left>500</left><top>466</top>
                 <width>280</width><height>2</height>
                 <texture colordiffuse="FF1C1C1C">white.png</texture>
             </control>
-            <control type="image">
+            <control type="image" id="202">
                 <left>500</left><top>466</top>
-                <width>110</width><height>2</height>
+                <width>28</width><height>2</height>
                 <texture colordiffuse="FFE50914">white.png</texture>
-                <animation effect="fade" start="15" end="75" time="600" tween="cubic" loop="true" reversible="true">Visible</animation>
             </control>
         </control>
 

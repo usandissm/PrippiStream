@@ -291,6 +291,9 @@ BTN_PLAY           = 110   # PLAY CTA button in hero
 BTN_INFO           = 111   # MORE INFO CTA button in hero
 BTN_LIST           = 112   # MY LIST CTA button in hero
 LOADING_LBL        = 200
+LOADING_TXT        = 201   # dynamic status text inside the loading overlay
+LOADING_BAR        = 202   # progress bar (width driven by Python)
+LOADING_TRACK      = 203   # full-width track behind the progress bar
 
 ROW_WRAPLIST_BASE  = 2000
 ROW_LABEL_BASE     = 3000   # category label above each row
@@ -363,6 +366,33 @@ SEARCH_STATUS_LBL  = 172   # "Ricerca in corso..." text inside loading group
 # ── Continue Watching helpers ────────────────────────────────
 
 # ── 4K carousel row builder ──────────────────────────────────
+
+def _sync_channels_json():
+    """Download channels.json from GitHub and apply it if changed.
+    Runs in a background thread so a slow/unreachable GitHub never blocks the
+    home load. Changes take effect on the next home open (and for the
+    background enrichment that imports channels after this returns)."""
+    _CHANNELS_REMOTE = 'https://raw.githubusercontent.com/usandissm/PrippiStream/main/channels.json'
+    try:
+        if PY3:
+            import urllib.request as _urllib_req
+        else:
+            import urllib as _urllib_req
+        _remote = _urllib_req.urlopen(_CHANNELS_REMOTE, timeout=6).read().decode('utf-8')
+        _local_path = os.path.join(config.get_runtime_path(), 'channels.json')
+        try:
+            with open(_local_path, 'r', encoding='utf-8') as _f:
+                _local = _f.read()
+        except Exception:
+            _local = ''
+        if _remote.strip() != _local.strip():
+            with open(_local_path, 'w', encoding='utf-8') as _f:
+                _f.write(_remote)
+            config.channels_data = dict()
+            logger.info('[NetflixHome] channels.json updated from GitHub')
+    except Exception as _e:
+        logger.error('[NetflixHome] channels.json sync failed: %s' % str(_e))
+
 
 def _build_4k_row():
     """Build a list of Items for the 4K carousel row.
@@ -543,6 +573,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         self._num_rows = 0
         self._alive = True
         self._last_focused_row = 0
+        self._hero_nav_token = 0  # debounce token for deferred hero updates on keyboard nav
+        self._load_full_w = 0     # cached loading-track width (resolution-independent bar)
         self._populated = set()  # track which row indices have had addItems() called
         self._hover_slot = {}    # row_idx -> last slot (throttle guard)
         self._hover_base = {}    # row_idx -> wraplist selectedPosition when mouse entered
@@ -577,93 +609,392 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _t4k.daemon = True
         _t4k.start()
 
-    def _bg_load(self):
-        """Run in background thread: fetch SC rows, prepend CW row, then update UI."""
-        global _sc_rows_cache
-        # ── Sync channels.json BEFORE loading rows so domains are always current ──
-        _CHANNELS_REMOTE = 'https://raw.githubusercontent.com/usandissm/PrippiStream/main/channels.json'
+    def _set_loading(self, pct, msg=None):
+        """Update the dynamic loading overlay: progress-bar width + percentage.
+        Always shows "CARICAMENTO NN%" (no phase-specific text).
+        Resolution-independent (reads the track width once via getWidth)."""
         try:
-            if PY3:
-                import urllib.request as _urllib_req
-            else:
-                import urllib as _urllib_req
-            _remote = _urllib_req.urlopen(_CHANNELS_REMOTE, timeout=6).read().decode('utf-8')
-            _local_path = os.path.join(config.get_runtime_path(), 'channels.json')
+            pct = max(0, min(100, int(pct)))
             try:
-                with open(_local_path, 'r', encoding='utf-8') as _f:
-                    _local = _f.read()
+                self.getControl(LOADING_TXT).setLabel('CARICAMENTO %d%%' % pct)
             except Exception:
-                _local = ''
-            if _remote.strip() != _local.strip():
-                with open(_local_path, 'w', encoding='utf-8') as _f:
-                    _f.write(_remote)
-                config.channels_data = dict()
-                logger.info('[NetflixHome] channels.json updated from GitHub')
-        except Exception as _e:
-            logger.error('[NetflixHome] channels.json sync failed: %s' % str(_e))
+                pass
+            if self._load_full_w <= 0:
+                try:
+                    self._load_full_w = int(self.getControl(LOADING_TRACK).getWidth() or 0)
+                except Exception:
+                    self._load_full_w = 0
+            full = self._load_full_w
+            if full > 0:
+                w = max(2, int(full * pct / 100.0))
+                try:
+                    self.getControl(LOADING_BAR).setWidth(w)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
-        try:
-            sc_rows = _fetch_rows()
-            _sc_rows_cache = sc_rows  # keep a copy for fast refresh
-        except Exception as exc:
-            logger.error('[NetflixHome] fetch error: %s' % str(exc))
-            sc_rows = _sc_rows_cache or []
+    def _assemble_initial(self, sc_rows):
+        """Build rows_data = [CW] + sc_rows with the 4K and Anime rows at fixed
+        positions 4 and 5.
 
-        if not self._alive:
-            return
-
-        # CW row is ALWAYS rows_data[0] (even when empty) so that SC rows i>=1
-        # always map to the same control IDs (2010, 2020, ...) regardless of CW state.
+        The 4K index runs in parallel with the SC fetch (started in onInit).
+        By the time this method is called (after _fetch_main_rows completes) the
+        index is almost always ready — either from the disk cache (instant) or
+        from the API build that ran concurrently. We wait up to 8 s so the 4K
+        row is fully populated from the very first render without any live-fill.
+        Anime stays empty and is filled by _bg_enrich_rows (needs extra sources).
+        """
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
         self.rows_data += list(sc_rows)
 
-        # ── 4K carousel row (3 rows after CW) ─────────────────────────────
+        # 4K row: wait up to 8 s for the index so it renders populated.
+        if not _fourk._ready:
+            mon = xbmc.Monitor()
+            deadline = time.time() + 8
+            while not _fourk._ready and time.time() < deadline:
+                if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
+                    break
+                xbmc.sleep(200)
+
         _4k_items = _build_4k_row()
-        if _4k_items:
-            insert_pos = min(4, len(self.rows_data))
-            self.rows_data.insert(insert_pos, (u'Film in 4K', _4k_items))
+        self.rows_data.insert(min(4, len(self.rows_data)), (u'Film in 4K', _4k_items))
+        need_4k_fill = not _4k_items   # still cold after 8 s → fill live later
 
-        # ── Anime carousel row (ToonItalia seed if available, then enriched  ──
-        # in background from _ENRICH_SOURCE_MAP['anime']; row is ALWAYS       ─
-        # inserted so _bg_enrich_rows() can fill it even when seed is empty)  ─
-        _anime_items = _build_anime_row()
-        self.rows_data.insert(min(5, len(self.rows_data)), (u'Anime', _anime_items))
+        # Anime row: reserved empty at index 5, filled by _bg_enrich_rows().
+        self.rows_data.insert(min(5, len(self.rows_data)), (u'Anime', []))
 
-        # Fire-and-forget: nuke stale vixcloud bookmarks from prior sessions
-        # so Kodi never shows a "Resume from" dialog for our managed content.
-        _t_nuke = threading.Thread(target=_nuke_all_vixcloud_bookmarks)
-        _t_nuke.daemon = True
-        _t_nuke.start()
-
-        # Sync CW progress to matching items in all SC rows
+        # Sync CW progress into every non-CW row.
         if cw_items:
             for row_label, row_items in self.rows_data:
                 if row_label != _CW_ROW_LABEL:
                     for it in row_items:
                         _apply_cw_to_item(it)
+        return cw_items, need_4k_fill
 
+    def _render_now(self, cw_items):
+        """Hide the loading overlay, populate the first rows and set focus.
+        Safe to call once from the GUI-driving background thread."""
         try:
             self.getControl(LOADING_LBL).setVisible(False)
         except Exception:
             pass
-
         self._num_rows = min(len(self.rows_data), MAX_ROWS)
-        logger.debug('[NetflixHome] rows loaded: %d (CW: %d)' % (self._num_rows, len(cw_items)))
-
+        logger.debug('[NetflixHome] rows rendered: %d (CW: %d)' % (self._num_rows, len(cw_items)))
         if self._num_rows > 0 and self._alive:
             xbmc.sleep(80)
-            for i in range(min(4, self._num_rows)):
+            for i in range(min(6, self._num_rows)):
                 self._populate_single_row(i)
             first_row_fid = ROW_WRAPLIST_BASE if cw_items else ROW_WRAPLIST_BASE + ROW_STEP
             self._update_hero(0 if cw_items else 1)
             self.setFocusId(first_row_fid)
 
-        # Kick off background enrichment of SC rows with extra-source items (non-blocking)
+    def _bg_load(self):
+        """Background thread: progressively fetch SC rows and render the home.
+
+        Fast path (cache hit): assemble + render everything at once.
+        Progressive path (cache miss): render the main-page rows immediately,
+        then append the archive rows live and enrich all rows in the background.
+        """
+        global _sc_rows_cache, _cache
+
+        # ── Sync channels.json from GitHub in the BACKGROUND (never blocks paint) ──
+        _t_chan = threading.Thread(target=_sync_channels_json)
+        _t_chan.daemon = True
+        _t_chan.start()
+
+        self._set_loading(8)
+
+        from time import time as _now
+        cache_fresh = (_cache['data'] is not None and (_now() - _cache['ts']) < _CACHE_TTL)
+
+        if cache_fresh:
+            # ---- FAST PATH: full cached rows (already enriched from prior run) ----
+            sc_rows = _cache['data']
+            _sc_rows_cache = sc_rows
+            logger.info('[NetflixHome] cache hit, %d rows' % len(sc_rows))
+            if not self._alive:
+                return
+            self._set_loading(70)
+            cw_items, need_4k_fill = self._assemble_initial(sc_rows)
+            self._set_loading(100)
+            self._render_now(cw_items)
+            self._start_bg_tasks(need_4k_fill, enrich=True)
+            return
+
+        # ---- PROGRESSIVE PATH ----
+        try:
+            main_rows, host, homepage_data = _fetch_main_rows(progress_cb=self._set_loading)
+        except Exception as exc:
+            logger.error('[NetflixHome] main fetch error: %s' % str(exc))
+            main_rows, host, homepage_data = [], '', None
+
+        if not main_rows and _sc_rows_cache:
+            # Network failed: fall back to whatever we showed last time.
+            main_rows = _sc_rows_cache
+
+        if not self._alive:
+            return
+
+        self._set_loading(60)
+        cw_items, need_4k_fill = self._assemble_initial(main_rows)
+
+        # Enrich the first visible SC rows SYNCHRONOUSLY (before paint) so their
+        # cards show the official TMDB HD posters from the very first frame.
+        # Costs a couple of seconds but matches the old behaviour; the remaining
+        # rows are enriched in the background after render.
+        self._enrich_visible_rows_sync(progress_lo=60, progress_hi=98)
+
+        self._set_loading(100)
+        self._render_now(cw_items)
+
+        # Enrich the rest of the rows + extra-source + 4K fill in the background.
+        self._start_bg_tasks(need_4k_fill, enrich=True)
+
+        # Fetch archive rows in the background, then append them live.
+        if self._alive and host:
+            t = threading.Thread(target=self._bg_load_archive,
+                                  args=(host, homepage_data, main_rows, cw_items))
+            t.daemon = True
+            t.start()
+
+    def _bg_load_archive(self, host, homepage_data, main_rows, cw_items):
+        """Fetch archive rows after the first paint and append them live."""
+        try:
+            archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows))
+        except Exception as exc:
+            logger.error('[NetflixHome] archive fetch error: %s' % str(exc))
+            archive_rows = []
+        if not archive_rows or not self._alive:
+            # Still cache the main rows so a quick re-open is instant.
+            full = list(main_rows)
+            if full:
+                _cache['data'] = full
+                _cache['ts'] = __import__('time').time()
+            return
+
+        # Apply CW progress to the new items.
+        if cw_items:
+            for _lbl, _items in archive_rows:
+                for it in _items:
+                    _apply_cw_to_item(it)
+
+        start_idx = None
+        with self._rows_lock:
+            if not self._alive:
+                return
+            start_idx = len(self.rows_data)
+            self.rows_data.extend(archive_rows)
+            self._num_rows = min(len(self.rows_data), MAX_ROWS)
+
+        # Populate any newly-appended rows that fall within the first screenful.
+        for j in range(start_idx, min(start_idx + 2, self._num_rows)):
+            self._populate_single_row(j)
+
+        # Cache the full assembled SC rows (main + archive) for fast re-open.
+        global _sc_rows_cache
+        full = list(main_rows) + list(archive_rows)
+        _sc_rows_cache = full
+        _cache['data'] = full
+        _cache['ts'] = __import__('time').time()
+
+        # Enrich the freshly-added archive rows in the background.
+        if self._alive:
+            t = threading.Thread(target=self._bg_enrich_inplace, args=(start_idx,))
+            t.daemon = True
+            t.start()
+        logger.info('[NetflixHome] archive appended: %d rows (from #%d)' % (len(archive_rows), start_idx))
+
+    def _start_bg_tasks(self, need_4k_fill, enrich=True):
+        """Launch the non-blocking post-render background jobs."""
+        # Nuke stale vixcloud bookmarks from prior sessions.
+        _t_nuke = threading.Thread(target=_nuke_all_vixcloud_bookmarks)
+        _t_nuke.daemon = True
+        _t_nuke.start()
+
+        # Deferred TMDB enrichment of all currently-loaded rows (Plan B).
+        if enrich and self._alive:
+            te = threading.Thread(target=self._bg_enrich_inplace, args=(0,))
+            te.daemon = True
+            te.start()
+
+        # Extra-source enrichment (anime/films/series pools) appended live.
         if self._alive:
             t = threading.Thread(target=self._bg_enrich_rows)
             t.daemon = True
             t.start()
+
+        # Fill the 4K row live if its index was cold at render time.
+        if need_4k_fill and self._alive:
+            t4k = threading.Thread(target=self._bg_fill_4k_row)
+            t4k.daemon = True
+            t4k.start()
+
+    def _enrich_visible_rows_sync(self, progress_lo=60, progress_hi=98, max_rows=8):
+        """Enrich the first visible SC rows SYNCHRONOUSLY (before the first paint).
+
+        Builds the official TMDB metadata/posters into the same Item objects so
+        the cards render correct from the very first frame (no flicker, no
+        'SC poster until you scroll' problem, and CW items are covered too).
+        Drives the loading bar from progress_lo to progress_hi. The remaining
+        rows are enriched in the background afterwards."""
+        try:
+            # Collect the indices of the first non-empty SC rows worth enriching.
+            targets = []
+            for idx, (label, items) in enumerate(self.rows_data):
+                if len(targets) >= max_rows:
+                    break
+                if not items:
+                    continue
+                if label in (_CW_ROW_LABEL, u'Film in 4K'):
+                    continue
+                if items[0].infoLabels.get('_enr'):
+                    continue
+                targets.append(idx)
+
+            if not targets:
+                self._set_loading(progress_hi)
+                return
+
+            span = max(1, progress_hi - progress_lo)
+            for n, idx in enumerate(targets):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                _label, items = self.rows_data[idx]
+                try:
+                    _tmdb_enrich_validated(items)
+                    for it in items:
+                        it.infoLabels['_enr'] = 1
+                except Exception as exc:
+                    logger.error('[NetflixHome] sync enrich row %d: %s' % (idx, str(exc)))
+                self._set_loading(progress_lo + int(span * (n + 1) / len(targets)))
+        except Exception as exc:
+            logger.error('[NetflixHome] _enrich_visible_rows_sync: %s' % str(exc))
+
+    def _bg_enrich_inplace(self, start_idx=0):
+        """Enrich row items with TMDB metadata IN PLACE, after the first paint.
+
+        The hero reads rows_data live, so enriching the same Item objects makes
+        the hero metadata (rating/genre/localized plot/fanart) improve without a
+        full re-render. Card thumbnails keep SC's own posters (already good), so
+        no wraplist reset/flicker is needed. Visible rows are enriched first.
+        Rows already enriched (sentinel _enr) are skipped, so a cache-hit reopen
+        does not refetch."""
+        try:
+            mon = xbmc.Monitor()
+            with self._rows_lock:
+                snapshot = list(enumerate(self.rows_data))
+            for idx, (label, items) in snapshot:
+                if idx < start_idx:
+                    continue
+                if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
+                    return
+                if not items:
+                    continue
+                # Skip non-SC rows: CW keeps its own data, 4K is enriched at build.
+                if label in (_CW_ROW_LABEL, u'Film in 4K'):
+                    continue
+                # Skip rows already enriched (sentinel on first item).
+                if items[0].infoLabels.get('_enr'):
+                    continue
+                try:
+                    _tmdb_enrich_validated(items)
+                    for it in items:
+                        it.infoLabels['_enr'] = 1
+                except Exception as exc:
+                    logger.error('[NetflixHome] inplace enrich row %d: %s' % (idx, str(exc)))
+                    continue
+                # Re-render this row's cards so they pick up the official TMDB
+                # HD posters (SC posters are lower-res / sometimes unofficial).
+                if idx in self._populated and self._alive:
+                    try:
+                        self._refresh_row_cards(idx)
+                    except Exception as exc:
+                        logger.error('[NetflixHome] refresh cards row %d: %s' % (idx, str(exc)))
+                # Refresh the hero if the user is currently parked on this row.
+                if idx == self._last_focused_row and self._alive:
+                    try:
+                        self._update_hero(idx)
+                    except Exception:
+                        pass
+                xbmc.sleep(20)
+        except Exception as exc:
+            logger.error('[NetflixHome] _bg_enrich_inplace: %s' % str(exc))
+
+    def _refresh_row_cards(self, i):
+        """Re-render an already-populated row's wraplist in place, preserving the
+        selected position and focus. Used after background TMDB enrichment so the
+        cards show the official HD posters."""
+        if i not in self._populated or i >= len(self.rows_data):
+            return
+        # Wait until no modal dialog is open (avoids C++ render-engine collision).
+        self._bg_ui_pause.wait(timeout=15)
+        if not self._alive:
+            return
+        wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+        # Don't fight a pending position restore.
+        if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+            return
+        with self._rows_lock:
+            row_items = list(self.rows_data[i][1])
+        if not row_items:
+            return
+        try:
+            currently_focused = (self.getFocusId() == wl_id)
+            if currently_focused:
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                except Exception:
+                    pass
+            wl = self.getControl(wl_id)
+            cur_pos = int(wl.getSelectedPosition() or 0)
+            wl.reset()
+            xbmc.sleep(80)  # let the UI flush on slow ARM devices before addItems
+            wl.addItems([_item_to_li(it) for it in row_items])
+            if cur_pos > 0:
+                try:
+                    wl.selectItem(cur_pos)
+                except Exception:
+                    pass
+            if currently_focused:
+                try:
+                    self.setFocusId(wl_id)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[NetflixHome] _refresh_row_cards %d: %s' % (i, str(exc)))
+
+    def _bg_fill_4k_row(self):
+        """Wait (non-blocking) for the 4K index, then fill the reserved row live."""
+        mon = xbmc.Monitor()
+        deadline = time.time() + 90
+        while not _fourk._ready and time.time() < deadline:
+            if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
+                return
+            if mon.waitForAbort(0.5):
+                return
+        if not _fourk._ready or not self._alive:
+            return
+        items = _build_4k_row()
+        if not items:
+            return
+        for it in items:
+            _apply_cw_to_item(it)
+        with self._rows_lock:
+            idx = None
+            for j, (label, _) in enumerate(self.rows_data):
+                if label == u'Film in 4K':
+                    idx = j
+                    break
+            if idx is None or not self._alive:
+                return
+            self.rows_data[idx] = (u'Film in 4K', items)
+            already_populated = idx in self._populated
+        if already_populated:
+            # Row was populated empty (hidden): reveal + append the cards live.
+            self._live_append_row(idx, items)
+        logger.info('[NetflixHome] 4K row filled live: %d items (row #%d)' % (len(items), idx))
 
     def _bg_enrich_rows(self):
         """
@@ -774,9 +1105,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         self._bg_ui_pause.wait(timeout=15)
         if not self._alive:
             return
-        wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+        wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
+        lbl_id = ROW_LABEL_BASE    + i * ROW_STEP
         try:
-            self.getControl(wl_id).addItems([_item_to_li(it) for it in new_items])
+            wl = self.getControl(wl_id)
+            wl.addItems([_item_to_li(it) for it in new_items])
+            # The row may have been populated while empty (hidden): reveal it
+            # now that it has cards, and (re)apply its label.
+            wl.setVisible(True)
+            try:
+                lbl = self.getControl(lbl_id)
+                lbl.setVisible(True)
+                lbl.setLabel('[B]%s[/B]' % self.rows_data[i][0].upper())
+            except Exception:
+                pass
         except Exception as exc:
             logger.error('[NetflixHome] _live_append_row %d: %s' % (i, str(exc)))
 
@@ -787,8 +1129,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
         lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
         cat_name, items = self.rows_data[i]
-        # Row 0 is always the CW row (control 2000). Hide it when empty.
-        if i == 0 and not items:
+        # Hide any empty row (CW, 4K, Anime…) instead of showing a bare label.
+        # It is revealed later by _live_append_row() once items arrive.
+        if not items:
             try:
                 self.getControl(wl_id).setVisible(False)
                 self.getControl(lbl_id).setVisible(False)
@@ -818,6 +1161,31 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             lbl.setLabel('[B]%s[/B]' % cat_name.upper())
         except Exception as exc:
             logger.error('[NetflixHome] populate row %d label: %s' % (i, str(exc)))
+
+    def _schedule_hero(self, row_idx):
+        """Defer the hero refresh until Kodi has settled the wraplist selection.
+
+        On keyboard/remote navigation the hero must read getSelectedPosition()
+        AFTER Kodi applies the move: on row change the new wraplist restores its
+        own column, and on LEFT/RIGHT the native selection moves only once
+        onAction returns. Reading immediately causes the hero to lag or show the
+        wrong card (item 0) while the carousel highlights a different one.
+        A debounce token guarantees only the most recent nav actually renders."""
+        self._hero_nav_token += 1
+        token = self._hero_nav_token
+
+        def _run():
+            xbmc.sleep(70)
+            if token != self._hero_nav_token or not self._alive:
+                return
+            try:
+                self._update_hero(row_idx)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_run)
+        t.daemon = True
+        t.start()
 
     def _update_hero(self, row_idx, pos=None):
         global _hero_plot_token
@@ -1005,7 +1373,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 self._hover_item[i] = None
                 self._hide_hover_box(i)
                 self._hover_box_row = -1
-            self._update_hero(i)
+            self._schedule_hero(i)
         else:
             # Focus moved outside the rows (to hero buttons, EXIT…): hide hover frame
             if self._hover_box_row >= 0:
@@ -1027,7 +1395,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 new_row = 0 if self._last_focused_row == 0 else self._last_focused_row
             self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
             self._last_focused_row = new_row
-            self._update_hero(new_row)
+            self._schedule_hero(new_row)
             return
         if aid == ACTION_WHEEL_DOWN:
             next_xml_exists = False
@@ -1048,7 +1416,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 self._populate_single_row(new_row)
                 self.setFocusId(next_wl_id)
                 self._last_focused_row = new_row
-                self._update_hero(new_row)
+                self._schedule_hero(new_row)
             else:
                 # last real row → loop back to first real row via background thread bounce
                 cw_empty = not (self.rows_data and self.rows_data[0][1])
@@ -1056,7 +1424,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
                     self._populate_single_row(j)
                 self._last_focused_row = new_row
-                self._update_hero(new_row)
+                self._schedule_hero(new_row)
                 wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
                 def _wheel_loop_back(wl_id=wl_id):
                     try:
@@ -1093,7 +1461,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         self._populate_single_row(j)
                     self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
                     self._last_focused_row = new_row
-                    self._update_hero(new_row)
+                    self._schedule_hero(new_row)
                 else:
                     self.setFocusId(CLOSE_BTN)   # first row → EXIT button
                 return
@@ -1123,7 +1491,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         self._populate_single_row(j)
                     self.setFocusId(next_wl_id)
                     self._last_focused_row = new_row
-                    self._update_hero(new_row)
+                    self._schedule_hero(new_row)
                 else:
                     # last real row → loop back to first real row via background thread bounce
                     cw_empty = not (self.rows_data and self.rows_data[0][1])
@@ -1131,7 +1499,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
                         self._populate_single_row(j)
                     self._last_focused_row = new_row
-                    self._update_hero(new_row)
+                    self._schedule_hero(new_row)
                     wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
                     def _down_loop_back(wl_id=wl_id):
                         try:
@@ -1154,7 +1522,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     self._populate_single_row(j)
                 self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
                 self._last_focused_row = new_row
-                self._update_hero(new_row)
+                self._schedule_hero(new_row)
                 return
         # Mouse move: compute hovered card slot, update hero + hover frame
         if aid == ACTION_MOUSE_MOVE:
@@ -1213,7 +1581,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     return
                 if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
                     self._last_focused_row = i
-                    self._update_hero(i)
+                    self._schedule_hero(i)
                     return
             return
 
@@ -2379,20 +2747,21 @@ def _apply_cw_to_item(it):
             'cw_total_time':        float(it.__dict__.get('cw_total_time', 0) or 0),
             'action':               getattr(it, 'action', ''),
             'url':                  getattr(it, 'url', ''),
-            'contentType':          getattr(it, 'contentType', ''),
-            'contentSeason':        getattr(it, 'contentSeason', 0),
-            'contentEpisodeNumber': getattr(it, 'contentEpisodeNumber', 0),
             '_cw_show_url':         getattr(it, '_cw_show_url', ''),
         }
     # Apply progress bar data
     it.cw_time_watched = cw_match.cw_time_watched
     it.cw_total_time   = cw_match.cw_total_time
-    # Make it play the same episode (direct video play, bypassing season picker)
+    # Make it play the same episode (direct video play, bypassing season picker).
+    # NOTE: we deliberately do NOT touch contentType / contentSeason /
+    # contentEpisodeNumber here. Setting those would map to infoLabels
+    # season/episode/mediatype, which makes TMDB enrichment fetch the EPISODE
+    # still image instead of the series portrait poster — so the same title in a
+    # genre carousel would show the wrong (or SC) poster once it is in CW.
+    # The direct-play url + action below are enough to resume the right episode;
+    # the saved resume position is matched via the CW database key.
     it.action               = cw_match.action
     it.url                  = cw_match.url
-    it.contentType          = cw_match.contentType
-    it.contentSeason        = getattr(cw_match, 'contentSeason', 0)
-    it.contentEpisodeNumber = getattr(cw_match, 'contentEpisodeNumber', 0)
     it._cw_show_url         = getattr(cw_match, '_cw_show_url', '')
     return True
 
@@ -2408,9 +2777,6 @@ def _clear_cw_from_item(it):
         it.cw_total_time        = orig['cw_total_time']
         it.action               = orig['action']
         it.url                  = orig['url']
-        it.contentType          = orig['contentType']
-        it.contentSeason        = orig['contentSeason']
-        it.contentEpisodeNumber = orig['contentEpisodeNumber']
         it._cw_show_url         = orig['_cw_show_url']
         del it._orig_cw_state
     else:
@@ -3287,6 +3653,10 @@ def _row_content_type(label):
     Returns None for ambiguous rows (e.g. 'In evidenza', 'Azione' without suffix).
     """
     l = label.lower()
+    # The 4K row is a curated Xtream-Codes feed: never enrich it with generic
+    # SC content or it gets polluted with non-4K movies.
+    if '4k' in l:
+        return None
     if 'anime' in l:
         return 'anime'
     if 'serie' in l or ' tv' in l or 'show' in l:
@@ -3358,8 +3728,7 @@ def _fetch_enrich_items(ctype):
 
     if all_items:
         try:
-            from core import tmdb as _tmdb
-            _tmdb.set_infoLabels_itemlist(all_items, seekTmdb=True, forced=True)
+            _tmdb_enrich_validated(all_items)
         except Exception as exc:
             logger.error('[NetflixHome enrich] tmdb: %s' % str(exc))
     _enrich_cache[ctype] = {'items': all_items, 'ts': now}
@@ -3367,14 +3736,105 @@ def _fetch_enrich_items(ctype):
     return all_items
 
 
-def _fetch_rows():
-    from time import time
-    global _cache
-    if _cache['data'] is not None and (time() - _cache['ts']) < _CACHE_TTL:
-        logger.info('[NetflixHome] cache hit, %d rows' % len(_cache['data']))
-        return _cache['data']
+# Known-bad TMDB ids that StreamingCommunity ships for the wrong title.
+# SC's database occasionally maps a modern catalog entry onto an unrelated
+# (usually very old) TMDB record. Title text cannot tell these apart because
+# the strings overlap heavily (e.g. "Una di famiglia" vs "Una famiglia di
+# matti"), and SC often ships no year for them, so the year check can't fire
+# either. This surgical blocklist strips those specific ids; add new ones as
+# they are reported. Keep it small and exact.
+_SC_BAD_TMDB_IDS = {
+    '50863',   # "Call of the Cuckoo" (1927) wrongly mapped to "Una di famiglia"
+}
+
+
+def _tmdb_enrich_validated(items):
+    """Enrich an itemlist via TMDB, then drop demonstrably wrong tmdb_ids.
+
+    StreamingCommunity sometimes ships a wrong tmdb_id. We only revert when we
+    have a HIGH-confidence signal, to avoid stripping correct metadata from
+    titles that legitimately differ between languages (e.g. "La Lista di
+    Schindler" vs "Schindler's List"):
+      1. tmdb_id is in the curated _SC_BAD_TMDB_IDS blocklist, OR
+      2. SC shipped a year AND it differs from the TMDB year by > 12 years.
+    Title-similarity is intentionally NOT used: it produces massive false
+    positives across IT/EN/native-script titles and still can't separate
+    word-overlapping mismatches. On a hit we strip tmdb_id/imdb_id and restore
+    SC's own (self-consistent) poster/title/plot."""
+    if not items:
+        return
+    from core import tmdb as _tmdb
+
+    # Snapshot SC-provided data BEFORE enrichment overwrites it.
+    # year lives in infoLabels, NOT in item.year (which always returns "").
+    sc_snap = [{
+        'year':   it.infoLabels.get('year') or '',
+        'title':  it.infoLabels.get('title') or it.fulltitle or '',
+        'plot':   it.infoLabels.get('plot') or '',
+        'thumb':  it.thumbnail or '',
+        'fanart': it.fanart or '',
+    } for it in items]
+
+    _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
+
+    for i, it in enumerate(items):
+        snap = sc_snap[i]
+        tmdb_id = str(it.infoLabels.get('tmdb_id') or '')
+        if not tmdb_id:
+            continue
+
+        wrong = False
+        reason = ''
+
+        if tmdb_id in _SC_BAD_TMDB_IDS:
+            wrong = True
+            reason = 'blocklisted id'
+        else:
+            try:
+                sc_year = int(snap['year'])
+            except (ValueError, TypeError):
+                sc_year = 0
+            try:
+                tmdb_year = int(it.infoLabels.get('year') or 0)
+            except (ValueError, TypeError):
+                tmdb_year = 0
+            if sc_year and tmdb_year and abs(sc_year - tmdb_year) > 12:
+                wrong = True
+                reason = 'year SC=%s TMDB=%s' % (sc_year, tmdb_year)
+
+        if wrong:
+            logger.info('[NetflixHome] wrong tmdb_id for "%s" (id=%s, %s) - reverting to SC data' % (
+                snap['title'], tmdb_id, reason))
+            it.infoLabels.pop('tmdb_id', None)
+            it.infoLabels.pop('imdb_id', None)
+            it.infoLabels['title'] = snap['title']
+            it.infoLabels['year'] = snap['year']
+            if snap['plot']:
+                it.infoLabels['plot'] = snap['plot']
+            it.thumbnail = snap['thumb']
+            it.fanart = snap['fanart'] or snap['thumb']
+
+
+def _fetch_main_rows(progress_cb=None):
+    """Fetch the SC main-page sliders (home/movies/tv-shows) only.
+
+    Fast path of the load: returns as soon as the 3 main pages are parsed.
+    TMDB enrichment is intentionally NOT done here — items already carry SC's
+    own poster/title/plot, which is enough for the first paint. Enrichment is
+    applied in the background afterwards (see _bg_enrich_inplace).
+
+    Returns (rows, host, homepage_data).
+    """
+    def _p(pct, msg=None):
+        if progress_cb:
+            try:
+                progress_cb(pct, msg)
+            except Exception:
+                pass
 
     rows = []
+    host = ''
+    homepage_data = None
     try:
         import channels.streamingcommunity as sc
         host = sc.host
@@ -3387,13 +3847,38 @@ def _fetch_rows():
             (host + '/it/tv-shows', ' \u2014 Serie TV'),
         ]
         seen_sliders = set()   # deduplicate by display_name (case-insensitive)
-        homepage_data = None   # saved to extract genres list afterwards
+
+        # Fetch all main pages CONCURRENTLY (network), then process in fixed
+        # order so slider order and dedup stay deterministic.
+        _page_data = {}
+        _pd_lock = threading.Lock()
+
+        def _fetch_main_page(u):
+            try:
+                d = _get_data(u)
+                if d and isinstance(d, dict):
+                    with _pd_lock:
+                        _page_data[u] = d
+            except Exception as exc:
+                logger.error('[NetflixHome] main page fetch %s: %s' % (u, str(exc)))
+
+        _p(15, u'Connessione a StreamingCommunity\u2026')
+        _pthreads = []
+        for _pu, _ in pages:
+            _pt = threading.Thread(target=_fetch_main_page, args=(_pu,))
+            _pt.daemon = True
+            _pthreads.append(_pt)
+            _pt.start()
+        for _pt in _pthreads:
+            _pt.join(timeout=15)
+
+        _p(55, u'Caricamento contenuti\u2026')
 
         for page_url, page_suffix in pages:
             if len(rows) >= SC_MAX_ROWS:
                 break
             try:
-                data = _get_data(page_url)
+                data = _page_data.get(page_url)
                 if not data or not isinstance(data, dict):
                     logger.error('[NetflixHome] _get_data empty for %s' % page_url)
                     continue
@@ -3435,110 +3920,106 @@ def _fetch_rows():
                     if not items:
                         continue
 
-                    try:
-                        from core import tmdb as _tmdb
-                        _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
-                    except Exception as exc:
-                        logger.error('[NetflixHome] tmdb: %s' % str(exc))
-
                     rows.append((display_name, items))
                     logger.error('[NetflixHome] row "%s": %d items' % (display_name, len(items)))
 
             except Exception as exc:
                 logger.error('[NetflixHome] page error %s: %s' % (page_url, str(exc)))
-
-        # Fetch curated + genre archive rows — unified ordered thread pool
-        if len(rows) < SC_MAX_ROWS:
-            try:
-                import threading as _threading
-
-                # Curated entries come first (pinned order), then SC genres
-                _CURATED = [
-                    ('I Più Votati — Film',              host + '/it/archive?sort=score&type=movie'),
-                    ('I Più Votati — Serie TV',          host + '/it/archive?sort=score&type=tv'),
-                    ('I Più Visti — Film',               host + '/it/archive?sort=views&type=movie'),
-                    ('I Più Visti',                      host + '/it/archive?sort=views'),
-                    ('Serie TV — Aggiornate di Recente', host + '/it/archive?sort=last_air_date&type=tv'),
-                    ('Film — Aggiunti di Recente',       host + '/it/archive?sort=created_at&type=movie'),
-                ]
-                genres_list = (homepage_data.get('props') or {}).get('genres') or [] if homepage_data else []
-                _genre_entries = [
-                    ((g.get('name') or '').strip(), host + '/it/archive?genre[]=' + str(g.get('id')))
-                    for g in genres_list if (g.get('name') or '').strip() and g.get('id')
-                ]
-                all_entries = _CURATED + _genre_entries  # curated first
-
-                remaining = SC_MAX_ROWS - len(rows)
-                entries_to_fetch = all_entries[:remaining]
-
-                # results_map preserves insertion order (curated before genres)
-                results_map = {}
-                alock = _threading.Lock()
-
-                def _fetch_archive_row(idx, label, url, result_dict, lock):
-                    try:
-                        adata = _get_data(url)
-                        if not adata:
-                            logger.error('[NetflixHome] archive "%s": empty _get_data' % label)
-                            return
-                        titles = (adata.get('props') or {}).get('titles') or {}
-                        if isinstance(titles, dict):
-                            raw_titles = titles.get('data', [])
-                        elif isinstance(titles, list):
-                            raw_titles = titles
-                        else:
-                            raw_titles = []
-                        if not raw_titles:
-                            logger.error('[NetflixHome] archive "%s": no titles in props' % label)
-                            return
-                        items = []
-                        for raw in raw_titles[:20]:
-                            try:
-                                it = _build_item(raw, host)
-                                if it:
-                                    items.append(it)
-                            except Exception:
-                                pass
-                        if items:
-                            try:
-                                from core import tmdb as _tmdb
-                                _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
-                            except Exception:
-                                pass
-                            with lock:
-                                result_dict[idx] = (label, items)
-                            logger.error('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
-                        else:
-                            logger.error('[NetflixHome] archive "%s": 0 items after build' % label)
-                    except Exception as exc:
-                        logger.error('[NetflixHome] archive "%s" error: %s' % (label, str(exc)))
-
-                threads = []
-                for idx, (label, url) in enumerate(entries_to_fetch):
-                    t = _threading.Thread(target=_fetch_archive_row,
-                                          args=(idx, label, url, results_map, alock))
-                    t.daemon = True
-                    threads.append(t)
-                    t.start()
-                # Plain join — no abortRequested() check (it falsely triggers in service context)
-                for t in threads:
-                    if _shutdown_event.is_set():
-                        break
-                    t.join(timeout=12)
-                # Collect in original order so curated rows appear before genres
-                for idx in range(len(entries_to_fetch)):
-                    if idx in results_map:
-                        rows.append(results_map[idx])
-            except Exception as exc:
-                logger.error('[NetflixHome] archive block: %s' % str(exc))
-
     except Exception as exc:
-        logger.error('[NetflixHome] import/init: %s' % str(exc))
+        logger.error('[NetflixHome] main rows import/init: %s' % str(exc))
 
-    logger.error('[NetflixHome] total rows: %d' % len(rows))
-    if rows:
-        _cache['data'] = rows
-        _cache['ts'] = time()
+    logger.error('[NetflixHome] main rows: %d' % len(rows))
+    return rows, host, homepage_data
+
+
+def _fetch_archive_rows(host, homepage_data, existing_count):
+    """Fetch curated + genre archive rows (the slower second phase).
+
+    Runs after the main rows are already on-screen so it never delays the
+    first paint. No inline TMDB enrichment (done later in background).
+    """
+    rows = []
+    if not host or existing_count >= SC_MAX_ROWS:
+        return rows
+    try:
+        import threading as _threading
+
+        # Curated entries come first (pinned order), then SC genres
+        _CURATED = [
+            ('I Più Votati — Film',              host + '/it/archive?sort=score&type=movie'),
+            ('I Più Votati — Serie TV',          host + '/it/archive?sort=score&type=tv'),
+            ('I Più Visti — Film',               host + '/it/archive?sort=views&type=movie'),
+            ('I Più Visti',                      host + '/it/archive?sort=views'),
+            ('Serie TV — Aggiornate di Recente', host + '/it/archive?sort=last_air_date&type=tv'),
+            ('Film — Aggiunti di Recente',       host + '/it/archive?sort=created_at&type=movie'),
+        ]
+        genres_list = (homepage_data.get('props') or {}).get('genres') or [] if homepage_data else []
+        _genre_entries = [
+            ((g.get('name') or '').strip(), host + '/it/archive?genre[]=' + str(g.get('id')))
+            for g in genres_list if (g.get('name') or '').strip() and g.get('id')
+        ]
+        all_entries = _CURATED + _genre_entries  # curated first
+
+        remaining = SC_MAX_ROWS - existing_count
+        entries_to_fetch = all_entries[:remaining]
+
+        # results_map preserves insertion order (curated before genres)
+        results_map = {}
+        alock = _threading.Lock()
+
+        def _fetch_archive_row(idx, label, url, result_dict, lock):
+            try:
+                adata = _get_data(url)
+                if not adata:
+                    logger.error('[NetflixHome] archive "%s": empty _get_data' % label)
+                    return
+                titles = (adata.get('props') or {}).get('titles') or {}
+                if isinstance(titles, dict):
+                    raw_titles = titles.get('data', [])
+                elif isinstance(titles, list):
+                    raw_titles = titles
+                else:
+                    raw_titles = []
+                if not raw_titles:
+                    logger.error('[NetflixHome] archive "%s": no titles in props' % label)
+                    return
+                items = []
+                for raw in raw_titles[:20]:
+                    try:
+                        it = _build_item(raw, host)
+                        if it:
+                            items.append(it)
+                    except Exception:
+                        pass
+                if items:
+                    with lock:
+                        result_dict[idx] = (label, items)
+                    logger.error('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
+                else:
+                    logger.error('[NetflixHome] archive "%s": 0 items after build' % label)
+            except Exception as exc:
+                logger.error('[NetflixHome] archive "%s" error: %s' % (label, str(exc)))
+
+        threads = []
+        for idx, (label, url) in enumerate(entries_to_fetch):
+            t = _threading.Thread(target=_fetch_archive_row,
+                                  args=(idx, label, url, results_map, alock))
+            t.daemon = True
+            threads.append(t)
+            t.start()
+        # Plain join — no abortRequested() check (it falsely triggers in service context)
+        for t in threads:
+            if _shutdown_event.is_set():
+                break
+            t.join(timeout=12)
+        # Collect in original order so curated rows appear before genres
+        for idx in range(len(entries_to_fetch)):
+            if idx in results_map:
+                rows.append(results_map[idx])
+    except Exception as exc:
+        logger.error('[NetflixHome] archive block: %s' % str(exc))
+
+    logger.error('[NetflixHome] archive rows: %d' % len(rows))
     return rows
 
 

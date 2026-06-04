@@ -321,3 +321,34 @@ def is_4k_available(tmdb_id):
         return int(tmdb_id) in _index_by_tmdb
     except (ValueError, TypeError):
         return False
+
+
+# ── Eager cache load at import time ─────────────────────────────────────
+# Load the disk cache immediately (even if expired) so that _ready=True
+# before netflixhome._bg_load() calls _build_4k_row().  This eliminates
+# the race condition where the 4K carousel is missing on first launch
+# (especially on TVs that restart Kodi each time).
+# The background build_4k_index() thread will still run and refresh the
+# index if the cache is stale.
+def _try_load_cache():
+    global _index_by_tmdb, _ready
+    try:
+        cache_path = os.path.join(config.get_data_path(), 'fourk_cache.json')
+        if not os.path.exists(cache_path):
+            return
+        with open(cache_path, 'r', encoding='utf-8') as _f:
+            _cache = json.load(_f)
+        # Accept any version that has movies data (stale is better than missing)
+        if _cache.get('movies'):
+            with _lock:
+                _index_by_tmdb = {int(k): v for k, v in _cache['movies'].items()}
+                _ready = True
+            logger.info('[4K] Eagerly loaded %d movies from cache (age %.1fh)' % (
+                len(_index_by_tmdb),
+                (time.time() - _cache.get('ts', 0)) / 3600.0
+            ))
+    except Exception as _exc:
+        logger.error('[4K] Eager cache load failed: %s' % str(_exc))
+
+
+_try_load_cache()

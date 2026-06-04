@@ -37,6 +37,21 @@
                 <height>1080</height>
                 <texture colordiffuse="FF888888"/>
             </control>
+
+            <!-- __ Top bar __ -->
+            <control type="image">
+                <left>0</left><top>0</top>
+                <width>1920</width><height>75</height>
+                <texture colordiffuse="C0000000">white.png</texture>
+            </control>
+
+            <!-- Brand -->
+            <control type="image">
+                <left>8</left><top>-13</top>
+                <width>480</width><height>100</height>
+                <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
+                <aspectratio>keep</aspectratio>
+            </control>
             <!-- COUNT -->
             <control type="textbox" id='30001'>
                 <left>1785</left>

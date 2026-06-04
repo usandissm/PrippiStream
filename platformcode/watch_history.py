@@ -21,6 +21,7 @@ import json
 import os
 import threading
 import time as _time
+import io
 
 from platformcode import logger
 
@@ -33,22 +34,39 @@ def _get_path():
     return os.path.join(config.get_data_path(), _FILENAME)
 
 
-def _read():
+# Sentinel returned by _read() when the file exists but could not be parsed.
+# Callers that WRITE must treat this as "unknown" and abort the write, so a
+# transient read error never wipes the whole CW database.
+_READ_ERROR = object()
+
+
+def _read(safe=False):
+    """Load the CW dict from disk.
+
+    Always opens as UTF-8: the file is written with ensure_ascii=False, so it
+    can contain non-Latin titles (e.g. Korean). Without an explicit encoding,
+    Python on Windows uses the locale codepage (cp1252) and raises
+    UnicodeDecodeError on those bytes.
+
+    @param safe: when True, return _READ_ERROR (not {}) if the file exists but
+        cannot be parsed, so a follow-up write does not overwrite good data.
+    """
+    path = _get_path()
     try:
-        path = _get_path()
         if not os.path.exists(path):
             return {}
-        with open(path, 'r') as f:
-            return json.load(f)
+        with io.open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
     except Exception as exc:
         logger.error('[WatchHistory] read: %s' % str(exc))
-        return {}
+        return _READ_ERROR if safe else {}
 
 
 def _write(data):
     try:
-        with open(_get_path(), 'w') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with io.open(_get_path(), 'w', encoding='utf-8') as f:
+            f.write(json.dumps(data, ensure_ascii=False, indent=2))
     except Exception as exc:
         logger.error('[WatchHistory] write: %s' % str(exc))
 
@@ -63,7 +81,10 @@ def save_progress(key, title, thumbnail, fanart, time_watched, total_time, item_
     any existing entry so partial saves don't wipe the history.
     """
     with _lock:
-        data = _read()
+        data = _read(safe=True)
+        if data is _READ_ERROR:
+            logger.error('[WatchHistory] save_progress aborted: CW file unreadable, refusing to overwrite')
+            return
         entry = {
             'key':          key,
             'title':        title,
@@ -97,7 +118,10 @@ def save_progress(key, title, thumbnail, fanart, time_watched, total_time, item_
 def remove(key):
     """Remove a completed (or deleted) entry."""
     with _lock:
-        data = _read()
+        data = _read(safe=True)
+        if data is _READ_ERROR:
+            logger.error('[WatchHistory] remove aborted: CW file unreadable')
+            return
         if key in data:
             title = data[key].get('title', key)
             del data[key]
@@ -127,7 +151,10 @@ def mark_episode_watched(show_key, season, episode):
     The [season, episode] pair is added to watched_episodes if not already present.
     """
     with _lock:
-        data = _read()
+        data = _read(safe=True)
+        if data is _READ_ERROR:
+            logger.error('[WatchHistory] mark_episode_watched aborted: CW file unreadable, refusing to overwrite')
+            return
         entry = data.get(show_key, {'key': show_key})
         watched = entry.get('watched_episodes', [])
         pair = [int(season), int(episode)]
