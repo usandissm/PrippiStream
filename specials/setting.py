@@ -1184,6 +1184,77 @@ def report_send(item, description='', fatal=False):
     # return report_menu(item)
 
 
+def send_log_to_dev(item):
+    """Upload the Kodi log to paste.rs and show the URL in a dialog.
+
+    The user (or their friend) can then screenshot or copy the URL and send it
+    to the developer. No account or token needed — paste.rs is anonymous.
+    Steps:
+      1. Activate debug if it wasn't already (so the log is useful).
+      2. Read the last 500 KB of kodi.log (enough context, avoids huge uploads).
+      3. POST to https://paste.rs — response body IS the paste URL.
+      4. Show the URL in a dialog that the user can copy/screenshot.
+    """
+    import xbmc
+    import xbmcgui
+
+    # ── 1. Make sure debug logging is on ──────────────────────────────────
+    debug_was_off = not config.get_setting('debug')
+    if debug_was_off:
+        config.set_setting('debug', True)
+        platformtools.dialog_notification(
+            'PrippiStream',
+            'Debug attivato. Riproduci il problema e premi di nuovo "Invia Log".')
+        return
+
+    # ── 2. Find and read the log ──────────────────────────────────────────
+    log_path = xbmc.translatePath('special://logpath/kodi.log')
+    if not filetools.exists(log_path):
+        platformtools.dialog_ok('Invia Log', 'File di log non trovato:\n%s' % log_path)
+        return
+
+    try:
+        MAX_BYTES = 500 * 1024   # 500 KB — more than enough, paste.rs limit is 1 MB
+        with open(log_path, 'rb') as _f:
+            _f.seek(0, 2)
+            size = _f.tell()
+            _f.seek(max(0, size - MAX_BYTES))
+            log_bytes = _f.read()
+    except Exception as exc:
+        platformtools.dialog_ok('Invia Log', 'Errore lettura log:\n%s' % str(exc))
+        return
+
+    # ── 3. Upload to paste.rs ─────────────────────────────────────────────
+    platformtools.dialog_notification('PrippiStream', 'Invio log in corso…')
+    paste_url = ''
+    try:
+        try:
+            import urllib.request as _urllib
+            import urllib.error as _urlerr
+        except ImportError:
+            import urllib2 as _urllib
+            _urlerr = _urllib
+
+        req = _urllib.Request(
+            'https://paste.rs',
+            data=log_bytes,
+            headers={'Content-Type': 'text/plain; charset=utf-8'})
+        resp = _urllib.urlopen(req, timeout=20)
+        paste_url = resp.read().decode('utf-8', errors='replace').strip()
+    except Exception as exc:
+        platformtools.dialog_ok('Invia Log', 'Upload fallito:\n%s' % str(exc))
+        return
+
+    if not paste_url.startswith('http'):
+        platformtools.dialog_ok('Invia Log', 'Risposta inattesa dal server:\n%s' % paste_url)
+        return
+
+    # ── 4. Show the URL ───────────────────────────────────────────────────
+    xbmcgui.Dialog().ok(
+        'Log Inviato',
+        'Manda questo link allo sviluppatore:\n\n[B][COLOR gold]%s[/COLOR][/B]' % paste_url)
+
+
 def call_browser(item):
     import webbrowser
     if not webbrowser.open(item.url):

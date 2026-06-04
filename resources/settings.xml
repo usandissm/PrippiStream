@@ -172,4 +172,12 @@
         <setting id="custom_theme" type="folder" label="70565" default="" visible="eq(-1,true)"/>
         <setting id="video_thumbnail_type" type="select" label="70131" lvalues="70132|70133" default="1"/>
     </category>
+
+    <!-- Supporto -->
+    <category label="Supporto">
+        <setting label="Diagnostica" type="lsep"/>
+        <setting id="send_log_to_dev" type="action"
+                 label="Invia Log allo Sviluppatore"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiAic2VuZF9sb2dfdG9fZGV2IiwgImNoYW5uZWwiOiAic2V0dGluZyJ9)"/>
+    </category>
 </settings>
