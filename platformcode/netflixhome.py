@@ -406,13 +406,10 @@ def _build_4k_row():
             items.append(it)
         except Exception:
             pass
-    # Enrich with TMDB metadata (fanart, plot, etc.) — same as SC rows
-    if items:
-        try:
-            from core import tmdb as _tmdb
-            _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
-        except Exception:
-            pass
+    # TMDB enrichment is intentionally deferred to _bg_enrich_inplace so
+    # _build_4k_row() returns instantly and never blocks the home render.
+    # Items already carry tmdb_id + IPTV poster (stream_icon) which is
+    # sufficient for the first frame; HD TMDB posters arrive shortly after.
     return items
 
 
@@ -849,8 +846,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     return
                 if not items:
                     continue
-                # Skip non-SC rows: CW keeps its own data, 4K is enriched at build.
-                if label in (_CW_ROW_LABEL, u'Film in 4K'):
+                # Skip CW row only — 4K is now enriched here like SC rows.
+                if label == _CW_ROW_LABEL:
                     continue
                 # Skip rows already enriched (sentinel on first item).
                 if items[0].infoLabels.get('_enr'):
@@ -863,7 +860,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     logger.error('[NetflixHome] inplace enrich row %d: %s' % (idx, str(exc)))
                     continue
                 # Re-render this row's cards so they pick up the official TMDB
-                # HD posters (SC posters are lower-res / sometimes unofficial).
+                # HD posters (SC/IPTV posters are lower-res / sometimes unofficial).
                 if idx in self._populated and self._alive:
                     try:
                         self._refresh_row_cards(idx)
