@@ -23,11 +23,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from platformcode import config, logger
 
 try:
-    from urllib.request import Request, urlopen, urlparse
+    from urllib.request import Request, urlopen
+    from urllib.parse import urlparse, urlunparse
     from urllib.error import HTTPError, URLError
 except ImportError:
     from urllib2 import Request, urlopen, HTTPError, URLError
-    from urlparse import urlparse
+    from urlparse import urlparse, urlunparse
 
 # ── API config ──────────────────────────────────────────────────────────
 _API_BASE   = 'http://marek2.myvisio.me:8000/player_api.php'
@@ -57,16 +58,63 @@ _building      = False     # True while a build is in progress
 _lock          = threading.Lock()
 
 
+# ── DNS fallback via DoH ────────────────────────────────────────────────
+
+_doh_cache = {}   # hostname → ip (in-memory, reset per session)
+
+def _resolve_via_doh(hostname):
+    """Resolve hostname using Google DNS-over-HTTPS, bypassing system DNS.
+    Returns an IP string or None on failure. Result is cached per session."""
+    if hostname in _doh_cache:
+        return _doh_cache[hostname]
+    try:
+        doh_url = 'https://dns.google/resolve?name=%s&type=A' % hostname
+        req = Request(doh_url, headers={'User-Agent': _UA, 'Accept': 'application/dns-json'})
+        resp = urlopen(req, timeout=6)
+        data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+        for answer in data.get('Answer', []):
+            if answer.get('type') == 1:   # A record
+                ip = answer['data'].strip()
+                _doh_cache[hostname] = ip
+                logger.info('[4K] DoH resolved %s → %s' % (hostname, ip))
+                return ip
+    except Exception as exc:
+        logger.error('[4K] DoH resolution failed for %s: %s' % (hostname, str(exc)))
+    return None
+
+
+def _url_with_ip(url, ip):
+    """Replace the hostname in url with a resolved IP, keeping Host header intact."""
+    parsed = urlparse(url)
+    netloc_ip = ip if ':' not in parsed.netloc else ('%s:%s' % (ip, parsed.netloc.split(':')[1]))
+    return urlunparse(parsed._replace(netloc=netloc_ip))
+
+
 # ── Internal helpers ────────────────────────────────────────────────────
 
 def _http_get(url, timeout=12):
-    """Minimal HTTP GET returning (response_object, final_url) or (None, None)."""
+    """Minimal HTTP GET returning (response_object, final_url) or (None, None).
+    On DNS failure (errno 7) retries once using Google DoH to resolve the host."""
     try:
         req = Request(url, headers={'User-Agent': _UA})
         resp = urlopen(req, timeout=timeout)
         return resp, resp.geturl()
     except Exception as exc:
-        logger.error('[4K] HTTP error for %s: %s' % (url[:80], str(exc)))
+        exc_str = str(exc)
+        # errno 7 = no address associated with hostname (DNS failure)
+        if 'Errno 7' in exc_str or 'Name or service not known' in exc_str or 'nodename nor servname' in exc_str:
+            parsed = urlparse(url)
+            ip = _resolve_via_doh(parsed.hostname)
+            if ip:
+                try:
+                    url_ip = _url_with_ip(url, ip)
+                    req2 = Request(url_ip, headers={'User-Agent': _UA, 'Host': parsed.hostname})
+                    resp2 = urlopen(req2, timeout=timeout)
+                    logger.info('[4K] DNS fallback succeeded for %s' % parsed.hostname)
+                    return resp2, resp2.geturl()
+                except Exception as exc2:
+                    logger.error('[4K] DoH fallback request failed for %s: %s' % (url[:80], str(exc2)))
+        logger.error('[4K] HTTP error for %s: %s' % (url[:80], exc_str))
         return None, None
 
 

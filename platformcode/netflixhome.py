@@ -55,20 +55,8 @@ _ENRICH_SOURCE_MAP = {
         ('guardaserieclick',      'series'),
         ('filmstreaming',         'series'),
     ],
-    'anime': [
-        ('animesaturn',           'anime'),
-        ('animeunity',            'anime'),
-        ('animeworld',            'anime'),
-        ('cb01anime',             'anime'),
-        ('animeforce',            'anime'),
-        ('dreamsub',              'anime'),
-        ('animealtadefinizione',  'anime'),
-        ('aniplay',               'anime'),
-        ('animeuniverse',         'anime'),
-        ('piratestreaming',       'anime'),
-        ('toonitalia',            'anime'),
-    ],
 }
+# anime sources removed — carousel not yet implemented
 
 # Per-type cache: ctype -> {'items': [Item, ...], 'ts': float}
 _enrich_cache = {}
@@ -428,32 +416,6 @@ def _build_4k_row():
     return items
 
 
-def _build_anime_row():
-    """Build a list of Items for the Anime carousel row, seeded from ToonItalia.
-    Uses a dedicated cache slot so it does not interfere with the full
-    _fetch_enrich_items('anime') pool used by _bg_enrich_rows.
-    The row is then further enriched in the background with items from the
-    other sources listed in _ENRICH_SOURCE_MAP['anime']."""
-    from time import time
-    cached = _enrich_cache.get('_anime_seed')
-    if cached and (time() - cached['ts']) < _CACHE_TTL:
-        return list(cached['items'])
-    try:
-        import channels.toonitalia as _toonitalia
-        items = _toonitalia.newest('anime') or []
-        if items:
-            try:
-                from core import tmdb as _tmdb
-                _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
-            except Exception:
-                pass
-            _enrich_cache['_anime_seed'] = {'items': items[:40], 'ts': time()}
-            return items[:40]
-    except Exception as exc:
-        logger.error('[NetflixHome] _build_anime_row: %s' % str(exc))
-    return []
-
-
 # ── CW helpers ──────────────────────────────────────────────
 
 def _cw_key(item):
@@ -635,15 +597,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             pass
 
     def _assemble_initial(self, sc_rows):
-        """Build rows_data = [CW] + sc_rows with the 4K and Anime rows at fixed
-        positions 4 and 5.
+        """Build rows_data = [CW] + sc_rows with the 4K row at fixed position 4.
 
         The 4K index runs in parallel with the SC fetch (started in onInit).
         By the time this method is called (after _fetch_main_rows completes) the
         index is almost always ready — either from the disk cache (instant) or
         from the API build that ran concurrently. We wait up to 8 s so the 4K
         row is fully populated from the very first render without any live-fill.
-        Anime stays empty and is filled by _bg_enrich_rows (needs extra sources).
         """
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
@@ -661,9 +621,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _4k_items = _build_4k_row()
         self.rows_data.insert(min(4, len(self.rows_data)), (u'Film in 4K', _4k_items))
         need_4k_fill = not _4k_items   # still cold after 8 s → fill live later
-
-        # Anime row: reserved empty at index 5, filled by _bg_enrich_rows().
-        self.rows_data.insert(min(5, len(self.rows_data)), (u'Anime', []))
 
         # Sync CW progress into every non-CW row.
         if cw_items:
