@@ -23,11 +23,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from platformcode import config, logger
 
 try:
-    from urllib.request import Request, urlopen
+    from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
     from urllib.parse import urlparse, urlunparse
     from urllib.error import HTTPError, URLError
 except ImportError:
-    from urllib2 import Request, urlopen, HTTPError, URLError
+    from urllib2 import Request, urlopen, build_opener, HTTPRedirectHandler, HTTPError, URLError
     from urlparse import urlparse, urlunparse
 
 # ── API config ──────────────────────────────────────────────────────────
@@ -62,24 +62,38 @@ _lock          = threading.Lock()
 
 _doh_cache = {}   # hostname → ip (in-memory, reset per session)
 
+# DoH providers tried in order. Google may refuse domains blocked by Piracy Shield (IT),
+# Cloudflare and Quad9 are used as fallbacks.
+_DOH_PROVIDERS = [
+    ('Cloudflare', 'https://1.1.1.1/dns-query?name=%s&type=A'),
+    ('Quad9',      'https://dns.quad9.net:5053/dns-query?name=%s&type=A'),
+    ('Google',     'https://dns.google/resolve?name=%s&type=A'),
+]
+
 def _resolve_via_doh(hostname):
-    """Resolve hostname using Google DNS-over-HTTPS, bypassing system DNS.
+    """Resolve hostname via DNS-over-HTTPS, bypassing system DNS.
+    Tries Google, Cloudflare and Quad9 in order (Italian Piracy Shield blocks
+    Google's response for some domains; Cloudflare/Quad9 usually still resolve).
     Returns an IP string or None on failure. Result is cached per session."""
     if hostname in _doh_cache:
         return _doh_cache[hostname]
-    try:
-        doh_url = 'https://dns.google/resolve?name=%s&type=A' % hostname
-        req = Request(doh_url, headers={'User-Agent': _UA, 'Accept': 'application/dns-json'})
-        resp = urlopen(req, timeout=6)
-        data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-        for answer in data.get('Answer', []):
-            if answer.get('type') == 1:   # A record
-                ip = answer['data'].strip()
-                _doh_cache[hostname] = ip
-                logger.info('[4K] DoH resolved %s → %s' % (hostname, ip))
-                return ip
-    except Exception as exc:
-        logger.error('[4K] DoH resolution failed for %s: %s' % (hostname, str(exc)))
+    for provider_name, doh_tpl in _DOH_PROVIDERS:
+        try:
+            doh_url = doh_tpl % hostname
+            req = Request(doh_url, headers={'User-Agent': _UA, 'Accept': 'application/dns-json'})
+            resp = urlopen(req, timeout=6)
+            data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+            for answer in data.get('Answer', []):
+                if answer.get('type') == 1:   # A record
+                    ip = answer['data'].strip()
+                    _doh_cache[hostname] = ip
+                    logger.info('[4K] DoH resolved %s → %s (via %s)' % (hostname, ip, provider_name))
+                    return ip
+            logger.info('[4K] DoH %s returned no A record for %s (Status=%s), trying next' % (
+                provider_name, hostname, data.get('Status', '?')))
+        except Exception as exc:
+            logger.error('[4K] DoH %s failed for %s: %s' % (provider_name, hostname, str(exc)))
+    logger.error('[4K] All DoH providers failed to resolve %s' % hostname)
     return None
 
 
@@ -101,8 +115,11 @@ def _http_get(url, timeout=12):
         return resp, resp.geturl()
     except Exception as exc:
         exc_str = str(exc)
-        # errno 7 = no address associated with hostname (DNS failure)
-        if 'Errno 7' in exc_str or 'Name or service not known' in exc_str or 'nodename nor servname' in exc_str:
+        # errno 7 = DNS failure on Linux; errno 11001 = WSAHOST_NOT_FOUND on Windows
+        if ('Errno 7' in exc_str or 'Errno 11001' in exc_str
+                or 'Name or service not known' in exc_str
+                or 'nodename nor servname' in exc_str
+                or 'getaddrinfo failed' in exc_str):
             parsed = urlparse(url)
             ip = _resolve_via_doh(parsed.hostname)
             if ip:
@@ -126,27 +143,57 @@ def _http_get_body(url, timeout=12):
     return None
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Redirect handler that raises HTTPError instead of following redirects.
+    This lets us capture the Location header without consuming the CDN token."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _resolve_stream_url(sid, ext):
-    """Follow redirect on the stream URL to get the final CDN URL (with token).
-    Returns final URL without pipe headers (clean URL for Kodi)."""
-    # Check short-lived memory cache (this session only)
+    """Capture the CDN redirect URL from the IPTV server WITHOUT following it.
+
+    The IPTV server issues a 302 to a CDN URL that carries a one-time token.
+    Following the redirect ourselves (via urlopen) would consume the token before
+    Kodi gets a chance to play it.  Instead we:
+      1. Resolve the IPTV hostname via DoH (Cloudflare) to bypass Piracy Shield.
+      2. Send one request using the IP with a Host header — server sends 302.
+      3. Capture the Location header and return that CDN URL to get_resolved_url.
+      4. Kodi opens the CDN URL directly (no Host override needed; CDN resolves fine)."""
     cache_key = '%d.%s' % (sid, ext)
     if cache_key in _resolved_urls:
         return _resolved_urls[cache_key]
 
     url = '%s/%d.%s' % (_STREAM_BASE, sid, ext)
+    parsed = urlparse(url)
+    ip = _doh_cache.get(parsed.hostname) or _resolve_via_doh(parsed.hostname)
+
     try:
-        req = Request(url, headers={'User-Agent': _UA})
-        # Don't follow redirects — we want to capture the 302 Location header
-        resp = urlopen(req, timeout=8)
-        final_url = resp.geturl()
-        resp.close()
-        if final_url and final_url != url:
-            _resolved_urls[cache_key] = final_url
-            return final_url
-    except Exception:
-        pass
-    # Fallback: return base URL (will likely fail with 401, but that's handled upstream)
+        if ip:
+            req_url = _url_with_ip(url, ip)
+            port = parsed.port
+            host_hdr = ('%s:%d' % (parsed.hostname, port)) if port else parsed.hostname
+            req = Request(req_url, headers={'User-Agent': _UA, 'Host': host_hdr})
+        else:
+            req = Request(url, headers={'User-Agent': _UA})
+
+        opener = build_opener(_NoRedirectHandler)
+        try:
+            resp = opener.open(req, timeout=8)
+            # Server returned 200 directly — no redirect, use this URL
+            resp.close()
+            logger.info('[4K] No redirect for sid=%d, using base URL' % sid)
+        except HTTPError as e:
+            if e.code in (301, 302, 303, 307, 308):
+                location = e.headers.get('Location') or e.headers.get('location')
+                if location:
+                    _resolved_urls[cache_key] = location
+                    logger.info('[4K] Captured CDN redirect for sid=%d: %s' % (sid, location[:80]))
+                    return location
+    except Exception as exc:
+        logger.error('[4K] _resolve_stream_url failed for sid=%d: %s' % (sid, str(exc)))
+
+    # Fallback: return the hostname URL; get_resolved_url will rewrite host to IP
     return url
 
 
@@ -347,15 +394,38 @@ def lookup_4k(tmdb_id):
 
 
 def get_resolved_url(f4k):
-    """Resolve the final CDN stream URL (follow redirect, get token).
-    f4k is the dict returned by lookup_4k().  Returns URL with Kodi pipe headers."""
+    """Return a playable URL for Kodi.
+
+    If _resolve_stream_url captured a CDN redirect URL (different host from the
+    IPTV server), return it directly — no Host override needed, CDN resolves fine.
+    If we only have the raw IPTV URL (no redirect captured), substitute the
+    DoH-resolved IP + Host header so Kodi's libcurl can connect despite DNS block.
+    f4k is the dict returned by lookup_4k()."""
     sid = f4k.get('sid')
     ext = f4k.get('ext', 'mp4')
     url = f4k.get('stream_url', '')
     if sid:
         url = _resolve_stream_url(int(sid), ext)
-    # CDN requires User-Agent — safe on final URL (no more redirects)
-    if url and '|User-Agent=' not in url:
+    if not url:
+        return ''
+
+    parsed = urlparse(url)
+    iptv_host = urlparse(_STREAM_BASE).hostname  # marek2.myvisio.me
+
+    if parsed.hostname == iptv_host:
+        # Redirect was not captured — fall back to IP substitution + Host header.
+        # Kodi will get the redirect token on its first request.
+        ip = _doh_cache.get(parsed.hostname) or _resolve_via_doh(parsed.hostname)
+        if ip:
+            port = parsed.port
+            host_hdr = ('%s:%d' % (parsed.hostname, port)) if port else parsed.hostname
+            url_ip = urlunparse(parsed._replace(netloc=('%s:%d' % (ip, port)) if port else ip))
+            logger.info('[4K] Fallback IP rewrite for Kodi: %s (Host: %s)' % (url_ip[:80], host_hdr))
+            return '%s|User-Agent=Mozilla/5.0&Host=%s' % (url_ip, host_hdr)
+
+    # CDN URL (or non-blocked host) — pass directly to Kodi, no Host override.
+    logger.info('[4K] CDN URL passed to Kodi: %s' % url[:80])
+    if '|User-Agent=' not in url:
         url += '|User-Agent=Mozilla/5.0'
     return url
 
