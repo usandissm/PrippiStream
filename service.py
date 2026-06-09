@@ -525,6 +525,18 @@ if __name__ == "__main__":
     config.set_setting('autostart', True)       # launch at Kodi start
     config.set_setting('default_action', 2)     # video quality = High (0=Ask, 1=Low, 2=High)
 
+    # Suppress the YouTube addon setup wizard so it never appears to the user.
+    # The wizard key is 'kodion.setup_wizard'; setting it to 'false' prevents it
+    # from showing both on first install and after YouTube updates.
+    try:
+        import xbmcaddon as _xbmcaddon
+        _yt_addon = _xbmcaddon.Addon('plugin.video.youtube')
+        if _yt_addon.getSetting('kodion.setup_wizard') != 'false':
+            _yt_addon.setSetting('kodion.setup_wizard', 'false')
+            logger.info('[Setup] YouTube setup wizard suppressed')
+    except Exception:
+        pass  # YouTube not installed yet — will be suppressed on next service start
+
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
