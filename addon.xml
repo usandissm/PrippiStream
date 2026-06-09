@@ -3,7 +3,7 @@
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
-    <import addon="plugin.video.youtube"/>
+    <import addon="plugin.video.youtube" optional="true"/>
     <import addon="metadata.themoviedb.org" optional="true"/>
     <import addon="metadata.tvshows.themoviedb.org" optional="true"/>
     <!-- <import addon="metadata.tvdb.com"/> -->
