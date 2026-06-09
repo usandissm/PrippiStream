@@ -537,6 +537,8 @@ if __name__ == "__main__":
     except Exception:
         pass  # YouTube not installed yet — will be suppressed on next service start
 
+    xbmc.executebuiltin('UpdateAddonRepos')
+
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
