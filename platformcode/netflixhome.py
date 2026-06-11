@@ -16,6 +16,7 @@ import xbmcgui
 from core.item import Item
 from platformcode import config, logger, watch_history, platformtools
 from platformcode import _fourk
+from platformcode import sportchannels
 
 PY3 = sys.version_info[0] >= 3
 
@@ -604,6 +605,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         """
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
+
+        # Live-channel rows (Sport Live, then SKY) — right after CW.  Items play
+        # directly on click (handled in onClick), never opening DetailWindow.
+        for _row_key in ('sky', 'sport'):
+            try:
+                _ch_items = sportchannels.build_items(_row_key)
+                if _ch_items:
+                    self.rows_data.append((sportchannels.row_label(_row_key), _ch_items))
+            except Exception as exc:
+                logger.error('[NetflixHome] %s row build: %s' % (_row_key, str(exc)))
+
         self.rows_data += list(sc_rows)
 
         # 4K row: wait up to 8 s for the index so it renders populated.
@@ -619,12 +631,16 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         self.rows_data.insert(min(4, len(self.rows_data)), (u'Film in 4K', _4k_items))
         need_4k_fill = not _4k_items   # still cold after 8 s → fill live later
 
-        # Sync CW progress into every non-CW row.
+        # Sync CW progress into every non-CW row (skip the live-channel rows —
+        # live channels have no watch progress).
+        _live_labels = (_CW_ROW_LABEL, sportchannels.row_label('sport'),
+                        sportchannels.row_label('sky'))
         if cw_items:
             for row_label, row_items in self.rows_data:
-                if row_label != _CW_ROW_LABEL:
-                    for it in row_items:
-                        _apply_cw_to_item(it)
+                if row_label in _live_labels:
+                    continue
+                for it in row_items:
+                    _apply_cw_to_item(it)
         return cw_items, need_4k_fill
 
     def _render_now(self, cw_items):
@@ -657,6 +673,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _t_chan = threading.Thread(target=_sync_channels_json)
         _t_chan.daemon = True
         _t_chan.start()
+
+        # ── Refresh the live-channel lists (Sport + SKY) from the backend ──
+        _t_sport = threading.Thread(target=sportchannels.refresh_background)
+        _t_sport.daemon = True
+        _t_sport.start()
 
         self._set_loading(8)
 
@@ -1097,6 +1118,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # see this row as already done and skip it.
         self._populated.add(i)
         try:
+            logger.info('[NetflixHome] populate row %d "%s": %d items, first=%s' % (
+                i, cat_name, len(items), (items[0].fulltitle if items else '-')))
+        except Exception:
+            pass
+        try:
             wl = self.getControl(wl_id)
             # No reset() here: this is FIRST-TIME population — the wraplist is
             # already empty, so reset() + sleep would waste time and cause the
@@ -1129,7 +1155,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         token = self._hero_nav_token
 
         def _run():
-            xbmc.sleep(70)
+            xbmc.sleep(30)
             if token != self._hero_nav_token or not self._alive:
                 return
             try:
@@ -1589,7 +1615,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         item_idx = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                     items = self.rows_data[i][1]
                     if 0 <= item_idx < len(items):
-                        self._open_detail(items[item_idx])
+                        _it = items[item_idx]
+                        if getattr(_it, 'is_live_channel', False):
+                            self._play_channel_stream(_it, i, item_idx)
+                        else:
+                            self._open_detail(_it)
                 except Exception as exc:
                     logger.error('[NetflixHome] overlay click row %d: %s' % (i, str(exc)))
                 return
@@ -1621,7 +1651,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 try:
                     pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
                     if 0 <= pos < len(self.rows_data[i][1]):
-                        self._open_detail(self.rows_data[i][1][pos])
+                        _it = self.rows_data[i][1][pos]
+                        if getattr(_it, 'is_live_channel', False):
+                            self._play_channel_stream(_it, i, pos)
+                        else:
+                            self._open_detail(_it)
                 except Exception as exc:
                     logger.error('[NetflixHome] onClick row %d: %s' % (i, str(exc)))
                 break
@@ -1733,7 +1767,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # resets focus to row 0, overwriting everything we do afterwards.
             # Instead, just wait briefly for the dialog transition to finish and set focus.
             xbmc.sleep(300)
-            self._pending_select_pos = (wl_id, saved_pos, 5)
+            self._pending_select_pos = (wl_id, saved_pos, 2)
             try:
                 self.setFocusId(CLOSE_BTN)
             except Exception:
@@ -1785,9 +1819,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 logger.error('[NetflixHome] MY LIST: %s' % str(exc))
 
     def _enforce_scroll_pos(self, wl_id, pos):
-        """Background thread: hammer selectItem every 80ms for 1.5s to defeat skin scroll animations."""
+        """Background thread: hammer selectItem every 80ms for 0.4s to defeat skin scroll animations."""
         with self._scroll_lock:
-            deadline = time.time() + 1.5
+            deadline = time.time() + 0.4
             while self._alive and time.time() < deadline:
                 try:
                     cur = self.getControl(wl_id).getSelectedPosition()
@@ -1806,7 +1840,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             try:
                 xbmc.sleep(600)
                 # Give focus to wraplist so CW refresh triggers via onFocus.
-                self._pending_select_pos = (wl_id, self._last_focused_pos, 5)
+                self._pending_select_pos = (wl_id, self._last_focused_pos, 2)
                 self.setFocusId(CLOSE_BTN)
                 xbmc.sleep(100)
                 self.setFocusId(wl_id)
@@ -2446,6 +2480,73 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             logger.error('[NetflixHome] _play_4k_stream: %s' % str(exc))
             # Fallback to SC
             self._launch(item)
+
+    def _play_channel_stream(self, item, row_idx=None, pos=None):
+        """Resolve a live channel (SKY/DAZN/FIFA+/Cinema) and play it directly.
+
+        Runs the network resolve on a background thread (shows a busy spinner)
+        so the GUI never blocks; SKY uses the heroku ClearKey endpoint with an
+        automatic freeshot fallback (handled inside sportchannels.resolve_listitem).
+        Saves the clicked row+position and restores home focus there after
+        playback ends (so Back returns to the channel you launched, not CW).
+        """
+        # Remember where we were so _restore_home() returns focus here.
+        if row_idx is not None:
+            self._last_focused_row = row_idx
+        if pos is not None:
+            self._last_focused_pos = pos
+
+        def _worker():
+            busy = None
+            try:
+                try:
+                    busy = xbmcgui.DialogBusy()
+                    busy.create()
+                except Exception:
+                    busy = None
+                li = sportchannels.resolve_listitem(item)
+                if busy:
+                    try:
+                        busy.close()
+                    except Exception:
+                        pass
+                    busy = None
+                if not li:
+                    xbmcgui.Dialog().notification(
+                        'PrippiStream', 'Canale non disponibile',
+                        xbmcgui.NOTIFICATION_WARNING, 4000)
+                    return
+                path = li.getPath()
+                player = xbmc.Player()
+                player.play(path, li)
+
+                # Wait for playback to start (≤20 s), then for it to end, then
+                # bring the home back with focus on the launched channel.
+                monitor = xbmc.Monitor()
+                for _ in range(40):
+                    if not self._alive or monitor.abortRequested():
+                        return
+                    if player.isPlaying():
+                        break
+                    xbmc.sleep(500)
+                else:
+                    return  # never started
+                while player.isPlaying():
+                    if not self._alive or monitor.abortRequested():
+                        return
+                    xbmc.sleep(500)
+                if self._alive:
+                    self._restore_home()
+            except Exception as exc:
+                logger.error('[NetflixHome] _play_channel_stream: %s' % str(exc))
+                if busy:
+                    try:
+                        busy.close()
+                    except Exception:
+                        pass
+        t = threading.Thread(target=_worker)
+        t.daemon = True
+        t.start()
 
     def _play_episode_direct(self, item, season_num, ep_num):
         """Play a specific episode (season_num, ep_num) directly from the show item.
