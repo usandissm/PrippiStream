@@ -217,10 +217,13 @@ def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, 
     # from core.support import dbg;dbg()
     # for i, item in enumerate(itemlist):
     #     r_list.append(sub_thread(item, i, seekTmdb))
-    with futures.ThreadPoolExecutor() as executor:
-        searchList = [executor.submit(sub_thread, item, i, seekTmdb) for i, item in enumerate(itemlist)]
+    executor = futures.ThreadPoolExecutor()
+    searchList = [executor.submit(sub_thread, item, i, seekTmdb) for i, item in enumerate(itemlist)]
+    try:
         for res in futures.as_completed(searchList):
             r_list.append(res.result())
+    finally:
+        executor.shutdown(wait=False)
 
 
     # Sort results list by call order to keep the same order q itemlist

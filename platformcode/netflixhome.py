@@ -17,6 +17,7 @@ from core.item import Item
 from platformcode import config, logger, watch_history, platformtools
 from platformcode import _fourk
 from platformcode import sportchannels
+from platformcode import skyepg
 
 PY3 = sys.version_info[0] >= 3
 
@@ -559,6 +560,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         self._pending_select_pos = None
         # Lock to prevent concurrent _enforce_scroll_pos threads.
         self._scroll_lock = threading.Lock()
+        # Prevents two concurrent _bg_load calls (Kodi fires onInit twice when
+        # show() is called from _restore_home, causing duplicate live rows).
+        self._bg_load_lock = threading.Lock()
 
     def onInit(self):
         try:
@@ -619,6 +623,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 _ch_items = sportchannels.build_items(_row_key)
                 # Always add the row (even if empty) so the label stays visible.
                 self.rows_data.append((sportchannels.row_label(_row_key), _ch_items or []))
+                # Prefetch "now on air" for any disk-cached online channels so the
+                # hero shows EPG immediately on first focus (refresh updates later).
+                if _ch_items:
+                    self._prefetch_live_epg(_ch_items)
             except Exception as exc:
                 logger.error('[NetflixHome] %s row build: %s' % (_row_key, str(exc)))
 
@@ -673,6 +681,18 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         Progressive path (cache miss): render the main-page rows immediately,
         then append the archive rows live and enrich all rows in the background.
         """
+        # Kodi fires onInit twice when show() is called from _restore_home
+        # (once from the GUI thread, once from the background caller).  Guard with
+        # a non-blocking lock so the second concurrent call is silently dropped.
+        if not self._bg_load_lock.acquire(blocking=False):
+            logger.info('[NetflixHome] _bg_load: already running — skipped (double onInit)')
+            return
+        try:
+            self._bg_load_inner()
+        finally:
+            self._bg_load_lock.release()
+
+    def _bg_load_inner(self):
         global _sc_rows_cache, _cache
 
         # ── Sync channels.json from GitHub in the BACKGROUND (never blocks paint) ──
@@ -947,6 +967,40 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _refresh_row_cards %d: %s' % (i, str(exc)))
 
+    def _prefetch_live_epg(self, items):
+        """Fire one batched Sky-guide "now on air" fetch for the ONLINE channels
+        in *items*, off the GUI thread.  Refreshes the hero if it is currently
+        parked on one of these live channels.  Best-effort — any failure leaves
+        the hero in its normal (no-EPG) state."""
+        titles = [getattr(it, 'fulltitle', '') or getattr(it, 'title', '')
+                  for it in items if getattr(it, 'is_live_channel', False)]
+        titles = [t for t in titles if t]
+        if not titles:
+            return
+
+        def _worker():
+            try:
+                skyepg.prefetch(titles)
+            except Exception as exc:
+                logger.error('[NetflixHome] EPG prefetch: %s' % str(exc))
+                return
+            if not self._alive:
+                return
+            # If the user is currently on a live channel, refresh the hero so the
+            # freshly-fetched programme info appears without needing to re-focus.
+            try:
+                row = self._last_focused_row
+                if 0 <= row < len(self.rows_data):
+                    sample = self.rows_data[row][1]
+                    if sample and getattr(sample[0], 'is_live_channel', False):
+                        self._update_hero(row)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_worker)
+        t.daemon = True
+        t.start()
+
     def _refresh_live_rows(self):
         """Probe SKY and Sport live channels in parallel.  Each row rerenders as
         soon as its own probe completes — no waiting for the other row."""
@@ -984,6 +1038,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             logger.info('[NetflixHome] live row "%s" (#%d) → %d online channels'
                         % (label, idx, len(items)))
             self._rerender_live_row(idx, items)
+            self._prefetch_live_epg(items)
 
         threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
                    for k in ('sport', 'sky')]
@@ -1159,8 +1214,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
                 xbmc.sleep(30)
                 self._live_append_row(i, new_items)
-                logger.error('[NetflixHome enrich] row "%s" (#%d) +%d items (total=%d)'
-                             % (label, i, len(new_items), len(items)))
+                logger.info('[NetflixHome enrich] row "%s" (#%d) +%d items (total=%d)'
+                            % (label, i, len(new_items), len(items)))
 
             # Final step: fetch trailers for first 20 visible items.
             # Runs AFTER all enrichment threads have completed, so thread count is low.
@@ -1327,16 +1382,39 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # 4K badge for hero
         if getattr(it, 'contentType', '') == 'movie' and tmdb_id_hero and _fourk.is_4k_available(tmdb_id_hero):
             ctype_lbl += '  [COLOR FFE50914]4K[/COLOR]'
+
+        # Live channel "In onda adesso": override meta/plot with the currently
+        # airing programme from the Sky guide (prefetched off-thread).  Falls
+        # back to the channel's normal look when no EPG is cached for it.
+        live_meta = None
+        live_plot = None
+        if getattr(it, 'is_live_channel', False):
+            try:
+                epg = skyepg.now_on(title)
+            except Exception:
+                epg = None
+            if epg:
+                when = ('%s–%s' % (epg['start'], epg['end'])) if epg.get('start') else ''
+                live_meta = '  •  '.join(
+                    p for p in [u'[COLOR FFE50914]● IN ONDA ADESSO[/COLOR]', when] if p)
+                # plot: show name bold, then "S2 Ep7 · episode title", then synopsis
+                live_plot = '[B]%s[/B]' % epg['prog']
+                ep_line = '  ·  '.join(
+                    p for p in [epg.get('ep_info', ''), epg.get('ep_title', '')] if p)
+                if ep_line:
+                    live_plot += '\n' + ep_line
+                if epg.get('synopsis'):
+                    live_plot += '\n\n' + epg['synopsis']
         try:
             img = fanart or thumb
             if img:
                 self.getControl(BG_FANART).setImage(img)
             self.getControl(HERO_TITLE).setLabel('[B]' + title + '[/B]')
             meta = '  •  '.join(p for p in [year, ctype_lbl, lang, rating_str, genre_str] if p)
-            self.getControl(HERO_META).setLabel(meta)
+            self.getControl(HERO_META).setLabel(live_meta if live_meta is not None else meta)
             self.getControl(HERO_CATEG).setLabel(self.rows_data[row_idx][0])
             try:
-                self.getControl(HERO_PLOT).setText(plot)
+                self.getControl(HERO_PLOT).setText(live_plot if live_plot is not None else plot)
             except Exception:
                 pass
         except Exception as exc:
@@ -4057,7 +4135,7 @@ def _fetch_main_rows(progress_cb=None):
                     homepage_data = data
                 props   = data.get('props', {})
                 sliders = props.get('sliders', [])
-                logger.error('[NetflixHome] %s => %d sliders' % (page_url, len(sliders)))
+                logger.info('[NetflixHome] %s => %d sliders' % (page_url, len(sliders)))
 
                 for slider in sliders:
                     if len(rows) >= SC_MAX_ROWS:
@@ -4092,14 +4170,14 @@ def _fetch_main_rows(progress_cb=None):
                         continue
 
                     rows.append((display_name, items))
-                    logger.error('[NetflixHome] row "%s": %d items' % (display_name, len(items)))
+                    logger.info('[NetflixHome] row "%s": %d items' % (display_name, len(items)))
 
             except Exception as exc:
                 logger.error('[NetflixHome] page error %s: %s' % (page_url, str(exc)))
     except Exception as exc:
         logger.error('[NetflixHome] main rows import/init: %s' % str(exc))
 
-    logger.error('[NetflixHome] main rows: %d' % len(rows))
+    logger.info('[NetflixHome] main rows: %d' % len(rows))
     return rows, host, homepage_data
 
 
@@ -4165,7 +4243,7 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
                 if items:
                     with lock:
                         result_dict[idx] = (label, items)
-                    logger.error('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
+                    logger.info('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
                 else:
                     logger.error('[NetflixHome] archive "%s": 0 items after build' % label)
             except Exception as exc:
@@ -4190,7 +4268,7 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
     except Exception as exc:
         logger.error('[NetflixHome] archive block: %s' % str(exc))
 
-    logger.error('[NetflixHome] archive rows: %d' % len(rows))
+    logger.info('[NetflixHome] archive rows: %d' % len(rows))
     return rows
 
 
