@@ -265,6 +265,11 @@ def _pre_play_set_lang(item):
 # Label for the Continue Watching row (must match what _refresh_cw_row checks).
 _CW_ROW_LABEL = u'Continua a guardare'
 
+# Live-channel row labels (SKY, Sport Live).  These keep their title visible even
+# when empty — an empty live row means "no channel online right now", which we
+# show as a bare titled row rather than hiding it like the other empty rows.
+_LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'))
+
 # CW lookup tables — populated by _build_cw_items(), used by _apply_cw_to_item().
 _cw_lookup_by_tmdb  = {}   # tmdb_id (str) -> CW Item
 _cw_lookup_by_title = {}   # normalized show name -> CW Item
@@ -290,6 +295,7 @@ ROW_LEFT_BASE      = 4000   # left arrow button per row
 ROW_RIGHT_BASE     = 4001   # right arrow button per row
 ROW_OVERLAY_BASE   = 5000   # transparent mouse-blocker overlay per row
 HOVER_BOX_BASE     = 6000   # hover-frame group per row (moved by setPosition)
+ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
 ROW_STEP           = 10
 # SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
 # MAX_ROWS: total wraplist slots in the XML (must match generator MAX_ROWS)
@@ -611,8 +617,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         for _row_key in ('sky', 'sport'):
             try:
                 _ch_items = sportchannels.build_items(_row_key)
-                if _ch_items:
-                    self.rows_data.append((sportchannels.row_label(_row_key), _ch_items))
+                # Always add the row (even if empty) so the label stays visible.
+                self.rows_data.append((sportchannels.row_label(_row_key), _ch_items or []))
             except Exception as exc:
                 logger.error('[NetflixHome] %s row build: %s' % (_row_key, str(exc)))
 
@@ -674,8 +680,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _t_chan.daemon = True
         _t_chan.start()
 
-        # ── Refresh the live-channel lists (Sport + SKY) from the backend ──
-        _t_sport = threading.Thread(target=sportchannels.refresh_background)
+        # ── Refresh the live-channel lists (Sport + SKY) from the backend, then
+        # swap the probed (online-only) result into the SKY/Sport rows live ──
+        _t_sport = threading.Thread(target=self._refresh_live_rows)
         _t_sport.daemon = True
         _t_sport.start()
 
@@ -940,6 +947,103 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _refresh_row_cards %d: %s' % (i, str(exc)))
 
+    def _refresh_live_rows(self):
+        """Probe SKY and Sport live channels in parallel.  Each row rerenders as
+        soon as its own probe completes — no waiting for the other row."""
+
+        def _refresh_one(row_key):
+            try:
+                parser = sportchannels._PARSERS[row_key]
+                fresh = parser()
+            except Exception as exc:
+                logger.error('[NetflixHome] live refresh %s: %s' % (row_key, exc))
+                fresh = None
+            if not self._alive:
+                return
+            if fresh is not None:
+                sportchannels._mem_cache[row_key]['data'] = fresh
+                sportchannels._mem_cache[row_key]['ts'] = time.time()
+                sportchannels._save_disk_cache(row_key, fresh)
+                logger.info('[Sport] %s list refreshed: %d channels' % (row_key, len(fresh)))
+            label = sportchannels.row_label(row_key)
+            idx = None
+            with self._rows_lock:
+                for n, (lbl, _) in enumerate(self.rows_data):
+                    if lbl == label:
+                        idx = n
+                        break
+            if idx is None:
+                return
+            try:
+                items = sportchannels.build_items(row_key)
+            except Exception as exc:
+                logger.error('[NetflixHome] build %s: %s' % (row_key, exc))
+                return
+            with self._rows_lock:
+                self.rows_data[idx] = (label, items)
+            logger.info('[NetflixHome] live row "%s" (#%d) → %d online channels'
+                        % (label, idx, len(items)))
+            self._rerender_live_row(idx, items)
+
+        threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
+                   for k in ('sport', 'sky')]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    def _rerender_live_row(self, i, items):
+        """Replace the contents of an already-painted live row with *items*.
+        Empty *items* hides both the list and the label entirely."""
+        if i not in self._populated:
+            # First paint hasn't happened yet — let _populate_single_row do it.
+            return
+        self._bg_ui_pause.wait(timeout=15)
+        if not self._alive:
+            return
+        wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
+        lbl_id = ROW_LABEL_BASE   + i * ROW_STEP
+        label  = self.rows_data[i][0]
+        # Don't fight a pending position restore on this row.
+        if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+            return
+        try:
+            wl = self.getControl(wl_id)
+            if self.getFocusId() == wl_id and not items:
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                except Exception:
+                    pass
+            cur_pos = int(wl.getSelectedPosition() or 0)
+            wl.reset()
+            xbmc.sleep(80)  # let the UI flush before re-adding (slow ARM devices)
+            grp_id = ROW_GROUP_BASE + i * ROW_STEP
+            if items:
+                wl.addItems([_item_to_li(it) for it in items])
+                wl.setVisible(True)
+                self.getControl(lbl_id).setVisible(True)
+                self.getControl(lbl_id).setLabel('[B]%s[/B]' % label.upper())
+                try:
+                    self.getControl(grp_id).setVisible(True)
+                    logger.info('[NetflixHome] _rerender_live_row %d: group %d shown OK' % (i, grp_id))
+                except Exception as exc2:
+                    logger.error('[NetflixHome] _rerender_live_row %d: group %d show FAILED: %s' % (i, grp_id, exc2))
+                if 0 < cur_pos < len(items):
+                    try:
+                        wl.selectItem(cur_pos)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self.getControl(grp_id).setVisible(False)
+                    logger.info('[NetflixHome] _rerender_live_row %d: group %d hidden OK' % (i, grp_id))
+                except Exception as exc2:
+                    logger.error('[NetflixHome] _rerender_live_row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                    wl.setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+        except Exception as exc:
+            logger.error('[NetflixHome] _rerender_live_row %d: %s' % (i, str(exc)))
+
     def _bg_fill_4k_row(self):
         """Wait (non-blocking) for the 4K index, then fill the reserved row live."""
         mon = xbmc.Monitor()
@@ -1085,8 +1189,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             wl = self.getControl(wl_id)
             wl.addItems([_item_to_li(it) for it in new_items])
-            # The row may have been populated while empty (hidden): reveal it
+            # The row may have been populated while empty (group hidden): reveal it
             # now that it has cards, and (re)apply its label.
+            try:
+                self.getControl(ROW_GROUP_BASE + i * ROW_STEP).setVisible(True)
+            except Exception:
+                pass
             wl.setVisible(True)
             try:
                 lbl = self.getControl(lbl_id)
@@ -1104,14 +1212,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
         lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
         cat_name, items = self.rows_data[i]
-        # Hide any empty row (CW, 4K, Anime…) instead of showing a bare label.
-        # It is revealed later by _live_append_row() once items arrive.
+        # Hide any empty row entirely (collapses the space in the grouplist).
+        # Revealed by _rerender_live_row() / _live_append_row() once items arrive.
         if not items:
+            grp_id = ROW_GROUP_BASE + i * ROW_STEP
             try:
-                self.getControl(wl_id).setVisible(False)
-                self.getControl(lbl_id).setVisible(False)
-            except Exception:
-                pass
+                self.getControl(grp_id).setVisible(False)
+                logger.info('[NetflixHome] populate row %d: group %d hidden (empty)' % (i, grp_id))
+            except Exception as exc2:
+                logger.error('[NetflixHome] populate row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                try:
+                    self.getControl(wl_id).setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+                except Exception:
+                    pass
             self._populated.add(i)
             return
         # Mark populated BEFORE addItems so that onFocus re-entrant calls
@@ -3600,6 +3714,8 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
         for it in items:
             if row_count >= per_row:
                 break
+            if it.infoLabels.get('_enr'):
+                continue  # live channels — no trailer search
             tid = str(it.infoLabels.get('tmdb_id') or it.fulltitle or it.show or '').strip()
             if not tid:
                 continue

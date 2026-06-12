@@ -24,6 +24,7 @@ import os
 import random
 import re
 import string
+import threading
 import time
 
 try:
@@ -199,6 +200,52 @@ def _doh_get(url, headers=None, timeout=15):
         return None
 
 
+_cf_scraper = None
+_cf_lock = threading.Lock()
+
+
+def _cf_get(url, headers=None, timeout=20):
+    """GET for freeshot CDNs (popcdn.day / lovetier.bz).
+
+    Strategy:
+    1. Try lib.requests with verify=False — handles Kodi Python 3.8 SSL cipher
+       issues (SSLV3_ALERT_HANDSHAKE_FAILURE) without cloudscraper overhead.
+    2. If that returns HTTP 403 with a Cloudflare indicator, retry with
+       cloudscraper which solves the JS challenge.
+    Returns response text (200 only) or None."""
+    hdrs = headers or {}
+    try:
+        from lib import requests as _req
+        r = _req.get(url, headers=hdrs, timeout=timeout, verify=False)
+        if r.status_code == 200:
+            return r.text
+        if r.status_code == 403:
+            logger.info('[Sport] cf_get %s: HTTP 403, retrying with cloudscraper' % url)
+            raise ValueError('cf_challenge')
+        logger.error('[Sport] cf_get %s: HTTP %s' % (url, r.status_code))
+        return None
+    except ValueError:
+        pass  # CF challenge path: fall through to cloudscraper
+    except Exception as exc:
+        logger.error('[Sport] cf_get %s (requests): %s' % (url, str(exc)))
+        # Still try cloudscraper as last resort on connection errors
+    global _cf_scraper
+    try:
+        with _cf_lock:
+            if _cf_scraper is None:
+                logger.info('[Sport] cf_get: initialising cloudscraper')
+                from lib import cloudscraper
+                _cf_scraper = cloudscraper.create_scraper()
+        r = _cf_scraper.get(url, headers=hdrs, timeout=timeout)
+        if r.status_code != 200:
+            logger.error('[Sport] cf_get %s (cloudscraper): HTTP %s' % (url, r.status_code))
+            return None
+        return r.text
+    except Exception as exc:
+        logger.error('[Sport] cf_get %s (cloudscraper): %s' % (url, str(exc)))
+        return None
+
+
 def _backend_get(num_test, extra=''):
     url = "%s?numTest=%s%s" % (_BACKEND, num_test, extra)
     return _http_get(url, headers={'User-Agent': _mandra_ua()}, timeout=20)
@@ -267,7 +314,13 @@ def _parse_sport_backend():
         channels.append(dazn)
     channels.append({"title": u"FIFA+ Italia", "kind": "iptvorg",
                      "par": "FIFA+ Italy", "fs": None, "logo": _poster("FIFA+ Italy")})
-    return channels
+
+    # Probe all channels in parallel; keep only the online ones.  No fallback to
+    # the full list: if nothing is online the row stays empty (titled but empty)
+    # rather than showing channels that won't play.
+    online = _probe_parallel(channels)
+    logger.info('[Sport] sport online: %d/%d channels' % (len(online), len(channels)))
+    return online
 
 
 def _sky_channel_valid(par):
@@ -276,26 +329,133 @@ def _sky_channel_valid(par):
     This is exactly what decides whether inputstream.adaptive can decrypt it."""
     raw = _backend_get(_CODE_SKY_RESOLVE, "&id=" + par)
     if not raw:
+        logger.debug('[Sport] sky_valid %s: backend no response' % par)
         return False
     try:
         obj = json.loads(_xor_decrypt(json.loads(raw).get('data')))
         man = obj['manifest']
         bkid = (obj.get('kid') or '').replace('-', '').lower()
         if not bkid:
+            logger.debug('[Sport] sky_valid %s: no kid in backend response' % par)
             return False
         e = re.search(r'_e~(\d+)', man)
         if e and int(e.group(1)) < time.time():
+            logger.debug('[Sport] sky_valid %s: manifest token expired (ts=%s)' % (par, e.group(1)))
             return False  # expired manifest → segments 403
         mpd = _http_get(man, headers={'User-Agent': _NOWTV_UA,
                                       'Referer': _NOWTV_HOST + '/'}, timeout=10)
         if not mpd:
+            logger.debug('[Sport] sky_valid %s: CDN MPD unreachable' % par)
             return False
         m = re.search(r'default_KID="([^"]+)"', mpd)
         if not m:
+            logger.debug('[Sport] sky_valid %s: no default_KID in MPD' % par)
             return False
-        return m.group(1).replace('-', '').lower() == bkid
-    except Exception:
+        match = m.group(1).replace('-', '').lower() == bkid
+        if not match:
+            logger.debug('[Sport] sky_valid %s: KID mismatch (mpd=%s backend=%s)' % (
+                par, m.group(1).replace('-', '').lower(), bkid))
+        return match
+    except Exception as exc:
+        logger.debug('[Sport] sky_valid %s: exception %s' % (par, exc))
         return False
+
+
+def _freeshot_ok(code):
+    """True if the freeshot page currently exposes a stream token, i.e. the same
+    signal resolve_freeshot() needs to build a playable URL.  A bare 200 is not
+    enough — the page can load without an active token."""
+    page = _cf_get("https://popcdn.day/player/" + code,
+                   headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
+                   timeout=12)
+    ok = bool(page and re.search(r'currentToken:\s*"(.*?)"', page))
+    logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else ('no token' if page else 'no page')))
+    return ok
+
+
+def _iptvorg_ok(display_name):
+    """True if the iptv-org channel resolves to a stream that actually responds.
+    Without this an entry stays in the row even when its upstream URL is dead
+    (e.g. FIFA+), so clicking it just fails."""
+    url = resolve_iptvorg(display_name)
+    if not url:
+        logger.debug('[Sport] iptvorg_ok %s: not found in iptv-org list' % display_name)
+        return False
+    try:
+        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA}), timeout=8)
+        ok = resp.getcode() == 200
+        resp.close()
+        logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, 'OK' if ok else 'HTTP %s' % resp.getcode()))
+        return ok
+    except Exception as exc:
+        logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, exc))
+        return False
+
+
+def _channel_token_valid(ch):
+    """Online probe deciding whether a channel actually plays right now.
+
+    Mirrors resolve_listitem()'s order: a sky channel is online if its ClearKey
+    stream is fully valid (non-expired manifest whose KID matches the key — see
+    _sky_channel_valid), OR its freeshot fallback has a live token.  Pure
+    freeshot channels are online iff the freeshot token is live; iptv-org is
+    online iff its upstream m3u8 actually responds."""
+    kind = ch.get('kind', '')
+    par  = ch.get('par', '')
+    fs   = ch.get('fs')
+
+    if kind == 'iptvorg':
+        return _iptvorg_ok(par)
+
+    # Sky ClearKey: full check (expiry gates the MPD fetch, so expired channels
+    # cost only the resolve call — no wasted CDN round-trip).
+    if kind == 'sky' and _sky_channel_valid(par):
+        return True
+
+    # Freeshot: fallback for sky channels, or the channel's own resolver.
+    fs_code = fs if fs else (par if kind == 'freeshot' else None)
+    if fs_code:
+        return _freeshot_ok(fs_code)
+
+    return False
+
+
+def _probe_parallel(channels, timeout=40):
+    """Probe all channels in parallel; return only the online ones.
+    Channels that take longer than *timeout* seconds get excluded.  The cap must
+    exceed the worst-case single probe (backend resolve + MPD fetch, ~30 s) so a
+    slow-but-valid channel isn't wrongly dropped when the heroku dyno is cold."""
+    if not channels:
+        return []
+    results = {}
+    t0 = time.time()
+    logger.info('[Sport] probe_parallel: starting %d channels (timeout=%ds)' % (len(channels), timeout))
+
+    def _probe(ch):
+        par = ch.get('par', '')
+        try:
+            ok = _channel_token_valid(ch)
+            results[par] = ok
+            logger.debug('[Sport] probe %s [%s]: %s' % (par, ch.get('kind', '?'), 'ONLINE' if ok else 'offline'))
+        except Exception as exc:
+            results[par] = False
+            logger.debug('[Sport] probe %s: exception %s' % (par, exc))
+
+    threads = [threading.Thread(target=_probe, args=(ch,), daemon=True)
+               for ch in channels]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=timeout)
+
+    timed_out = [ch['par'] for ch in channels if ch.get('par', '') not in results]
+    if timed_out:
+        logger.error('[Sport] probe_parallel: timed out (>%ds): %s' % (timeout, ', '.join(timed_out)))
+
+    online = [ch for ch in channels if results.get(ch.get('par', ''), False)]
+    logger.info('[Sport] probe_parallel: done in %.1fs — %d/%d online' % (
+        time.time() - t0, len(online), len(channels)))
+    return online
 
 
 def _parse_sky_backend():
@@ -323,19 +483,17 @@ def _parse_sky_backend():
     if not live:
         return None
 
-    # Probe Sky Cinema candidates; include only the ones playable right now.
-    cinema = []
-    for c in CINEMA_CANDIDATES:
-        try:
-            if _sky_channel_valid(c["par"]):
-                d = dict(c)
-                d["logo"] = _logo_for(c["par"])
-                cinema.append(d)
-        except Exception:
-            pass
-    logger.info('[Sport] sky cinema online: %d/%d' % (len(cinema), len(CINEMA_CANDIDATES)))
+    # Probe ALL candidates (cinema + live) in parallel.
+    cinema_cands = [dict(c, logo=_logo_for(c["par"])) for c in CINEMA_CANDIDATES]
+    all_cands    = cinema_cands + live
+    online       = _probe_parallel(all_cands)
 
-    return cinema + live   # cinema first, then LIVE SKY
+    cinema_online = [c for c in online if c in cinema_cands]
+    live_online   = [c for c in online if c in live]
+    logger.info('[Sport] sky online: %d cinema, %d live (of %d+%d)' % (
+        len(cinema_online), len(live_online), len(cinema_cands), len(live)))
+
+    return cinema_online + live_online  # cinema first, then LIVE SKY
 
 
 _PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend}
@@ -367,11 +525,20 @@ def _save_disk_cache(row, data):
 
 
 def refresh_background():
-    """Refresh both rows' lists from the backend and persist.  Daemon-safe."""
-    for row, parser in _PARSERS.items():
+    """Refresh rows whose cache is stale; skip rows that are still fresh."""
+    now = time.time()
+    stale = [r for r in ('sport', 'sky')
+             if (now - _mem_cache[r]['ts']) >= _CACHE_TTL]
+    if not stale:
+        return  # both caches fresh — nothing to do
+    for row in stale:
+        parser = _PARSERS[row]
         try:
             fresh = parser()
-            if fresh:
+            # None = probe could not run (backend down) → keep the previous list.
+            # [] = probe ran and nothing is online → persist the empty list so the
+            # row correctly shows no channels (never resurrect stale offline ones).
+            if fresh is not None:
                 _mem_cache[row]['data'] = fresh
                 _mem_cache[row]['ts'] = time.time()
                 _save_disk_cache(row, fresh)
@@ -381,24 +548,26 @@ def refresh_background():
 
 
 def get_channels(row):
-    """Current channel list for a row: memory → disk → bundled default.
-    Bundled defaults get their poster path filled in."""
+    """Currently-online channel list for a row: memory → disk.
+
+    Returns [] when there is no cached probe result yet (cold start): we never
+    show the bundled default list because it isn't probe-verified and would put
+    offline channels in front of the user (clicking a dead one can hard-crash the
+    player).  The empty row is filled live by the home once refresh_background()
+    finishes its probe."""
     mc = _mem_cache.get(row)
     if mc and mc['data'] and (time.time() - mc['ts']) < _CACHE_TTL:
+        logger.debug('[Sport] get_channels %s: from memory (%d items)' % (row, len(mc['data'])))
         return mc['data']
     disk = _load_disk_cache(row)
     if disk:
+        logger.info('[Sport] get_channels %s: from disk cache (%d items)' % (row, len(disk)))
         if mc is not None:
             mc['data'] = disk
             mc['ts'] = time.time()
         return disk
-    # Bundled default → attach posters.
-    out = []
-    for c in _ROWS[row]['default']:
-        d = dict(c)
-        d["logo"] = _poster(c["par"])
-        out.append(d)
-    return out
+    logger.info('[Sport] get_channels %s: cold start — no cache yet' % row)
+    return []
 
 
 # ── row building ─────────────────────────────────────────────────────────────
@@ -431,23 +600,33 @@ def row_label(row):
 
 # ── resolvers ────────────────────────────────────────────────────────────────
 def resolve_sky(channel_id):
-    """Return (manifest, kid, key) for a SKY channel, or None."""
+    """Return (manifest, kid, key) for a SKY channel, or None.
+
+    Rejects a manifest whose signed-URL token has already expired: those serve
+    nothing but 403s and feeding one to inputstream.adaptive can hang/crash the
+    player.  Caller falls back to freeshot (or fails gracefully) on None."""
     raw = _backend_get(_CODE_SKY_RESOLVE, "&id=" + channel_id)
     if not raw:
         return None
     try:
         data = json.loads(_xor_decrypt(json.loads(raw).get('data')))
-        return data['manifest'], data['kid'], data['key']
+        man = data['manifest']
+        e = re.search(r'_e~(\d+)', man)
+        if e and int(e.group(1)) < time.time():
+            logger.info('[Sport] resolve_sky %s: manifest token expired' % channel_id)
+            return None
+        return man, data['kid'], data['key']
     except Exception as exc:
         logger.error('[Sport] resolve_sky %s: %s' % (channel_id, str(exc)))
         return None
 
 
 def resolve_freeshot(code):
-    """Return an HLS m3u8 URL for a freeshot channel, or None."""
-    page = _http_get("https://popcdn.day/player/" + code,
-                     headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                     timeout=15)
+    """Return an HLS m3u8 URL for a freeshot channel, or None.
+    Goes through cloudscraper (popcdn.day is behind a Cloudflare challenge)."""
+    page = _cf_get("https://popcdn.day/player/" + code,
+                   headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
+                   timeout=15)
     if not page:
         return None
     m = re.search(r'currentToken:\s*"(.*?)"', page)

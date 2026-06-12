@@ -211,7 +211,7 @@
             <onup>109</onup>
 
             <!-- _______________________ ROW 00 _______________________ -->
-            <control type="group">
+            <control type="group" id="7000">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>320</height>
                 <control type="image">
@@ -396,7 +396,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 01 _______________________ -->
-            <control type="group">
+            <control type="group" id="7010">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -413,10 +413,9 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2010">
+                <control type="list" id="2010">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
-                    <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
                 <itemlayout height="450" width="278">
@@ -577,7 +576,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 02 _______________________ -->
-            <control type="group">
+            <control type="group" id="7020">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -594,10 +593,9 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2020">
+                <control type="list" id="2020">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
-                    <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
                 <itemlayout height="450" width="278">
@@ -758,7 +756,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 03 _______________________ -->
-            <control type="group">
+            <control type="group" id="7030">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -939,7 +937,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 04 _______________________ -->
-            <control type="group">
+            <control type="group" id="7040">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -1120,7 +1118,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 05 _______________________ -->
-            <control type="group">
+            <control type="group" id="7050">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -1301,7 +1299,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 06 _______________________ -->
-            <control type="group">
+            <control type="group" id="7060">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -1482,7 +1480,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 07 _______________________ -->
-            <control type="group">
+            <control type="group" id="7070">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -1663,7 +1661,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 08 _______________________ -->
-            <control type="group">
+            <control type="group" id="7080">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -1844,7 +1842,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 09 _______________________ -->
-            <control type="group">
+            <control type="group" id="7090">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2025,7 +2023,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 10 _______________________ -->
-            <control type="group">
+            <control type="group" id="7100">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2206,7 +2204,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 11 _______________________ -->
-            <control type="group">
+            <control type="group" id="7110">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2387,7 +2385,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 12 _______________________ -->
-            <control type="group">
+            <control type="group" id="7120">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2568,7 +2566,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 13 _______________________ -->
-            <control type="group">
+            <control type="group" id="7130">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2749,7 +2747,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 14 _______________________ -->
-            <control type="group">
+            <control type="group" id="7140">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -2930,7 +2928,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 15 _______________________ -->
-            <control type="group">
+            <control type="group" id="7150">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -3111,7 +3109,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 16 _______________________ -->
-            <control type="group">
+            <control type="group" id="7160">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -3292,7 +3290,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 17 _______________________ -->
-            <control type="group">
+            <control type="group" id="7170">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -3473,7 +3471,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 18 _______________________ -->
-            <control type="group">
+            <control type="group" id="7180">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -3654,7 +3652,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 19 _______________________ -->
-            <control type="group">
+            <control type="group" id="7190">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -3835,7 +3833,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 20 _______________________ -->
-            <control type="group">
+            <control type="group" id="7200">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4015,7 +4013,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 21 _______________________ -->
-            <control type="group">
+            <control type="group" id="7210">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4195,7 +4193,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 22 _______________________ -->
-            <control type="group">
+            <control type="group" id="7220">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4375,7 +4373,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 23 _______________________ -->
-            <control type="group">
+            <control type="group" id="7230">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4555,7 +4553,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 24 _______________________ -->
-            <control type="group">
+            <control type="group" id="7240">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4735,7 +4733,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 25 _______________________ -->
-            <control type="group">
+            <control type="group" id="7250">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -4915,7 +4913,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 26 _______________________ -->
-            <control type="group">
+            <control type="group" id="7260">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -5095,7 +5093,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 27 _______________________ -->
-            <control type="group">
+            <control type="group" id="7270">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -5275,7 +5273,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 28 _______________________ -->
-            <control type="group">
+            <control type="group" id="7280">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
@@ -5455,7 +5453,7 @@
                 </control>
             </control>
             <!-- _______________________ ROW 29 _______________________ -->
-            <control type="group">
+            <control type="group" id="7290">
                 <left>0</left><top>0</top>
                 <width>1920</width><height>522</height>
                 <control type="image">
