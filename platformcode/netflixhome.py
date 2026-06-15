@@ -71,6 +71,38 @@ _trailer_cache = {}
 # Populated by _load_hd_fanart (DetailWindow) and home hero background fetch.
 # Persists across window opens so already-fetched plots are shown instantly.
 _plot_it_cache = {}
+
+# CW backdrop cache: "<ctype>:<tmdb_id>" -> [backdrop_url, ...] (or [] if none).
+# Filled during initial home loading (for Continue-Watching items) so the
+# DetailWindow fanart slideshow starts instantly with no TMDB round-trip.
+_cw_backdrops_cache = {}
+_cw_backdrops_lock  = threading.Lock()
+
+
+def _fetch_cw_backdrops(tmdb_id, ctype):
+    """Up to 6 TMDB backdrop URLs for a title, cached by '<ctype>:<tmdb_id>'.
+    ctype is 'tv' or 'movie'. Returns a (possibly empty) list; never raises."""
+    if not tmdb_id:
+        return []
+    key = '%s:%s' % (ctype, tmdb_id)
+    with _cw_backdrops_lock:
+        if key in _cw_backdrops_cache:
+            return _cw_backdrops_cache[key]
+    urls = []
+    try:
+        from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+        url = '%s/%s/%s/images?api_key=%s&include_image_language=null' % (
+              _tmdb_host, ctype, tmdb_id, _tmdb_api)
+        data = _Tmdb.get_json(url)
+        for b in (data or {}).get('backdrops', [])[:6]:
+            fp = b.get('file_path') or ''
+            if fp:
+                urls.append('https://image.tmdb.org/t/p/original' + fp)
+    except Exception as exc:
+        logger.error('[CW preload] backdrops fetch %s: %s' % (tmdb_id, str(exc)[:80]))
+    with _cw_backdrops_lock:
+        _cw_backdrops_cache[key] = urls
+    return urls
 # Token counter used to cancel stale home-hero plot-fetch threads when focus moves fast.
 _hero_plot_token = 0
 
@@ -288,6 +320,8 @@ LOADING_LBL        = 200
 LOADING_TXT        = 201   # dynamic status text inside the loading overlay
 LOADING_BAR        = 202   # progress bar (width driven by Python)
 LOADING_TRACK      = 203   # full-width track behind the progress bar
+HOME_PRELOAD_IMG   = 290   # off-screen image (behind base bg) used to warm the
+                           # texture cache for CW backdrops — never visible
 
 ROW_WRAPLIST_BASE  = 2000
 ROW_LABEL_BASE     = 3000   # category label above each row
@@ -334,6 +368,7 @@ ACTION_LEFT         = 1
 ACTION_RIGHT        = 2
 ACTION_UP           = 3
 ACTION_DOWN         = 4
+ACTION_SELECT_ITEM  = 7
 ACTION_WHEEL_UP     = 104
 ACTION_WHEEL_DOWN   = 105
 ACTION_MOUSE_MOVE   = 107
@@ -577,6 +612,16 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 self.setCoordinateResolution(3)  # 1920x1080
         except Exception:
             pass
+        # Reflect the real installed version into the read-only settings field, so
+        # "Versione installata" in settings is always current (the release CI bumps
+        # addon.xml automatically). Only write when it actually changed.
+        try:
+            _ad = xbmcaddon.Addon()
+            _ver = _ad.getAddonInfo('version')
+            if _ad.getSetting('addon_version_display') != _ver:
+                _ad.setSetting('addon_version_display', _ver)
+        except Exception:
+            pass
         # Loading overlay starts visible in XML — just start background fetch.
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
@@ -680,6 +725,44 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             first_row_fid = ROW_WRAPLIST_BASE if cw_items else ROW_WRAPLIST_BASE + ROW_STEP
             self._update_hero(0 if cw_items else 1)
             self.setFocusId(first_row_fid)
+        # Preload the DetailWindow fanart-slideshow backdrops for CW items (URLs +
+        # Kodi texture cache) so opening a CW card shows them with no delay.
+        if cw_items and self._alive:
+            _tpre = threading.Thread(target=self._preload_cw_backdrops, args=(list(cw_items),))
+            _tpre.daemon = True
+            _tpre.start()
+
+    def _preload_cw_backdrops(self, cw_items):
+        """Background (post-render): for each Continue-Watching item, fetch its
+        TMDB backdrop URLs and prime Kodi's texture cache by briefly displaying
+        each on the off-screen preload image (control 290, hidden behind the base
+        background). The DetailWindow slideshow then shows them with no network or
+        decode delay. Bounded + abort-aware so it never burdens the home."""
+        try:
+            seen = set()
+            for it in (cw_items or []):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                tmdb_id = str((it.infoLabels or {}).get('tmdb_id') or '').strip()
+                if not tmdb_id or tmdb_id in seen:
+                    continue
+                seen.add(tmdb_id)
+                ctype = 'tv' if getattr(it, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+                urls = _fetch_cw_backdrops(tmdb_id, ctype)
+                for u in urls:
+                    if not self._alive or _shutdown_event.is_set():
+                        return
+                    # Pause preloading while a modal (e.g. DetailWindow) is open, so
+                    # we don't fight it for the GUI/texture loader.
+                    self._bg_ui_pause.wait(timeout=15)
+                    try:
+                        self.getControl(HOME_PRELOAD_IMG).setImage(u)
+                    except Exception:
+                        pass
+                    xbmc.sleep(250)  # give the texture loader time to fetch + cache
+            logger.info('[CW preload] warmed backdrops for %d CW titles' % len(seen))
+        except Exception as exc:
+            logger.error('[CW preload] %s' % str(exc)[:100])
 
     def _bg_load(self):
         """Background thread: progressively fetch SC rows and render the home.
@@ -4451,6 +4534,11 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         self._selected_episode = None  # int: episode selected in EpisodePicker
         self._default_season   = 1     # int: default season (from CW or S01)
         self._default_episode  = 1     # int: default episode (from CW or E01)
+        # Cinema mode: True while the menu/overlay is hidden during a trailer.
+        # While hidden, the FIRST key (arrows/center/back) only brings the menu
+        # back — it must NOT perform its normal action (play, navigate, close).
+        self._overlay_hidden     = False
+        self._consume_next_click = False  # swallow the onClick that follows a SELECT
 
     def onInit(self):
         item = self._item
@@ -4698,20 +4786,9 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         Runs in a background thread; respects _close_requested.
         """
         try:
-            backdrops = []
-            if tmdb_id:
-                try:
-                    from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
-                    url   = '%s/%s/%s/images?api_key=%s&include_image_language=null' % (
-                            _tmdb_host, ctype, tmdb_id, _tmdb_api)
-                    data  = _Tmdb.get_json(url)
-                    blist = (data or {}).get('backdrops', [])
-                    for b in blist[:6]:
-                        fp = b.get('file_path') or ''
-                        if fp:
-                            backdrops.append('https://image.tmdb.org/t/p/original' + fp)
-                except Exception as exc:
-                    logger.error('[DetailWindow] fanart slideshow fetch: %s' % str(exc)[:80])
+            # Reuse the list preloaded at home-load time when available (instant);
+            # otherwise fetch now. Both go through the shared per-title cache.
+            backdrops = list(_fetch_cw_backdrops(tmdb_id, ctype)) if tmdb_id else []
 
             # If TMDB gave nothing, keep the initial fanart (already set in onInit)
             if not backdrops:
@@ -4930,6 +5007,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 pass
             try:
                 self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+                self._overlay_hidden = False
             except Exception:
                 pass
         except Exception as exc:
@@ -5239,6 +5317,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             # Restore cinema-mode group so window fade-out looks correct
             try:
                 self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+                self._overlay_hidden = False
             except Exception:
                 pass
 
@@ -5262,26 +5341,46 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             return
         try:
             self.getControl(DW_OVERLAY_GROUP).setVisible(False)
+            self._overlay_hidden = True
+        except Exception:
+            pass
+
+    def _restore_overlay(self):
+        """Bring the cinema-mode menu/overlay back and refocus PLAY."""
+        self._overlay_hidden = False
+        try:
+            self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+        except Exception:
+            pass
+        try:
+            self.setFocusId(DW_BTN_PLAY)
         except Exception:
             pass
 
     def onAction(self, action):
         aid = action.getId()
+        # While the menu is hidden during the trailer, ANY key just brings the
+        # menu back — including BACK (only a second BACK closes the window).
+        # Mouse-move events are ignored so a stray cursor jiggle can't pop it.
+        if self._overlay_hidden and aid != ACTION_MOUSE_MOVE:
+            self._restore_overlay()
+            if aid == ACTION_SELECT_ITEM:
+                # A SELECT also fires onClick on the focused button — swallow it
+                # so this first press doesn't also trigger PLAY.
+                self._consume_next_click = True
+            return
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._initiate_close()
-        else:
-            # Any other key restores the overlay (cinema mode → normal)
-            try:
-                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
-            except Exception:
-                pass
 
     def onClick(self, control_id):
-        # Restore overlay first (handles click after cinema mode hides it)
-        try:
-            self.getControl(DW_OVERLAY_GROUP).setVisible(True)
-        except Exception:
-            pass
+        # First click right after the menu was hidden: already consumed by
+        # onAction's _restore_overlay — don't also run the button's action.
+        if self._consume_next_click:
+            self._consume_next_click = False
+            return
+        if self._overlay_hidden:
+            self._restore_overlay()
+            return
         if control_id == DW_BTN_CLOSE:
             self._initiate_close()
         elif control_id == DW_BTN_PLAY:
@@ -5745,104 +5844,21 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             xbmc.log('[NetflixSearch] _launch_item action=%r ch=%s' % (
                 item.action, getattr(item, '_search_channel', '?')), xbmc.LOGINFO)
 
-            # ── Prefetch path: non-SC items ─────────────────────────────────────
+            # ── Non-SC items: always use the channel flow ───────────────────────
+            # Route through _parent_window._launch → RunPlugin → platformtools
+            # .play_video, which configures inputstream.adaptive (manifest_type
+            # mpd/hls) + DRM + headers.  The previous "prefetch direct play" path
+            # played the resolved URL with a bare ListItem and no ISA, so the
+            # DASH/HLS/Widevine streams that Mediaset/Discovery/Rai/… serve failed
+            # in Kodi's native demuxer ("Error creating demuxer") and never started.
             if getattr(item, '_search_channel', 'sc') != 'sc':
-                _item_id  = id(item)
-                _evt      = self._prefetch_events.get(_item_id)
-                _pw       = self._parent_window
-                _results  = self._prefetch_results
-
-                # If no prefetch was pre-started for this item, start one now on-demand.
-                # sources = [item] itself; _prefetch_links also searches extra channels.
-                if _evt is None and getattr(item, '_search_channel', 'sc') != 'sc':
-                    _evt = threading.Event()
-                    self._prefetch_events[_item_id] = _evt
-                    threading.Thread(
-                        target=self._prefetch_links,
-                        args=(_item_id, [item], _evt),
-                        daemon=True
-                    ).start()
-
-                if _evt is not None:
-                    def _async_play(evt=_evt, pw=_pw, item=item,
-                                    item_id=_item_id, results=_results):
-                        # Wait up to 20 s for prefetch to complete
-                        evt.wait(timeout=20)
-                        result = results.get(item_id)
-                        if result:
-                            _si, _vu = result           # (server_item, [label, url])
-                            _stream_url = _vu[1]
-                            xbmc.log('[NetflixSearch] direct play: %.80s' % _stream_url,
-                                     xbmc.LOGINFO)
-                            try:
-                                # Append HTTP headers to URL (Kodi pipe format: url|Header=val&...).
-                                # Referer comes from the server item URL (the embed page),
-                                # User-Agent from httptools defaults.
-                                try:
-                                    import urllib.parse as _urlparse
-                                except ImportError:
-                                    import urllib as _urlparse
-                                from core import httptools as _ht
-                                _play_url = _stream_url
-                                if '|' not in _play_url:
-                                    _hdrs = {
-                                        'User-Agent': _ht.default_headers.get('User-Agent', ''),
-                                        'Referer': getattr(_si, 'url', '') or '',
-                                    }
-                                    _play_url = _play_url + '|' + _urlparse.urlencode(_hdrs)
-
-                                # ListItem path = raw URL (no headers) — same as platformtools.py
-                                li = xbmcgui.ListItem(
-                                    item.fulltitle or item.title or '',
-                                    path=_stream_url)
-                                li.setArt({'thumb': item.thumbnail or ''})
-                                try:
-                                    _il = dict(item.infoLabels or {})
-                                    if _il:
-                                        li.setInfo('video', {
-                                            k: v for k, v in _il.items()
-                                            if v is not None and
-                                            isinstance(v, (str, int, float))
-                                        })
-                                except Exception:
-                                    pass
-                                li.setProperty('IsPlayable', 'true')
-                                _pre_play_set_lang(item)
-                                # Same pattern as platformtools.py: add to playlist with
-                                # piped-headers URL, then play the playlist
-                                _pl = xbmc.PlayList(xbmc.PLAYLIST_VIDEO)
-                                _pl.clear()
-                                _pl.add(_play_url, li)
-                                xbmc.Player().play(_pl, li)
-                                if pw:
-                                    t2 = threading.Thread(
-                                        target=pw._wait_and_restore, args=(item,))
-                                    t2.daemon = True
-                                    t2.start()
-                            except Exception as _ex:
-                                logger.error('[NS-prefetch] direct play error: %s' % str(_ex))
-                                if pw:
-                                    pw._launch(item)
-                                else:
-                                    xbmc.executebuiltin(
-                                        'RunPlugin(plugin://plugin.video.prippistream/?%s)'
-                                        % item.tourl())
-                        else:
-                            xbmc.log('[NetflixSearch] prefetch: no working URL, fallback to channel',
-                                     xbmc.LOGINFO)
-                            # Prefetch found no working direct URL — fall back to the full
-                            # channel flow (opens server-selection dialog / findvideos).
-                            if pw:
-                                pw._launch(item)
-                            else:
-                                xbmcgui.Dialog().notification(
-                                    'PrippiStream',
-                                    'Nessun link funzionante trovato per questo film.',
-                                    xbmcgui.NOTIFICATION_WARNING, 4000)
-
-                    t = threading.Thread(target=_async_play, name='NS-launch', daemon=True)
-                    t.start()
-                    return
+                if self._parent_window is not None:
+                    self._parent_window._launch(item)
+                else:
+                    _pre_play_set_lang(item)
+                    xbmc.executebuiltin(
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+                return
 
             # ── 4K check (movies only, before normal path) ────────────────
             ct = getattr(item, 'contentType', '') or ''
@@ -6102,14 +6118,6 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             t = (it.thumbnail or '').strip()
             return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
 
-        # Build sources map: norm_title → all non-SC items (may be from multiple channels)
-        # Used by prefetch to test ALL channels for a title simultaneously.
-        _all_sources_by_title = {}
-        for _si in all_others:
-            _nt2 = _norm_title(_si)
-            if _nt2:
-                _all_sources_by_title.setdefault(_nt2, []).append(_si)
-
         # Dedup: first occurrence (highest priority) wins per tmdb_id;
         # ALSO dedup by normalized title regardless of whether tmdb_id is present.
         seen_tmdb  = set()
@@ -6138,30 +6146,9 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 seen_title.add(nt)
             deduped.append(it)
 
-        # ── Step 4a: Start background link pre-testing for non-SC items ────────
-        # Only prefetch the TOP 3 non-SC results that closely match the query —
-        # avoids saturating the network with threads for false-positive results.
-        _pf_started = 0
-        for _it in deduped:
-            if getattr(_it, '_search_channel', 'sc') == 'sc':
-                continue
-            if _pf_started >= 3:
-                break
-            _nt = _norm_title(_it)
-            # Use the same article-aware match as _do_channel.
-            if _q_norm_raw and not _title_match_query(_nt):
-                continue
-            _sources = _all_sources_by_title.get(_nt, [_it])
-            _evt = threading.Event()
-            self._prefetch_events[id(_it)] = _evt
-            _pf_t = threading.Thread(
-                target=self._prefetch_links,
-                args=(id(_it), list(_sources), _evt),
-                name='NS-pf-%s' % (_nt[:20] if _nt else '?'),
-                daemon=True
-            )
-            _pf_t.start()
-            _pf_started += 1
+        # Non-SC items are played via the channel flow (see _launch_item), which
+        # sets up inputstream.adaptive/DRM correctly — so there is no background
+        # link pre-testing here anymore (it played raw URLs that wouldn't start).
 
         # ── Step 4b: Reset panel and re-populate with final sorted list ──
         with self._lock:

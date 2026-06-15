@@ -2,6 +2,7 @@
 <settings>
     <!-- General -->
     <category label="70168">
+        <setting id="addon_version_display" type="text" label="Versione installata" enable="false" default=""/>
         <setting label="70786" type="lsep"/>
         <setting id="autostart" type="bool" label="70706" default="true"/>
         <setting label="70579" type="lsep"/>

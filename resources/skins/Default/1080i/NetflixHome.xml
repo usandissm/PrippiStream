@@ -14,6 +14,15 @@
 
     <controls>
 
+        <!-- CW backdrop preloader: warms Kodi's texture cache (Python setImage on
+             id=290). Sits FIRST so the opaque base background fully covers it →
+             never visible, but still rendered so its texture is loaded/cached. -->
+        <control type="image" id="290">
+            <left>0</left><top>0</top>
+            <width>1920</width><height>1080</height>
+            <aspectratio>scale</aspectratio>
+        </control>
+
         <!-- __ Base background __ -->
         <control type="image">
             <left>0</left><top>0</top>

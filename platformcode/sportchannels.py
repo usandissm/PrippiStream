@@ -139,6 +139,14 @@ CINEMA_CANDIDATES = [
     {"title": u"Sky Cinema Suspense",  "kind": "sky", "par": "skycinemasuspense",   "fs": None},
 ]
 
+# Backend-title overrides keyed by par: force a canonical display name regardless
+# of what the backend returns (e.g. Sky Serie sometimes carries a date string;
+# skyunoplus arrives with the same title as skyuno).
+_TITLE_OVERRIDE = {
+    "skyunoplus": u"SKY UNO +1",
+    "skyserie":   u"SKY SERIE",
+}
+
 # Row definitions (label + bundled default + backend source).
 _ROWS = {
     'sport': {'label': u'Sport Live', 'default': DEFAULT_SPORT},
@@ -625,8 +633,9 @@ def _parse_sky_backend():
         if not mr.startswith('sky@@'):
             continue
         par = mr.split('@@', 1)[1]
+        title = _TITLE_OVERRIDE.get(par) or _strip_color(it.get('info') or it.get('title') or par)
         live.append({
-            "title": _strip_color(it.get('info') or it.get('title') or par),
+            "title": title,
             "kind": "sky", "par": par, "fs": None,
             "logo": _logo_for(par, it.get('thumbnail', '')),
         })

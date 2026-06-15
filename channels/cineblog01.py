@@ -199,6 +199,12 @@ def findvideos(item):
         logger.info('CB01 load_links [%s] streaming_snippet=%r' % (desc_txt, streaming[:300] if streaming else ''))
         matches = support.match(streaming, patron = r'<td><a.*?href=([^ ]+) [^>]+>([^<]+)<').matches
         for scrapedurl, scrapedtitle in matches:
+            # uprot.net (Maxstream) is now permanently behind a 5-digit image CAPTCHA,
+            # so it can never resolve — skip it. Every CB01 film also carries a
+            # stayonline.pro/Mixdrop mirror that DOES resolve, so nothing is lost.
+            if 'uprot.net' in scrapedurl:
+                logger.info("CB01 findvideos %s ## SKIP dead uprot/Maxstream url=%s" % (desc_txt, scrapedurl))
+                continue
             logger.info("CB01 findvideos %s ## url=%s ## title=%s ##" % (desc_txt, scrapedurl, scrapedtitle))
             itemlist.append(item.clone(action="play", title=scrapedtitle, url=scrapedurl, server=scrapedtitle, quality=quality))
 
