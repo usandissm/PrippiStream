@@ -2,7 +2,6 @@
 <!--
   StreamingUnity Home 1280x720 v8
   Hero 279px | Rows area 438px | Card 160x210
-  Buttons: PLAY id=110  MORE INFO id=111  MY LIST id=112
 -->
 <window type="window">
     <allowmouse>false</allowmouse>

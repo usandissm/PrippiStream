@@ -132,13 +132,6 @@ def run(item=None):
             from core import videolibrarytools
             videolibrarytools.add_to_videolibrary(item, channel)
 
-        # Special action for downloading all episodes from a serie
-        elif item.action == "download_all_episodes":
-            from specials import downloads
-            item.action = item.extra
-            del item.extra
-            downloads.save_download(item)
-
         # keymaptools special actions
         elif item.action == "keymap":
             from platformcode import keymaptools
@@ -293,18 +286,10 @@ def makeItem():
                 if val.lower() == 'false': val = False
                 elif val.lower() == 'true': val = True
                 item.__setattr__(key, urllib.parse.unquote(val) if isinstance(val,str) else val)
-    # If no item, decide whether to open the skin or the normal menu.
-    # Use a Kodi Window property as a session flag: it persists while Kodi is running
-    # but resets on restart — so the skin opens on first access per session, then
-    # subsequent back-navigations land on the normal menu instead of looping.
+    # No item → always open the PrippiStream Netflix-style home (the only UI).
+    # Settings are reachable from inside the home window.
     else:
-        import xbmcgui as _xg
-        _home = _xg.Window(10000)
-        if not _home.getProperty('prippistream_skin_shown'):
-            _home.setProperty('prippistream_skin_shown', '1')
-            item = Item(channel='channelselector', action='open_netflix_home', viewmode='movie')
-        else:
-            item = Item(channel='channelselector', action='getmainlist', viewmode='movie')
+        item = Item(channel='channelselector', action='open_netflix_home', viewmode='movie')
 
     return item
 

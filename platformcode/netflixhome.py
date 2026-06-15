@@ -284,7 +284,6 @@ CLOSE_BTN          = 108
 SETTINGS_BTN       = 107   # ⚙ settings button in top bar
 BTN_PLAY           = 110   # PLAY CTA button in hero
 BTN_INFO           = 111   # MORE INFO CTA button in hero
-BTN_LIST           = 112   # MY LIST CTA button in hero
 LOADING_LBL        = 200
 LOADING_TXT        = 201   # dynamic status text inside the loading overlay
 LOADING_BAR        = 202   # progress bar (width driven by Python)
@@ -318,7 +317,6 @@ DW_BTN_PLAY      = 210
 DW_BTN_AUDIO_SUB = 211   # formerly LIST — now opens audio/subtitle picker
 DW_BTN_CLOSE     = 212
 DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
-DW_BTN_LIST      = 211   # alias kept for any remaining references
 DW_CAST_PANEL    = 220   # horizontal cast cards panel
 DW_CAST_HDR      = 221   # "CAST" section header label
 DW_EP_INFO       = 223   # "Continua S02E05" episode info label (tvshow only)
@@ -2026,19 +2024,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         elif result == 'removed_cw':
             # Item was removed from CW — refresh the CW row immediately
             self._refresh_cw_row()
-        elif result == 'list':
-            try:
-                title = item.fulltitle or item.show or item.contentSerieName or ''
-                if item.contentType == 'movie':
-                    action_item = item.clone(action='add_pelicula_to_library')
-                else:
-                    action_item = item.clone(action='add_serie_to_library')
-                xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % action_item.tourl())
-                xbmcgui.Dialog().notification(
-                    'My List', '[B]%s[/B] aggiunto alla libreria' % title,
-                    xbmcgui.NOTIFICATION_INFO, 2500)
-            except Exception as exc:
-                logger.error('[NetflixHome] MY LIST: %s' % str(exc))
 
     def _enforce_scroll_pos(self, wl_id, pos):
         """Background thread: hammer selectItem every 80ms for 0.4s to defeat skin scroll animations."""
@@ -4450,7 +4435,7 @@ class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
 class DetailWindow(xbmcgui.WindowXMLDialog):
     """
     Full-screen detail card for a single title.
-    Shows fanart / trailer (via videowindow), scrollable plot, PLAY and MY LIST buttons.
+    Shows fanart / trailer (via videowindow), scrollable plot and PLAY button.
     Opened via doModal() from NetflixHomeWindow._open_detail (main GUI thread).
     """
 

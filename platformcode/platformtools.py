@@ -703,78 +703,10 @@ def set_context_commands(item, item_url, parent_item, **kwargs):
         # if item.infoLabels['plot'] and (num_version_xbmc < 17.0 or item.contentType == 'season'):
         #     context_commands.append((config.get_localized_string(60348), "Action(Info)"))
 
-        # InfoPlus
-        if config.get_setting("infoplus"):
-            #if item.infoLabels['tmdb_id'] or item.infoLabels['imdb_id'] or item.infoLabels['tvdb_id'] or \
-            #        (item.contentTitle and item.infoLabels["year"]) or item.contentSerieName:
-            if item.infoLabels['tmdb_id'] or item.infoLabels['imdb_id'] or item.infoLabels['tvdb_id']:
-                context_commands.append(("InfoPlus", "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=infoplus&action=Main&from_channel=' + item.channel)))
-
-        if item.channel != "videolibrary" and item.videolibrary != False and not item.disable_videolibrary:
-            # Add Series to the video library
-            if item.action in ["episodios", "get_episodios", "get_seasons"] and item.contentSerieName:
-                context_commands.append((config.get_localized_string(60352), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'action=add_serie_to_library&from_action=' + item.action)))
-            # Add Movie to Video Library
-            elif item.action in ["detail", "findvideos"] and item.contentType == 'movie' and item.contentTitle:
-                context_commands.append((config.get_localized_string(60353), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'action=add_pelicula_to_library&from_action=' + item.action)))
-            # Add to Video Library
-            elif item.action in ['check'] and item.contentTitle:
-                context_commands.append((config.get_localized_string(30161), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'action=add_to_library&from_action=' + item.action)))
-
-        # Search trailer...
-        if (item.contentTitle and item.contentType in ['movie', 'tvshow']) or "buscar_trailer" in context:
-            context_commands.append((config.get_localized_string(60359), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, urllib.urlencode({ 'channel': "trailertools", 'action': "buscartrailer", 'search_title': item.contentTitle if item.contentTitle else item.fulltitle, 'contextual': True}))))
-
-        # Add to addonfavoritos (My links)
-        if item.channel not in ["favorites", "videolibrary", "help", ""] and parent_item.channel != "favorites" and parent_item.from_channel != "addonfavorites":
-            context_commands.append( (config.get_localized_string(70557), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, urllib.urlencode({'channel': "addonfavorites", 'action': "addFavourite", 'from_channel': item.channel, 'from_action': item.action}))))
-
-        # Add to addonfavoritos
-        if parent_item.channel == 'globalsearch':
-            context_commands.append( (config.get_localized_string(30155), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, urllib.urlencode({'channel': "favorites", 'action': "addFavourite", 'from_channel': item.channel, 'from_action': item.action}))))
-
         # Open in browser and previous menu
         if parent_item.channel not in ["news", "channelselector", "downloads", "search"] and item.action != "mainlist":
             context_commands.append((config.get_localized_string(70739), "Container.Update (%s?%s)" % (sys.argv[0], Item(action="open_browser", url=item.url).tourl())))
 
-        # Search in other channels
-        if item.contentTitle and item.contentType in ['movie', 'tvshow'] and parent_item.channel not in ['search', 'globalsearch'] and item.action not in ['play'] and parent_item.action != 'mainlist':
-
-            # Search in other channels
-            if item.contentSerieName != '':
-                item.wanted = item.contentSerieName
-            else:
-                item.wanted = item.contentTitle
-
-            if item.contentType == 'tvshow':
-                mediatype = 'tv'
-            else:
-                mediatype = item.contentType
-
-            if config.get_setting('new_search'):
-                context_commands.append((config.get_localized_string(60350), "RunPlugin (%s?%s&%s)" % (sys.argv[0], item_url, urllib.urlencode({'channel': 'search', 'action': "from_context", 'from_channel': item.channel, 'contextual': True}))))
-            else:
-                context_commands.append((config.get_localized_string(60350), "Container.Refresh (%s?%s&%s)" % (sys.argv[0], item_url, urllib.urlencode({'channel': 'search', 'action': "from_context", 'from_channel': item.channel, 'contextual': True, 'text': item.wanted}))))
-            context_commands.append( (config.get_localized_string(70561), "Container.Update (%s?%s&%s)" % (sys.argv[0], item_url, 'channel=search&action=from_context&search_type=list&page=1&list_type=%s/%s/similar' % (mediatype, item.infoLabels['tmdb_id']))))
-
-        if not item.local and item.channel not in ["downloads", "filmontv", "search"] and item.server != 'torrent' and parent_item.action != 'mainlist' and config.get_setting('downloadenabled') and not item.disable_videolibrary:
-            # Download movie
-            if item.contentType == "movie":
-                context_commands.append((config.get_localized_string(60354), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&from_channel=' + item.channel + '&from_action=' + item.action)))
-
-            elif item.contentSerieName:
-                # Download series
-                if item.contentType == "tvshow" and item.action not in ['findvideos']:
-                    if item.channel == 'videolibrary':
-                        context_commands.append((config.get_localized_string(60003), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&unseen=true&from_channel=' + item.channel + '&from_action=' + item.action)))
-                    context_commands.append((config.get_localized_string(60355), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&from_channel=' + item.channel + '&from_action=' + item.action)))
-                    context_commands.append((config.get_localized_string(60357), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&download=season&from_channel=' + item.channel + '&from_action=' + item.action)))
-                # Download episode
-                elif item.contentType == "episode" and item.action in ['findvideos']:
-                    context_commands.append((config.get_localized_string(60356), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&from_channel=' + item.channel + '&from_action=' + item.action)))
-                # Download season
-                elif item.contentType == "season":
-                    context_commands.append((config.get_localized_string(60357), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'channel=downloads&action=save_download&download=season&from_channel=' + item.channel + '&from_action=' + item.action)))
         if item.contentType in ['movie', 'episode'] and config.get_setting('autoplay'):
             context_commands.append((config.get_localized_string(70192), "RunPlugin(%s?%s&%s)" % (sys.argv[0], item_url, 'disableAutoplay=true')))
         if item.nextPage:
@@ -1464,27 +1396,9 @@ def get_dialogo_opciones(item, default_action, strm, autoplay):
 
         if item.server == "local":
             opciones.append(config.get_localized_string(30164))
-        else:
-            # "Download"
-            downloadenabled = config.get_setting('downloadenabled')
-            if downloadenabled != False and item.channel != 'videolibrary':
-                opcion = config.get_localized_string(30153)
-                opciones.append(opcion)
-
-            if item.isFavourite:
-                # "Remove from favorites"
-                opciones.append(config.get_localized_string(30154))
-            else:
-                # "Add to Favorites"
-                opciones.append(config.get_localized_string(30155))
 
         if default_action == 3:
             seleccion = len(opciones) - 1
-
-        # Search for trailers
-        if item.channel not in ["trailertools"]:
-            # "Search Trailer"
-            opciones.append(config.get_localized_string(30162))
 
     # If you can't see the video it informs you
     elif puedes == False:
@@ -1505,9 +1419,6 @@ def get_dialogo_opciones(item, default_action, strm, autoplay):
                 if ret:
                     xbmc.executebuiltin("Container.Update (%s?%s)" %
                                         (sys.argv[0], Item(action="open_browser", url=item.url).tourl()))
-            if item.channel == "favorites":
-                # "Remove from favorites"
-                opciones.append(config.get_localized_string(30154))
 
             if len(opciones) == 0:
                 error = True
@@ -1535,35 +1446,6 @@ def set_opcion(item, seleccion, opciones, video_urls):
             listitem.setThumbnailImage(item.thumbnail)
 
         xbmcplugin.setResolvedUrl(int(sys.argv[1]), False, listitem)
-
-    # "Download"
-    elif opciones[seleccion] == config.get_localized_string(30153):
-        from specials import downloads
-
-        if item.contentType == "list" or item.contentType == "tvshow":
-            item.contentType = "video"
-        item.play_menu = True
-        downloads.save_download(item)
-        salir = True
-
-    # "Remove from favorites"
-    elif opciones[seleccion] == config.get_localized_string(30154):
-        from specials import favorites
-        favorites.delFavourite(item)
-        salir = True
-
-    # "Add to Favorites":
-    elif opciones[seleccion] == config.get_localized_string(30155):
-        from specials import favorites
-        item.from_channel = "favorites"
-        favorites.addFavourite(item)
-        salir = True
-
-    # "Search Trailer":
-    elif opciones[seleccion] == config.get_localized_string(30162):
-        config.set_setting("subtitulo", False)
-        xbmc.executebuiltin("RunPlugin(%s?%s)" % (sys.argv[0], item.clone(channel="trailertools", action="buscartrailer", contextual=True).tourl()))
-        salir = True
 
     return salir
 
