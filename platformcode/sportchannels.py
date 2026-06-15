@@ -154,6 +154,121 @@ _KNOWN_POSTERS = set(c["par"] for c in DEFAULT_SPORT + DEFAULT_SKY + CINEMA_CAND
 _CACHE_TTL = 6 * 3600
 _mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0}}
 
+# Resolved-stream cache: par -> (manifest, kid, key, expiry_epoch).
+# Populated by the probe (_sky_channel_valid already fetches a fully valid
+# manifest+key), reused by resolve_sky at click-time so playing a channel needs
+# NO second backend round-trip — the heroku dyno call that times out when cold.
+_stream_cache = {}
+_stream_cache_lock = threading.Lock()
+
+# Set on home shutdown so a running probe abandons its wait immediately instead
+# of making Kodi block on it ("script didn't stop in 5 seconds" → Back/exit
+# freeze).  Cleared by reset_state() at the start of each session.
+_abort_event = threading.Event()
+
+
+def abort_probes():
+    """Tell any running probe to stop waiting (called on home shutdown)."""
+    _abort_event.set()
+
+# Minimum remaining life a Sky manifest token must have to count as "online".
+# Healthy channels carry multi-hour tokens; dead/stale ones expire within
+# seconds, so a few minutes' margin cleanly separates them.
+_MANIFEST_MIN_TTL = 300  # seconds (5 min)
+
+# Ground-truth deny-list: par -> epoch until which the channel is hidden.
+# Probe-level HTTP checks can't predict whether ISA will actually play a stream
+# (e.g. Sky Sport Tennis's freeshot m3u8 returns #EXTM3U to python but ISA fails
+# to open it).  So when a channel genuinely fails to start playing, we mark it
+# dead and skip it in the probe for a while — the only reliable signal.
+_DEAD_TTL = 1800  # 30 min
+_dead_until = {}
+_dead_lock = threading.Lock()
+_dead_loaded = False
+
+
+def _dead_file():
+    try:
+        return os.path.join(config.get_data_path(), "sportchannels_dead.json")
+    except Exception:
+        return None
+
+
+def _load_dead():
+    global _dead_loaded
+    if _dead_loaded:
+        return
+    _dead_loaded = True
+    f = _dead_file()
+    if not f or not os.path.isfile(f):
+        return
+    try:
+        with open(f, 'r') as fh:
+            blob = json.load(fh)
+        now = time.time()
+        with _dead_lock:
+            _dead_until.update({p: t for p, t in blob.items() if t > now})
+    except Exception:
+        pass
+
+
+def _save_dead():
+    f = _dead_file()
+    if not f:
+        return
+    try:
+        with _dead_lock:
+            snapshot = dict(_dead_until)
+        with open(f, 'w') as fh:
+            json.dump(snapshot, fh)
+    except Exception:
+        pass
+
+
+def mark_dead(par, ttl=_DEAD_TTL):
+    """Hide a channel that genuinely failed to play, for *ttl* seconds."""
+    if not par:
+        return
+    _load_dead()
+    with _dead_lock:
+        _dead_until[par] = time.time() + ttl
+    _save_dead()
+    logger.info('[Sport] mark_dead %s for %ds (playback failed)' % (par, ttl))
+
+
+def _is_dead(par):
+    """True if *par* is on the deny-list and the TTL hasn't elapsed."""
+    _load_dead()
+    with _dead_lock:
+        until = _dead_until.get(par, 0)
+        if until and time.time() < until:
+            return True
+        if until:
+            _dead_until.pop(par, None)  # expired → allow re-probe
+    return False
+
+
+def _cache_stream(par, manifest, kid, key):
+    """Store a validated (manifest, kid, key) for reuse at play-time."""
+    e = re.search(r'_e~(\d+)', manifest or '')
+    expiry = int(e.group(1)) if e else (time.time() + 3600)
+    with _stream_cache_lock:
+        _stream_cache[par] = (manifest, kid, key, expiry)
+
+
+def _get_cached_stream(par):
+    """Return a still-valid cached (manifest, kid, key) for *par*, or None."""
+    with _stream_cache_lock:
+        entry = _stream_cache.get(par)
+    if not entry:
+        return None
+    manifest, kid, key, expiry = entry
+    if expiry <= time.time() + 30:   # 30 s margin against mid-stream expiry
+        with _stream_cache_lock:
+            _stream_cache.pop(par, None)
+        return None
+    return manifest, kid, key
+
 
 def _cache_file(row):
     try:
@@ -204,16 +319,19 @@ _cf_scraper = None
 _cf_lock = threading.Lock()
 
 
-def _cf_get(url, headers=None, timeout=20):
+def _cf_get(url, headers=None, timeout=10):
     """GET for freeshot CDNs (popcdn.day / lovetier.bz).
 
     Strategy:
     1. Try lib.requests with verify=False — handles Kodi Python 3.8 SSL cipher
        issues (SSLV3_ALERT_HANDSHAKE_FAILURE) without cloudscraper overhead.
-    2. If that returns HTTP 403 with a Cloudflare indicator, retry with
-       cloudscraper which solves the JS challenge.
+    2. ONLY if that returns HTTP 403 (a real Cloudflare JS challenge) retry with
+       cloudscraper.  On a connection timeout the host is simply unreachable —
+       cloudscraper hits the SAME host, so retrying just doubles the wait (this
+       is what made a dead popcdn.day block the player for 30 s); bail instead.
     Returns response text (200 only) or None."""
     hdrs = headers or {}
+    cf_challenge = False
     try:
         from lib import requests as _req
         r = _req.get(url, headers=hdrs, timeout=timeout, verify=False)
@@ -221,14 +339,16 @@ def _cf_get(url, headers=None, timeout=20):
             return r.text
         if r.status_code == 403:
             logger.info('[Sport] cf_get %s: HTTP 403, retrying with cloudscraper' % url)
-            raise ValueError('cf_challenge')
-        logger.error('[Sport] cf_get %s: HTTP %s' % (url, r.status_code))
-        return None
-    except ValueError:
-        pass  # CF challenge path: fall through to cloudscraper
+            cf_challenge = True
+        else:
+            logger.error('[Sport] cf_get %s: HTTP %s' % (url, r.status_code))
+            return None
     except Exception as exc:
+        # Connection error / timeout → host unreachable; don't double the wait.
         logger.error('[Sport] cf_get %s (requests): %s' % (url, str(exc)))
-        # Still try cloudscraper as last resort on connection errors
+        return None
+    if not cf_challenge:
+        return None
     global _cf_scraper
     try:
         with _cf_lock:
@@ -248,7 +368,9 @@ def _cf_get(url, headers=None, timeout=20):
 
 def _backend_get(num_test, extra=''):
     url = "%s?numTest=%s%s" % (_BACKEND, num_test, extra)
-    return _http_get(url, headers={'User-Agent': _mandra_ua()}, timeout=20)
+    # 12 s, not 20: the keepalive keeps the dyno warm so it answers in ~1-2 s; a
+    # shorter cap means a probe thread can't hang for 20 s and block Back/exit.
+    return _http_get(url, headers={'User-Agent': _mandra_ua()}, timeout=12)
 
 
 def _xor_decrypt(data_b64, key=_XOR_SECRET):
@@ -338,12 +460,18 @@ def _sky_channel_valid(par):
         if not bkid:
             logger.debug('[Sport] sky_valid %s: no kid in backend response' % par)
             return False
+        # Reject manifests that are expired OR about to expire: healthy channels
+        # carry tokens valid for HOURS, while dead ones (e.g. Sky Sport Tennis
+        # when not actively restreamed) get a stale token with seconds of life
+        # that the backend never refreshes.  Requiring a comfortable margin keeps
+        # those off the carousel entirely instead of letting them fail on click.
         e = re.search(r'_e~(\d+)', man)
-        if e and int(e.group(1)) < time.time():
-            logger.debug('[Sport] sky_valid %s: manifest token expired (ts=%s)' % (par, e.group(1)))
-            return False  # expired manifest → segments 403
+        if e and int(e.group(1)) < time.time() + _MANIFEST_MIN_TTL:
+            logger.debug('[Sport] sky_valid %s: manifest token expired/expiring (ts=%s, now=%d)'
+                         % (par, e.group(1), int(time.time())))
+            return False  # expired/near-expiry → dead by click time, segments 403
         mpd = _http_get(man, headers={'User-Agent': _NOWTV_UA,
-                                      'Referer': _NOWTV_HOST + '/'}, timeout=10)
+                                      'Referer': _NOWTV_HOST + '/'}, timeout=6)
         if not mpd:
             logger.debug('[Sport] sky_valid %s: CDN MPD unreachable' % par)
             return False
@@ -355,6 +483,10 @@ def _sky_channel_valid(par):
         if not match:
             logger.debug('[Sport] sky_valid %s: KID mismatch (mpd=%s backend=%s)' % (
                 par, m.group(1).replace('-', '').lower(), bkid))
+        elif obj.get('key'):
+            # Stream is fully valid right now — cache it so clicking the channel
+            # replays it directly with no second (timeout-prone) backend call.
+            _cache_stream(par, man, obj['kid'], obj['key'])
         return match
     except Exception as exc:
         logger.debug('[Sport] sky_valid %s: exception %s' % (par, exc))
@@ -362,12 +494,16 @@ def _sky_channel_valid(par):
 
 
 def _freeshot_ok(code):
-    """True if the freeshot page currently exposes a stream token, i.e. the same
-    signal resolve_freeshot() needs to build a playable URL.  A bare 200 is not
-    enough — the page can load without an active token."""
+    """True if the freeshot page currently exposes a stream token.
+
+    NOTE: a token doesn't guarantee ISA can play the lovetier.bz stream (it can
+    return a valid-looking m3u8 that ISA still rejects).  We deliberately do NOT
+    fetch the m3u8 here — that doubled the probe time and over-rejected without
+    actually predicting ISA's behaviour.  Channels that pass this check but fail
+    to play are caught by the deny-list (mark_dead) on their first failed click."""
     page = _cf_get("https://popcdn.day/player/" + code,
                    headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                   timeout=12)
+                   timeout=10)
     ok = bool(page and re.search(r'currentToken:\s*"(.*?)"', page))
     logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else ('no token' if page else 'no page')))
     return ok
@@ -382,7 +518,7 @@ def _iptvorg_ok(display_name):
         logger.debug('[Sport] iptvorg_ok %s: not found in iptv-org list' % display_name)
         return False
     try:
-        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA}), timeout=8)
+        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA}), timeout=5)
         ok = resp.getcode() == 200
         resp.close()
         logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, 'OK' if ok else 'HTTP %s' % resp.getcode()))
@@ -404,6 +540,12 @@ def _channel_token_valid(ch):
     par  = ch.get('par', '')
     fs   = ch.get('fs')
 
+    # Ground truth wins over any HTTP check: a channel that just failed to play
+    # in ISA stays hidden until its deny-list TTL elapses.
+    if _is_dead(par):
+        logger.debug('[Sport] %s: deny-listed (recent playback failure)' % par)
+        return False
+
     if kind == 'iptvorg':
         return _iptvorg_ok(par)
 
@@ -420,11 +562,9 @@ def _channel_token_valid(ch):
     return False
 
 
-def _probe_parallel(channels, timeout=40):
+def _probe_parallel(channels, timeout=25):
     """Probe all channels in parallel; return only the online ones.
-    Channels that take longer than *timeout* seconds get excluded.  The cap must
-    exceed the worst-case single probe (backend resolve + MPD fetch, ~30 s) so a
-    slow-but-valid channel isn't wrongly dropped when the heroku dyno is cold."""
+    Channels still running after *timeout* WALL-CLOCK seconds get excluded."""
     if not channels:
         return []
     results = {}
@@ -445,8 +585,18 @@ def _probe_parallel(channels, timeout=40):
                for ch in channels]
     for t in threads:
         t.start()
-    for t in threads:
-        t.join(timeout=timeout)
+    # Wait against ONE shared deadline, polling so we can bail the instant the
+    # home shuts down.  The old per-thread `join(timeout)` added up to N×timeout
+    # when several channels hung (probe took 82-121 s in the wild → froze the UI
+    # on Back/exit because Kodi waited on these threads).
+    deadline = t0 + timeout
+    while time.time() < deadline:
+        if _abort_event.is_set():
+            logger.info('[Sport] probe_parallel: aborted (home closing)')
+            break
+        if not any(t.is_alive() for t in threads):
+            break
+        time.sleep(0.2)
 
     timed_out = [ch['par'] for ch in channels if ch.get('par', '') not in results]
     if timed_out:
@@ -547,6 +697,78 @@ def refresh_background():
             logger.error('[Sport] refresh %s: %s' % (row, str(exc)))
 
 
+_KEEPALIVE_INTERVAL = 50   # seconds — dyno sleeps after ~60 s of inactivity
+_keepalive_running = False
+_keepalive_lock = threading.Lock()
+
+
+def _keepalive_loop(stop_event):
+    """Ping the backend every 50 s so the Heroku dyno never goes to sleep."""
+    base = _BACKEND.rsplit('/filter.php', 1)[0] + '/'
+    while not stop_event.wait(timeout=_KEEPALIVE_INTERVAL):
+        try:
+            resp = urlopen(Request(base, headers={'User-Agent': _mandra_ua()}), timeout=10)
+            resp.close()
+            logger.debug('[Sport] keepalive ping OK')
+        except Exception as exc:
+            logger.debug('[Sport] keepalive ping: %s' % str(exc))
+
+
+def start_keepalive(stop_event):
+    """Start the background keep-alive thread, exactly once per session.
+
+    onInit re-fires every time the home regains focus after playback, so guard
+    against spawning duplicate keepalive threads that would hammer the backend."""
+    global _keepalive_running
+    with _keepalive_lock:
+        if _keepalive_running:
+            return
+        _keepalive_running = True
+    t = threading.Thread(target=_keepalive_loop, args=(stop_event,))
+    t.daemon = True
+    t.name = 'SportKeepalive'
+    t.start()
+    logger.info('[Sport] keepalive started (interval=%ds)' % _KEEPALIVE_INTERVAL)
+
+
+def reset_state():
+    """Re-initialise module state at the start of a new home session.
+
+    Kodi force-kills the previous script if its background threads don't stop in
+    5 s ("script didn't stop in 5 seconds - let's kill it").  Module globals then
+    survive into the next session in a possibly-broken state — a lock a killed
+    thread never released would deadlock every resolve/probe, so NO channel would
+    play.  Rebuild the locks and clear the run-once flags for a clean slate.
+    Cached data (channel lists, deny-list) is left intact — it's still valid."""
+    global _stream_cache_lock, _dead_lock, _cf_lock, _keepalive_lock
+    global _keepalive_running, _cf_scraper
+    _stream_cache_lock = threading.Lock()
+    _dead_lock = threading.Lock()
+    _cf_lock = threading.Lock()
+    _keepalive_lock = threading.Lock()
+    _keepalive_running = False
+    _cf_scraper = None   # a half-initialised scraper from a killed thread is unusable
+    _abort_event.clear()
+    logger.info('[Sport] module state reset for new session')
+
+
+def remove_channel(row_key, par):
+    """Remove one channel (by par) from the memory and disk cache for *row_key*.
+
+    Does NOT deny-list — a resolve failure can be transient (cold backend, a CDN
+    blip, the network hiccup right after a force-kill), so the next probe should
+    be free to bring the channel back.  Only a genuine ISA playback failure
+    deny-lists, via an explicit mark_dead() from the play worker."""
+    mc = _mem_cache.get(row_key)
+    if mc and mc['data'] is not None:
+        before = len(mc['data'])
+        mc['data'] = [ch for ch in mc['data'] if ch.get('par') != par]
+        if len(mc['data']) < before:
+            _save_disk_cache(row_key, mc['data'])
+            logger.info('[Sport] remove_channel %s from %s → %d remaining'
+                        % (par, row_key, len(mc['data'])))
+
+
 def get_channels(row):
     """Currently-online channel list for a row: memory → disk.
 
@@ -599,12 +821,42 @@ def row_label(row):
 
 
 # ── resolvers ────────────────────────────────────────────────────────────────
+def _mpd_alive(man):
+    """Quick liveness check on a Sky MPD URL before handing it to ISA.
+
+    The CDN (cssott02.com) can go down between the probe and the click; feeding
+    ISA a dead manifest makes it hang ~45 s on socket timeouts and freezes the
+    whole UI (the 'crash' the user saw).  A short HEAD-like GET catches it so we
+    can fail fast / fall back instead."""
+    try:
+        resp = urlopen(Request(man, headers={'User-Agent': _NOWTV_UA,
+                                             'Referer': _NOWTV_HOST + '/'}), timeout=6)
+        code = resp.getcode()
+        resp.close()
+        return code == 200
+    except Exception as exc:
+        logger.info('[Sport] mpd_alive: dead/slow CDN — %s' % str(exc))
+        return False
+
+
 def resolve_sky(channel_id):
     """Return (manifest, kid, key) for a SKY channel, or None.
 
-    Rejects a manifest whose signed-URL token has already expired: those serve
-    nothing but 403s and feeding one to inputstream.adaptive can hang/crash the
-    player.  Caller falls back to freeshot (or fails gracefully) on None."""
+    Rejects a manifest whose signed-URL token has already expired or whose CDN is
+    unreachable: those serve nothing but 403s/timeouts and feeding one to
+    inputstream.adaptive can hang/crash the player.  Caller falls back to
+    freeshot (or fails gracefully) on None."""
+    # Fast path: reuse the stream the probe validated — but re-check the CDN is
+    # still alive, since it may have gone down since the probe.
+    cached = _get_cached_stream(channel_id)
+    if cached and _mpd_alive(cached[0]):
+        logger.info('[Sport] resolve_sky %s: reusing probed stream (cache hit)' % channel_id)
+        return cached
+    if cached:
+        # CDN died since the probe → drop the stale entry and re-resolve fresh.
+        logger.info('[Sport] resolve_sky %s: cached CDN dead, re-resolving' % channel_id)
+        with _stream_cache_lock:
+            _stream_cache.pop(channel_id, None)
     raw = _backend_get(_CODE_SKY_RESOLVE, "&id=" + channel_id)
     if not raw:
         return None
@@ -615,6 +867,11 @@ def resolve_sky(channel_id):
         if e and int(e.group(1)) < time.time():
             logger.info('[Sport] resolve_sky %s: manifest token expired' % channel_id)
             return None
+        if not _mpd_alive(man):
+            logger.info('[Sport] resolve_sky %s: CDN unreachable' % channel_id)
+            return None
+        if data.get('key'):
+            _cache_stream(channel_id, man, data['kid'], data['key'])
         return man, data['kid'], data['key']
     except Exception as exc:
         logger.error('[Sport] resolve_sky %s: %s' % (channel_id, str(exc)))
@@ -626,7 +883,7 @@ def resolve_freeshot(code):
     Goes through cloudscraper (popcdn.day is behind a Cloudflare challenge)."""
     page = _cf_get("https://popcdn.day/player/" + code,
                    headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                   timeout=15)
+                   timeout=10)
     if not page:
         return None
     m = re.search(r'currentToken:\s*"(.*?)"', page)
@@ -745,7 +1002,7 @@ def resolve_listitem(item):
 
 def resolve_iptvorg(display_name):
     """Resolve a channel from the iptv-org Italy list by matching its name."""
-    m3u = _http_get(_IPTVORG_IT, timeout=20)
+    m3u = _http_get(_IPTVORG_IT, timeout=10)
     if not m3u:
         return None
     lines = m3u.splitlines()

@@ -563,6 +563,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # Prevents two concurrent _bg_load calls (Kodi fires onInit twice when
         # show() is called from _restore_home, causing duplicate live rows).
         self._bg_load_lock = threading.Lock()
+        # Per-row epoch of the last live-channel probe (throttles re-probes when
+        # onInit re-fires on every return from playback).  row_key -> ts.
+        self._last_live_probe = {}
+        # Monotonic play counter: each channel click supersedes older in-flight
+        # play workers (they share one xbmc.Player and must not cross-talk).
+        self._play_gen = 0
+        # True once the home has been fully built; stops onInit (which re-fires
+        # when _restore_home calls show()) from re-running the whole load.
+        self._loaded_once = False
 
     def onInit(self):
         try:
@@ -681,6 +690,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         Progressive path (cache miss): render the main-page rows immediately,
         then append the archive rows live and enrich all rows in the background.
         """
+        # onInit re-fires every time _restore_home() calls show() to bring the
+        # home back after playback.  Only do the full build ONCE — re-running it
+        # re-renders 30 rows, re-spawns all the TMDB-enrich threads and re-probes
+        # the live rows, flooding the network with blocking I/O that then blocks
+        # Kodi's shutdown ("script didn't stop in 5 seconds" → freeze/kill).
+        if self._loaded_once:
+            logger.info('[NetflixHome] _bg_load: already built — skipping reload (return from playback)')
+            return
         # Kodi fires onInit twice when show() is called from _restore_home
         # (once from the GUI thread, once from the background caller).  Guard with
         # a non-blocking lock so the second concurrent call is silently dropped.
@@ -689,6 +706,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             return
         try:
             self._bg_load_inner()
+            self._loaded_once = True
         finally:
             self._bg_load_lock.release()
 
@@ -705,6 +723,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _t_sport = threading.Thread(target=self._refresh_live_rows)
         _t_sport.daemon = True
         _t_sport.start()
+        sportchannels.start_keepalive(_shutdown_event)
 
         self._set_loading(8)
 
@@ -1001,11 +1020,22 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         t.daemon = True
         t.start()
 
+    # Don't re-probe a live row that was probed within this window.  onInit
+    # re-fires on every return from playback; without this each return would
+    # re-probe all ~46 channels and hammer the already-flaky backend.
+    _LIVE_PROBE_THROTTLE = 120  # seconds
+
     def _refresh_live_rows(self):
         """Probe SKY and Sport live channels in parallel.  Each row rerenders as
         soon as its own probe completes — no waiting for the other row."""
 
         def _refresh_one(row_key):
+            last = self._last_live_probe.get(row_key, 0)
+            if last and (time.time() - last) < self._LIVE_PROBE_THROTTLE:
+                logger.info('[NetflixHome] live row "%s": probe throttled (probed %.0fs ago)'
+                            % (sportchannels.row_label(row_key), time.time() - last))
+                return
+            self._last_live_probe[row_key] = time.time()
             try:
                 parser = sportchannels._PARSERS[row_key]
                 fresh = parser()
@@ -2688,8 +2718,35 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if pos is not None:
             self._last_focused_pos = pos
 
+        # Play generation: each click supersedes any in-flight play worker so an
+        # older worker can't mistake a NEWER channel's playback for its own (all
+        # workers share one xbmc.Player()).  Captured per worker below.
+        self._play_gen = getattr(self, '_play_gen', 0) + 1
+        my_gen = self._play_gen
+
         def _worker():
             busy = None
+
+            def _remove_dead():
+                """Remove the channel from cache + re-render its row."""
+                par = getattr(item, 'sport_par', None)
+                if not par or row_idx is None:
+                    return
+                lbl = None
+                with self._rows_lock:
+                    if row_idx < len(self.rows_data):
+                        lbl = self.rows_data[row_idx][0]
+                row_key = next((rk for rk in ('sky', 'sport')
+                                if lbl == sportchannels.row_label(rk)), None)
+                if not row_key:
+                    return
+                sportchannels.remove_channel(row_key, par)
+                new_items = sportchannels.build_items(row_key)
+                with self._rows_lock:
+                    if row_idx < len(self.rows_data):
+                        self.rows_data[row_idx] = (lbl, new_items)
+                self._rerender_live_row(row_idx, new_items)
+
             try:
                 try:
                     busy = xbmcgui.DialogBusy()
@@ -2703,7 +2760,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     except Exception:
                         pass
                     busy = None
+                # A newer click superseded us while resolving → drop silently.
+                if my_gen != self._play_gen:
+                    if not li:
+                        _remove_dead()
+                    return
                 if not li:
+                    # Resolve failed (backend down, freeshot unreachable, etc.)
+                    _remove_dead()
                     xbmcgui.Dialog().notification(
                         'PrippiStream', 'Canale non disponibile',
                         xbmcgui.NOTIFICATION_WARNING, 4000)
@@ -2712,22 +2776,47 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 player = xbmc.Player()
                 player.play(path, li)
 
-                # Wait for playback to start (≤20 s), then for it to end, then
-                # bring the home back with focus on the launched channel.
+                # Wait for THIS channel's playback to start (≤14 s).  Abort if a
+                # newer click took over — otherwise we'd mistake the new channel's
+                # isPlaying() for our own (one shared xbmc.Player).
                 monitor = xbmc.Monitor()
-                for _ in range(40):
+                started = False
+                for _ in range(28):
                     if not self._alive or monitor.abortRequested():
                         return
+                    if my_gen != self._play_gen:
+                        return  # superseded — the new worker owns the player now
                     if player.isPlaying():
+                        started = True
                         break
                     xbmc.sleep(500)
-                else:
-                    return  # never started
+
+                if not started:
+                    # ISA genuinely failed to open the stream (dead freeshot URL,
+                    # DRM mismatch, Piracy-Shield block…).  This is ground truth
+                    # that the channel doesn't play, so deny-list it (mark_dead)
+                    # AND remove it from the row.  Only notify if the user is still
+                    # waiting on it (not if they already clicked another).
+                    par = getattr(item, 'sport_par', None)
+                    if par:
+                        sportchannels.mark_dead(par)
+                    _remove_dead()
+                    if my_gen == self._play_gen:
+                        xbmcgui.Dialog().notification(
+                            'PrippiStream', 'Canale non disponibile',
+                            xbmcgui.NOTIFICATION_WARNING, 4000)
+                    return
+
+                # Stream opened successfully (isPlaying went True): it's a good
+                # channel.  Wait for it to end, then restore the home — never
+                # remove a channel the user actually watched.
                 while player.isPlaying():
                     if not self._alive or monitor.abortRequested():
                         return
+                    if my_gen != self._play_gen:
+                        return  # another channel took over
                     xbmc.sleep(500)
-                if self._alive:
+                if self._alive and my_gen == self._play_gen:
                     self._restore_home()
             except Exception as exc:
                 logger.error('[NetflixHome] _play_channel_stream: %s' % str(exc))
@@ -5455,6 +5544,8 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         self._parent_window  = parent_window   # NetflixHomeWindow — for CW/launch delegation
         self._items     = []             # flat list of all results
         self._hero_item = None           # item currently shown in hero
+        self._last_pos  = 0              # last selected grid position (restored after trailer)
+        self._search_started = False     # guard: onInit may fire again after a fullscreen trailer
         self._search_done = threading.Event()
         self._lock      = threading.Lock()
         self._cancelled    = threading.Event()   # UI-close signal (stops search thread)
@@ -5471,6 +5562,14 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self.getControl(SEARCH_QUERY_BTN).setLabel(
                 '[COLOR FF888888]' + chr(0x1F50D) + '  [/COLOR]' + self._query
             )
+            # Re-init guard: Kodi calls onInit again when this WindowXML is re-activated
+            # after a fullscreen video (e.g. a trailer played inside DetailWindow). In
+            # that case the search has ALREADY run — restore the cached results instead
+            # of launching a brand-new network search ("ricerca che riparte da capo").
+            if self._search_started:
+                self._restore_after_reinit()
+                return
+            self._search_started = True
             # Hide no-results label; show loading indicator
             self.getControl(SEARCH_NORESULTS).setVisible(False)
             self.getControl(SEARCH_LOADING).setVisible(True)
@@ -5480,6 +5579,40 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             t.start()
         except Exception as exc:
             logger.error('[NetflixSearch] onInit error: %s' % str(exc))
+
+    def _restore_after_reinit(self):
+        """Re-populate the (freshly re-created) grid from cached results after the
+        window was re-initialised — typically returning from a fullscreen trailer.
+        Never triggers a new network search."""
+        try:
+            if not self._search_done.is_set():
+                # Search still running: it will populate the grid itself when it
+                # reaches its final step. Just keep the loading indicator visible.
+                self.getControl(SEARCH_LOADING).setVisible(True)
+                self.getControl(SEARCH_NORESULTS).setVisible(False)
+                return
+            self.getControl(SEARCH_LOADING).setVisible(False)
+            with self._lock:
+                items = list(self._items)
+            try:
+                self.getControl(SEARCH_WL_SC).reset()
+            except Exception:
+                pass
+            if items:
+                self.getControl(SEARCH_NORESULTS).setVisible(False)
+                self._populate_grid(items)
+                # Restore hero + the card the user was on before opening the detail
+                pos = self._last_pos if 0 <= self._last_pos < len(items) else 0
+                self._update_hero(items[pos])
+                try:
+                    self.getControl(SEARCH_WL_SC).selectItem(pos)
+                    self.setFocusId(SEARCH_WL_SC)
+                except Exception:
+                    pass
+            else:
+                self.getControl(SEARCH_NORESULTS).setVisible(True)
+        except Exception as exc:
+            logger.error('[NetflixSearch] _restore_after_reinit: %s' % str(exc))
 
     def onAction(self, action):
         aid = action.getId()
@@ -5521,6 +5654,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             try:
                 pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
                 if 0 <= pos < len(self._items):
+                    self._last_pos = pos
                     self._open_detail(self._items[pos])
             except Exception as exc:
                 logger.error('[NetflixSearch] onClick grid: %s' % str(exc))
@@ -5530,6 +5664,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             try:
                 pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
                 if 0 <= pos < len(self._items):
+                    self._last_pos = pos
                     self._update_hero(self._items[pos])
             except Exception:
                 pass
@@ -5544,6 +5679,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             with self._lock:
                 items = list(self._items)
             if 0 <= pos < len(items):
+                self._last_pos = pos
                 self._update_hero(items[pos])
         except Exception:
             pass
@@ -6262,6 +6398,13 @@ xbmc.log('[NetflixSearch] MODULE: NetflixSearchWindow defined OK', xbmc.LOGINFO)
 def open_netflix_home():
     """Public entry point — called from launcher.py."""
     _shutdown_event.clear()   # reset shutdown flag for this session
+    # The previous session may have been force-killed (blocked network threads →
+    # "script didn't stop in 5 seconds"), leaving module locks/flags in a broken
+    # state that would deadlock playback.  Reset them for a clean slate.
+    try:
+        sportchannels.reset_state()
+    except Exception:
+        pass
     win = NetflixHomeWindow('NetflixHome.xml', config.get_runtime_path())
     win.show()
     monitor = xbmc.Monitor()
@@ -6273,5 +6416,9 @@ def open_netflix_home():
     # then the thread checks the flag and returns — all within Kodi's 5-second window.
     win._alive = False
     _shutdown_event.set()     # unblocks all BG network threads immediately
+    try:
+        sportchannels.abort_probes()   # stop any running probe from blocking exit
+    except Exception:
+        pass
     xbmc.sleep(300)   # brief pause so threads notice _alive=False / _shutdown_event
     del win
