@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.72" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.73" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -12,14 +12,6 @@
   </requires>
   <extension point="xbmc.python.pluginsource" library="default.py">
     <provides>video</provides>
-  </extension>
-  <extension point="kodi.context.item">
-    <menu id="kodi.core.main">
-      <item library="contextmenu.py">
-        <label>90001</label>
-        <visible>!String.StartsWith(ListItem.FileNameAndPath, plugin://plugin.video.prippistream/) + [ String.IsEqual(ListItem.dbtype, tvshow) | String.IsEqual(ListItem.dbtype, movie) | String.IsEqual(ListItem.dbtype, season) | String.IsEqual(ListItem.dbtype, episode) ]</visible>
-      </item>
-    </menu>
   </extension>
   <extension point="xbmc.addon.metadata">
     <summary lang="en">PrippiStream is a Kodi add-on to search and watch contents on the web.</summary>
