@@ -240,9 +240,14 @@ if __name__ == "__main__":
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
-    # Check for addon updates AFTER launching the plugin so there is no race
-    # condition between the repo download and the RunAddon call above.
-    xbmc.executebuiltin('UpdateAddonRepos')
+    # Delay the repo update check so PrippiStream has time to fully load before
+    # Kodi potentially disables + reinstalls it. Without the delay, UpdateAddonRepos
+    # can trigger an immediate install while RunAddon is still initialising the addon,
+    # causing Kodi to show the "Add-on required: PrippiStream" popup.
+    def _deferred_update_repos():
+        xbmc.sleep(30000)
+        xbmc.executebuiltin('UpdateAddonRepos')
+    run_threaded(_deferred_update_repos, ())
 
     # port old db to new
     old_db_name = filetools.join(config.get_data_path(), "prippistream_db.sqlite")
