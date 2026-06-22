@@ -51,10 +51,12 @@ def get_video_url(page_url, premium=False, user="", password="", video_password=
     masterPlaylistParams = ast.literal_eval(params)
     if canPlayFHD == 'true':
         masterPlaylistParams['h'] = 1
-    if 'b' in urlParams:
-        masterPlaylistParams['b'] = 1
+    for _p in ('b', 'scz'):
+        if _p in urlParams:
+            masterPlaylistParams[_p] = urlParams[_p][0]
     
     masterPlaylistParams.update(url_params)
+    masterPlaylistParams = {k: v for k, v in masterPlaylistParams.items() if v is not None and v != ''}
     url =  '{}://{}{}?{}'.format(split_url.scheme,split_url.netloc,split_url.path,urllib.parse.urlencode(masterPlaylistParams))
 
     video_urls = [['hls [{}]'.format('FullHD' if canPlayFHD == 'true' else 'HD'), url]]

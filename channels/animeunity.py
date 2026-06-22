@@ -3,7 +3,7 @@
 # Canale per AnimeUnity
 # ------------------------------------------------------------
 
-import cloudscraper, json, copy, inspect
+import json, copy, inspect
 from core import jsontools, support, httptools, scrapertools
 from platformcode import autorenumber, logger, config
 
@@ -16,12 +16,31 @@ def findhost(url):
     final = getattr(resp, 'url', '') or ''
     return final.rstrip('/') if final and not final.startswith('https://animeunity.to') else url.rstrip('/')
 
-host = config.get_channel_url(findhost)
-response = httptools.downloadpage(host + '/archivio')
-csrf_token = support.match(response.data, patron='name="csrf-token" content="([^"]+)"').match
-headers = {'content-type': 'application/json;charset=UTF-8',
-           'x-csrf-token': csrf_token,
-           'Cookie' : '; '.join([x.name + '=' + x.value for x in response.cookies])}
+host = config.get_channel_url(name='animeunity')  # explicit name avoids inspect-stack mis-detection when imported from netflixhome
+
+# CSRF token and session headers are fetched lazily on first use (not at import
+# time) so importing this module never triggers an HTTP request.
+_headers = None
+_archivio_data = None
+
+def _ensure_init():
+    """Fetch the /archivio page once to obtain the CSRF token + session cookie."""
+    global _headers, _archivio_data
+    if _headers is not None:
+        return
+    try:
+        response = httptools.downloadpage(host + '/archivio')
+        csrf_token = support.match(response.data, patron='name="csrf-token" content="([^"]+)"').match
+        _headers = {
+            'content-type': 'application/json;charset=UTF-8',
+            'x-csrf-token': csrf_token,
+            'Cookie': '; '.join([x.name + '=' + x.value for x in response.cookies]),
+        }
+        _archivio_data = response.data
+    except Exception as exc:
+        logger.error('[AnimeUnity] _ensure_init failed: %s' % str(exc))
+        _headers = {}
+        _archivio_data = ''
 
 
 @support.menu
@@ -58,10 +77,10 @@ def menu(item):
 
 def genres(item):
     support.info()
-    # support.dbg()
+    _ensure_init()
     itemlist = []
 
-    genres = json.loads(support.match(response.data, patron='genres="([^"]+)').match.replace('&quot;','"'))
+    genres = json.loads(support.match(_archivio_data, patron='genres="([^"]+)').match.replace('&quot;','"'))
 
     for genre in genres:
         item.args['genres'] = [genre]
@@ -70,11 +89,12 @@ def genres(item):
 
 def years(item):
     support.info()
+    _ensure_init()
     itemlist = []
 
     from datetime import datetime
     next_year = datetime.today().year + 1
-    oldest_year = int(support.match(response.data, patron='anime_oldest_date="([^"]+)').match)
+    oldest_year = int(support.match(_archivio_data, patron='anime_oldest_date="([^"]+)').match)
 
     for year in list(reversed(range(oldest_year, next_year + 1))):
         item.args['year']=year
@@ -122,10 +142,11 @@ def newest(categoria):
 
 def news(item):
     support.info()
+    _ensure_init()
     item.contentType = 'episode'
     itemlist = []
 
-    fullJs = json.loads(support.match(httptools.downloadpage(item.url).data, headers=headers, patron=r'items-json="([^"]+)"').match.replace('&quot;','"'))
+    fullJs = json.loads(support.match(httptools.downloadpage(item.url).data, headers=_headers, patron=r'items-json="([^"]+)"').match.replace('&quot;','"'))
     js = fullJs['data']
 
     for it in js:
@@ -141,7 +162,7 @@ def news(item):
                 pattern = r'[._\s]Ep[._\s]*(?P<episode>\d+)'
                 episode = scrapertools.find_single_match(it['file_name'], pattern)
                 if episode:
-                    full_episode = ' - E' + episode                             
+                    full_episode = ' - E' + episode
             itemlist.append(
                 item.clone(title = support.typo(title_name + full_episode, 'bold'),
                            fulltitle = it['anime']['title'],
@@ -159,6 +180,7 @@ def news(item):
 
 def peliculas(item):
     support.info()
+    _ensure_init()
     itemlist = []
 
     page = item.page if item.page else 0
@@ -166,21 +188,20 @@ def peliculas(item):
 
     order = support.config.get_setting('order', item.channel)
     if order:
-        order_list = [ "Standard", "Lista A-Z", "Lista Z-A", "Popolarità", "Valutazione" ]
+        order_list = [ "Standard", "Lista A-Z", "Lista Z-A", u"Popolarità", "Valutazione" ]
         item.args['order'] = order_list[order]
 
     payload = json.dumps(item.args)
-    records = httptools.downloadpage(host + '/archivio/get-animes', headers=headers, post=payload).json['records']
-    # support.dbg()
- 
+    records = httptools.downloadpage(host + '/archivio/get-animes', headers=_headers, post=payload).json['records']
+
     for it in records:
         if not it['title']:
             it['title'] = it['title_eng']
 
         lang = support.match(it['title'], patron=r'\(([It][Tt][Aa])\)').match
         title = support.re.sub(r'\s*\([^\)]+\)', '', it['title'])
-	
-        if 'ita' in lang.lower(): 
+
+        if 'ita' in lang.lower():
             language = 'ITA'
         else:
             language = 'Sub-ITA'
@@ -193,23 +214,20 @@ def peliculas(item):
         itm.type = it['type']
         itm.thumbnail = it['imageurl']
         itm.plot = it['plot']
-        itm.url = '{}/anime/{}-{}'.format(item.url, it.get('id'), it.get('slug'))
+        itm.url = '{}/anime/{}-{}'.format(host, it.get('id'), it.get('slug'))
 
         if it['episodes_count'] == 1:
             itm.contentType = 'movie'
             itm.fulltitle = itm.show = itm.contentTitle = title
             itm.contentSerieName = ''
             itm.action = 'findvideos'
-            # itm.scws_id = it['episodes'][0].get('scws_id', '')
-            # itm.video_url = it['episodes'][0].get('link', '')
 
         else:
-            itm.api_ep_url = '{}/info_api/{}/'.format(item.url, it.get('id'))
+            itm.api_ep_url = '{}/info_api/{}/'.format(host, it.get('id'))
             itm.contentType = 'tvshow'
             itm.contentTitle = ''
             itm.fulltitle = itm.show = itm.contentSerieName = title
             itm.action = 'episodios'
-            #itm.episodes = it['episodes'] if 'episodes' in it else it.get('scws_id', '')
 
         itemlist.append(itm)
 
@@ -221,13 +239,18 @@ def peliculas(item):
 
 def episodios(item):
     support.info()
+    _ensure_init()
     itemlist = []
     title = 'Parte' if item.type.lower() == 'movie' else 'Episodio'
     start=1
     limit=120
- 
+
+    # Ensure URLs are absolute regardless of how the item was constructed
+    api_url = item.api_ep_url if (item.api_ep_url or '').startswith('http') else host.rstrip('/') + (item.api_ep_url or '')
+    item_url = item.url if (item.url or '').startswith('http') else host.rstrip('/') + (item.url or '')
+
     while True:
-        full = json.loads(httptools.downloadpage('{}1?start_range={}&end_range={}'.format(item.api_ep_url,start, start + (limit -1)), headers=headers).data)
+        full = json.loads(httptools.downloadpage('{}1?start_range={}&end_range={}'.format(api_url, start, start + (limit -1)), headers=_headers).data)
         count = full['episodes_count']
         episodes = full['episodes']
         for it in episodes:
@@ -242,9 +265,8 @@ def episodios(item):
                        plot=item.plot,
                        action='findvideos',
                        contentType='episode',
-                       url = '{}/{}'.format(item.url, it['id'])
+                       url = '{}/{}'.format(item_url, it['id'])
                       )
-                    #    video_url=it.get('link', ''))
             )
         if count > start:
             start = start + limit
@@ -254,39 +276,12 @@ def episodios(item):
     if inspect.stack(0)[1][3] not in ['find_episodes']:
         autorenumber.start(itemlist, item)
     support.videolibrary(itemlist, item)
-    #support.download(itemlist, item)
 
     return itemlist
 
 
 def findvideos(item):
-    # if item.scws_id:
-    #     from time import time
-    #     from base64 import b64encode
-    #     from hashlib import md5
-    #
-    #     client_ip = support.httptools.downloadpage('http://ip-api.com/json/').json.get('query')
-    #
-    #     expires = int(time() + 172800)
-    #     token = b64encode(md5('{}{} Yc8U6r8KjAKAepEA'.format(expires, client_ip).encode('utf-8')).digest()).decode('utf-8').replace('=', '').replace('+', '-').replace('/', '_')
-    #
-    #     url = 'https://scws.work/master/{}?token={}&expires={}&n=1'.format(item.scws_id, token, expires)
-    #
-    #     itemlist = [item.clone(title=support.config.get_localized_string(30137), url=url, server='directo', action='play')]
-
     from core import channeltools
     itemlist = [item.clone(title=channeltools.get_channel_parameters(item.channel)['title'],
                            url=item.url, server='streamingcommunityws')]
     return support.server(item, itemlist=itemlist, referer=False)
-
-    # return support.server(item, itemlist=itemlist)
-
-#
-# def play(item):
-#     urls = list()
-#     info = support.match(item.url, patron=r'(http.*?rendition=(\d+)[^\s]+)').matches
-#
-#     if info:
-#         for url, res in info:
-#             urls.append(['hls [{}]'.format(res), url])
-#     return urls

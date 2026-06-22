@@ -311,22 +311,28 @@ if __name__ == "__main__":
     # Also run once at startup (in background, non-blocking)
     run_threaded(_update_channels_json, ())
 
-    # ── Addon update notification (works on every platform including Android TV) ──
-    # Kodi's own update toast is sometimes suppressed by skins/settings on TV.
-    # We detect the version change ourselves and show a reliable notification.
+    # ── Addon update notification ──
+    # Parse <news> from addon.xml and show a dialog popup when the version changes.
+    def _show_changelog_popup(ver, news_text):
+        import xbmcgui
+        xbmc.sleep(5000)  # wait for Kodi UI to settle after startup
+        xbmcgui.Dialog().textviewer(
+            u'PrippiStream v%s — Novit\xe0' % ver,
+            news_text
+        )
+
     try:
         current_ver = config.get_addon_version(with_fix=False)
         last_ver    = config.get_setting('last_notified_version', default='')
         if current_ver != last_ver:
-            import xbmcgui
-            xbmcgui.Dialog().notification(
-                config.get_localized_string(20000),                     # "PrippiStream"
-                u'Aggiornato alla versione %s' % current_ver,
-                xbmcgui.NOTIFICATION_INFO,
-                5000,   # 5 s
-                True    # sound=True
-            )
+            import re as _re
+            addon_xml_path = os.path.join(config.get_runtime_path(), 'addon.xml')
+            with open(addon_xml_path, 'r', encoding='utf-8') as _f:
+                _xml = _f.read()
+            _m = _re.search(r'<news>(.*?)</news>', _xml, _re.DOTALL)
+            news_text = _m.group(1).strip() if _m else u'Nuova versione disponibile.'
             config.set_setting('last_notified_version', current_ver)
+            run_threaded(_show_changelog_popup, (current_ver, news_text))
     except Exception:
         logger.error(traceback.format_exc())
 

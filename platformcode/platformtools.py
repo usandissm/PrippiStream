@@ -1129,7 +1129,13 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         #         logger.error('Failed to resolve hostname, fallback to normal dns')
         from core import support
         # support.dbg()
-        if '|' not in mediaurl and item.referer != False and 'youtube' not in mediaurl and not 'mpd' in item.manifest and not 'hls' in item.manifest:
+        # The '|headers' VFS syntax is only understood by Kodi's native CURL file
+        # reader. HLS/MPD streams are played through inputstream.adaptive, which
+        # ignores the pipe (it uses the manifest_headers/stream_headers properties
+        # set below) and would pass the literal '|User-Agent=...' as part of the URL
+        # query — vixcloud and other CDNs then reject it (HTTP 403 Forbidden) and the
+        # manifest fails to parse. So never append the pipe for adaptive streams.
+        if '|' not in mediaurl and item.referer != False and 'youtube' not in mediaurl and not mpd and not hls and not 'mpd' in item.manifest and not 'hls' in item.manifest:
             mediaurl = mediaurl + '|' + urllib.urlencode(headers)
 
         # video information is obtained.
@@ -1158,6 +1164,13 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         except Exception:
             pass
 
+        # inputstream.adaptive forwards these headers verbatim on its manifest and
+        # segment requests but does NOT transparently decompress gzip responses. If
+        # we advertise Accept-Encoding: gzip the CDN (e.g. vixcloud) returns a gzipped
+        # manifest and ISA fails with "Non-compliant HLS manifest, #EXTM3U tag not
+        # found". Strip Accept-Encoding so ISA always receives a plain-text manifest.
+        isa_headers = {k: v for k, v in headers.items() if k.lower() != 'accept-encoding'}
+
         if mpd or item.manifest =='mpd':
             if not install_inputstream():
                 return
@@ -1169,10 +1182,10 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
                 xlistitem.setProperty("inputstream.adaptive.license_key", item.license)
                 xlistitem.setMimeType('application/dash+xml')
             if config.get_platform(True)['num_version'] >= 22:
-                xlistitem.setProperty('inputstream.adaptive.common_headers', urllib.urlencode(headers))
+                xlistitem.setProperty('inputstream.adaptive.common_headers', urllib.urlencode(isa_headers))
             else:
-                xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(headers))
-                xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(headers))
+                xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(isa_headers))
+                xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(isa_headers))
             if _preferred_isa_audio:
                 xlistitem.setProperty('inputstream.adaptive.audio_language', _preferred_isa_audio)
                 logger.info('[ISA] audio_language=%s (mpd)' % _preferred_isa_audio)
@@ -1184,11 +1197,11 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
             xlistitem.setProperty('inputstream.adaptive.manifest_type', 'hls')
             xlistitem.setMimeType('application/x-mpegURL')
             if config.get_platform(True)['num_version'] >= 22:
-                xlistitem.setProperty('inputstream.adaptive.common_headers', urllib.urlencode(headers))
+                xlistitem.setProperty('inputstream.adaptive.common_headers', urllib.urlencode(isa_headers))
             else:
-                xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(headers))
-                xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(headers))
-                xlistitem.setProperty('inputstream.adaptive.license_key', '|' + urllib.urlencode(headers) +'|')
+                xlistitem.setProperty('inputstream.adaptive.stream_headers', urllib.urlencode(isa_headers))
+                xlistitem.setProperty('inputstream.adaptive.manifest_headers', urllib.urlencode(isa_headers))
+                xlistitem.setProperty('inputstream.adaptive.license_key', '|' + urllib.urlencode(isa_headers) +'|')
             if _preferred_isa_audio:
                 xlistitem.setProperty('inputstream.adaptive.audio_language', _preferred_isa_audio)
                 logger.info('[ISA] audio_language=%s (hls)' % _preferred_isa_audio)

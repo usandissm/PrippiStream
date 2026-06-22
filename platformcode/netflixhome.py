@@ -296,6 +296,15 @@ _CW_ROW_LABEL = u'Continua a guardare'
 # show as a bare titled row rather than hiding it like the other empty rows.
 _LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'))
 
+# Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
+# of the home. Sourced live from the animeunity channel (which already handles
+# the domain auto-update via channels.json + the streamingcommunityws resolver).
+# Items carry the '_enr' sentinel so the TMDB enrichment pass skips them — anime
+# titles match TMDB poorly, so we keep AnimeUnity's own native posters.
+_ANIME_ROW_LABEL = u'Anime — Popolari'
+# Module-level cache so re-opening the home reuses the fetched anime titles.
+_anime_row_cache = {'items': None, 'ts': 0}
+
 # CW lookup tables — populated by _build_cw_items(), used by _apply_cw_to_item().
 _cw_lookup_by_tmdb  = {}   # tmdb_id (str) -> CW Item
 _cw_lookup_by_title = {}   # normalized show name -> CW Item
@@ -598,6 +607,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # True once the home has been fully built; stops onInit (which re-fires
         # when _restore_home calls show()) from re-running the whole load.
         self._loaded_once = False
+        # Guard so the dedicated ANIME row is appended exactly once per build.
+        self._anime_appended = False
 
     def onInit(self):
         try:
@@ -816,6 +827,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self._set_loading(100)
             self._render_now(cw_items)
             self._start_bg_tasks(need_4k_fill, enrich=True)
+            # No archive phase on the cache-hit path → append the ANIME row here.
+            self._start_anime_append(cw_items)
             return
 
         # ---- PROGRESSIVE PATH ----
@@ -848,11 +861,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         self._start_bg_tasks(need_4k_fill, enrich=True)
 
         # Fetch archive rows in the background, then append them live.
+        # _bg_load_archive appends the ANIME row last; if SC is unreachable
+        # (no host) there is no archive phase, so append the ANIME row here.
         if self._alive and host:
             t = threading.Thread(target=self._bg_load_archive,
                                   args=(host, homepage_data, main_rows, cw_items))
             t.daemon = True
             t.start()
+        else:
+            self._start_anime_append(cw_items)
 
     def _bg_load_archive(self, host, homepage_data, main_rows, cw_items):
         """Fetch archive rows after the first paint and append them live."""
@@ -867,6 +884,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if full:
                 _cache['data'] = full
                 _cache['ts'] = __import__('time').time()
+            # The ANIME row goes last — append it even when there are no archive rows.
+            self._append_anime_row(cw_items)
             return
 
         # Apply CW progress to the new items.
@@ -900,6 +919,49 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t.daemon = True
             t.start()
         logger.info('[NetflixHome] archive appended: %d rows (from #%d)' % (len(archive_rows), start_idx))
+
+        # Finally, append the ANIME row so it sits at the very bottom of the home.
+        self._append_anime_row(cw_items)
+
+    def _start_anime_append(self, cw_items):
+        """Spawn the ANIME-row append on a background thread (used by the cache-hit
+        fast path, where there is no archive phase to piggy-back on)."""
+        if self._anime_appended or not self._alive:
+            return
+        t = threading.Thread(target=self._append_anime_row, args=(cw_items,))
+        t.daemon = True
+        t.start()
+
+    def _append_anime_row(self, cw_items=None):
+        """Fetch popular AnimeUnity titles and append them as the last home row.
+
+        Runs on a background thread (either the archive thread or the one spawned
+        by _start_anime_append). Guarded so it executes once per build. Network
+        fetch + append are abort-aware and never raise into the caller."""
+        if self._anime_appended or not self._alive:
+            return
+        self._anime_appended = True
+        try:
+            items = _fetch_anime_row()
+            if not items or not self._alive:
+                return
+            if cw_items:
+                for it in items:
+                    _apply_cw_to_item(it)
+            with self._rows_lock:
+                if not self._alive:
+                    return
+                start_idx = len(self.rows_data)
+                self.rows_data.append((_ANIME_ROW_LABEL, items))
+                self._num_rows = min(len(self.rows_data), MAX_ROWS)
+            # Pre-fill the row (it is off-screen at the bottom) so scrolling to it
+            # is instant — mirrors how archive rows are populated after append.
+            if start_idx < self._num_rows:
+                self._populate_single_row(start_idx)
+            logger.info('[NetflixHome] anime row appended at #%d (%d items)'
+                        % (start_idx, len(items)))
+        except Exception as exc:
+            logger.error('[NetflixHome] _append_anime_row: %s' % str(exc)[:160])
 
     def _start_bg_tasks(self, need_4k_fill, enrich=True):
         """Launch the non-blocking post-render background jobs."""
@@ -2008,11 +2070,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 t.daemon = True
                 t.start()
             else:
-                # Non-SC show: open the channel's episode list in Kodi container.
-                # 'return' means pressing Back returns to the Netflix home.
-                xbmc.executebuiltin(
-                    'ActivateWindow(10025,plugin://plugin.video.prippistream/?%s,return)'
-                    % item.tourl())
+                # Non-SC show (e.g. AnimeUnity): play first episode by default,
+                # handled entirely inside PrippiStream (the season/episode picker
+                # in the detail card is used to choose a different episode).
+                t = threading.Thread(target=self._play_episode_direct_nonsc,
+                                     args=(item, 1))
+                t.daemon = True
+                t.start()
         else:
             # Non-SC item or any other action (e.g. 'check' from altadefinizione,
             # cineblog01, etc.): dispatch via RunPlugin → launcher.actions/findvideos
@@ -2086,6 +2150,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 if _show_url and (_is_sc or getattr(item, '_cw_show_url', '')):
                     t_ep = threading.Thread(target=self._play_episode_direct,
                                             args=(item, sel_s, sel_e))
+                    t_ep.daemon = True
+                    t_ep.start()
+                elif getattr(item, 'action', '') == 'episodios' and not _is_sc:
+                    # Non-SC show (e.g. AnimeUnity): play the chosen episode directly.
+                    t_ep = threading.Thread(target=self._play_episode_direct_nonsc,
+                                            args=(item, sel_e))
                     t_ep.daemon = True
                     t_ep.start()
                 else:
@@ -2994,6 +3064,124 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _play_episode_direct: %s' % str(exc))
 
+    def _play_episode_direct_nonsc(self, item, ep_num):
+        """Play episode *ep_num* of a non-SC show directly (no separate Kodi window).
+
+        Mirrors _play_episode_direct (the SC path) but sources the episode list from
+        the channel's own episodios(). Used for AnimeUnity etc. so anime behave
+        exactly like SC series: GUARDA plays the chosen (or default S01E01) episode,
+        all handled inside PrippiStream.
+        """
+        busy = None
+        try:
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                pass
+
+            ep_list = _get_channel_episodes(item)
+
+            if busy:
+                try:
+                    busy.close()
+                except Exception:
+                    pass
+                busy = None
+
+            if not ep_list:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Nessun episodio trovato',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find the requested episode by number; fall back to the first one.
+            ep_item = None
+            ep_idx  = 0
+            for _i, ep in enumerate(ep_list):
+                try:
+                    if int(getattr(ep, 'episode', 0) or 0) == int(ep_num):
+                        ep_item = ep
+                        ep_idx  = _i
+                        break
+                except Exception:
+                    pass
+            if ep_item is None:
+                ep_item = ep_list[0]
+                ep_idx  = 0
+
+            # Carry season/episode + show identity so Continue-Watching tracking and
+            # the "Continua" resume label key match the DetailWindow show item.
+            _show_name = (getattr(item, 'fulltitle', '') or
+                          getattr(item, 'show', '') or
+                          getattr(item, 'contentSerieName', '') or '')
+            try:
+                ep_item.contentSeason = 1
+                ep_item.contentEpisodeNumber = int(getattr(ep_item, 'episode', ep_num) or ep_num)
+            except Exception:
+                pass
+            if _show_name:
+                ep_item.contentSerieName = _show_name
+                ep_item.show = _show_name
+                ep_item.fulltitle = _show_name
+            ep_item._cw_show_url = getattr(item, 'url', '') or ''
+
+            # Build Up Next context so the next episode is offered near the end,
+            # exactly like SC series. The whole episode list is cached, so advancing
+            # chains through the entire season without further API calls.
+            next_ep_ctx = {
+                'nonsc':     True,
+                'show_item': item,
+                'ep_list':   ep_list,
+                'ep_idx':    ep_idx,
+            }
+
+            _pre_play_set_lang(ep_item)
+            xbmc.executebuiltin(
+                'RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
+            t = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                 kwargs={'next_ep_ctx': next_ep_ctx})
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            logger.error('[NetflixHome] _play_episode_direct_nonsc: %s' % str(exc))
+            if busy:
+                try:
+                    busy.close()
+                except Exception:
+                    pass
+
+# ── Non-SC channel episode list (shared by picker + direct play) ──
+
+_nonsc_ep_cache = {}   # show_url -> (timestamp, [episode Items])
+
+def _get_channel_episodes(item):
+    """Fetch (and cache for 5 min) the episode list for a non-SC show *item*.
+
+    Calls the owning channel's episodios() and returns the list of playable
+    episode Items (action='findvideos'). Cached by the show URL so the episode
+    picker and the subsequent direct-play don't fetch the API twice.
+    """
+    url = getattr(item, 'url', '') or ''
+    now = time.time()
+    cached = _nonsc_ep_cache.get(url)
+    if cached and (now - cached[0]) < 300:
+        return cached[1]
+    channel = getattr(item, 'channel', '') or ''
+    ep_list = []
+    try:
+        import importlib
+        ch_module = importlib.import_module('channels.%s' % channel)
+        eps = ch_module.episodios(item)
+        ep_list = [ep for ep in (eps or [])
+                   if getattr(ep, 'action', '') == 'findvideos']
+    except Exception as exc:
+        logger.error('[NonSC-EP] episodios(%s) failed: %s' % (channel, str(exc)))
+    if ep_list and url:
+        _nonsc_ep_cache[url] = (now, ep_list)
+    return ep_list
+
+
 # ── Continue Watching save helper ────────────────────────────────
 
 def _save_cw(item, key, actual_time, total_time, played_url=''):
@@ -3040,9 +3228,45 @@ def _rebuild_ctx_from_cw(item):
     Returns a next_ep_ctx dict, or None on failure / non-episode.
     """
     try:
-        show_url = getattr(item, '_cw_show_url', '') or ''
         if getattr(item, 'contentType', '') != 'episode':
             return None
+
+        # ── Non-SC channels (e.g. AnimeUnity): rebuild the flat episode list ──
+        _channel = getattr(item, 'channel', '') or ''
+        if _channel and _channel != 'streamingcommunity':
+            show_url = getattr(item, '_cw_show_url', '') or ''
+            if not show_url:
+                return None
+            cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+            show_item = item.clone(action='episodios', contentType='tvshow', url=show_url)
+            # AnimeUnity episodios() needs api_ep_url — derive it from the show URL
+            # ( .../anime/{id}-{slug} → .../info_api/{id}/ ) when not already present.
+            if not getattr(item, 'api_ep_url', ''):
+                _m = re.search(r'/anime/(\d+)', show_url)
+                _hm = re.match(r'(https?://[^/]+)', show_url)
+                if _m and _hm:
+                    show_item.api_ep_url = '%s/info_api/%s/' % (_hm.group(1), _m.group(1))
+            ep_list = _get_channel_episodes(show_item)
+            if not ep_list:
+                return None
+            ep_idx = 0
+            for _i, _ep in enumerate(ep_list):
+                try:
+                    if int(getattr(_ep, 'episode', 0) or 0) == cur_e:
+                        ep_idx = _i
+                        break
+                except Exception:
+                    pass
+            logger.info('[UpNext] rebuilt nonsc ctx from CW: ch=%s E%02d, %d eps'
+                        % (_channel, cur_e, len(ep_list)))
+            return {
+                'nonsc':     True,
+                'show_item': show_item,
+                'ep_list':   ep_list,
+                'ep_idx':    ep_idx,
+            }
+
+        show_url = getattr(item, '_cw_show_url', '') or ''
         cur_s = int(getattr(item, 'contentSeason', 0) or 0)
         cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
         url   = getattr(item, 'url', '') or ''
@@ -3195,6 +3419,37 @@ def _build_next_ep(ctx):
       ep_idx     – int index of current episode in `episodes`
       title_id   – str, the SC series title id
     """
+    # ── Non-SC channels (e.g. AnimeUnity): flat episode list, single season ──
+    if ctx.get('nonsc'):
+        try:
+            ep_list   = ctx['ep_list']
+            ei        = int(ctx['ep_idx'])
+            show_item = ctx.get('show_item')
+            if ei + 1 >= len(ep_list):
+                return None, None   # last episode
+            next_ei = ei + 1
+            next_ep = ep_list[next_ei]
+            try:
+                _epn = int(getattr(next_ep, 'episode', 0) or 0) or (next_ei + 1)
+            except Exception:
+                _epn = next_ei + 1
+            ep_item = next_ep.clone()
+            ep_item.contentSeason         = 1
+            ep_item.contentEpisodeNumber  = _epn
+            _name = (getattr(show_item, 'fulltitle', '') or
+                     getattr(show_item, 'show', '') or '')
+            if _name:
+                ep_item.contentSerieName = ep_item.show = ep_item.fulltitle = _name
+            ep_item._cw_show_url    = getattr(show_item, 'url', '') or ''
+            ep_item._upnext_season  = 1
+            ep_item._upnext_episode = _epn
+            ep_item._upnext_name    = re.sub(r'\[/?[^\]]+\]', '',
+                                             getattr(next_ep, 'title', '') or '').strip()
+            return ep_item, dict(ctx, ep_idx=next_ei)
+        except Exception as exc:
+            logger.error('[UpNext] _build_next_ep (nonsc): %s' % str(exc))
+            return None, None
+
     try:
         show_item  = ctx['show_item']
         seasons    = ctx['seasons']
@@ -4063,6 +4318,61 @@ def _row_content_type(label):
     if 'film' in l or 'movie' in l or 'pellicol' in l:
         return 'peliculas'
     return None
+
+
+def _fetch_anime_row(limit=20):
+    """Fetch popular anime titles from AnimeUnity for the dedicated home row.
+
+    Reuses the existing channels/animeunity.py engine (peliculas → /archivio/
+    get-animes with order=Popolarità), so the domain auto-update, CSRF handling
+    and the streamingcommunityws resolver all keep working unchanged.
+
+    Returns a list of ready-to-render Items:
+      - movies  → action='findvideos'  (direct play on click)
+      - series  → action='episodios'   (opens the channel episode list)
+    Each item gets infoLabels['_enr']=1 so the TMDB enrichment pass skips it and
+    AnimeUnity's own posters are preserved. Results are cached for _CACHE_TTL.
+    Never raises — returns [] on any failure so the home is unaffected.
+    """
+    from time import time as _now
+    global _anime_row_cache
+
+    cached = _anime_row_cache.get('items')
+    if cached is not None and (_now() - _anime_row_cache.get('ts', 0)) < _CACHE_TTL:
+        return cached
+
+    items = []
+    try:
+        import channels.animeunity as au
+        from core.item import Item
+        # order is passed explicitly in args; the channel only overrides it from
+        # its per-channel setting when that setting is non-zero (default 0).
+        seed = Item(channel='animeunity', url=au.host,
+                    args={'order': u'Popolarità'}, page=0)
+        raw = au.peliculas(seed) or []
+        for it in raw:
+            act = getattr(it, 'action', '') or ''
+            if act not in ('findvideos', 'episodios'):
+                continue  # drops the trailing "next page" pagination entry
+            if not _extract_item_title(it):
+                continue
+            if not getattr(it, 'channel', ''):
+                it.channel = 'animeunity'
+            # Keep AnimeUnity's native poster — skip TMDB enrichment for this item.
+            try:
+                it.infoLabels['_enr'] = 1
+            except Exception:
+                pass
+            items.append(it)
+            if len(items) >= limit:
+                break
+        logger.info('[NetflixHome anime] popular: %d items' % len(items))
+    except Exception as exc:
+        logger.error('[NetflixHome anime] fetch failed: %s' % str(exc)[:160])
+
+    if items:
+        _anime_row_cache = {'items': items, 'ts': _now()}
+    return items
 
 
 def _fetch_enrich_items(ctype):
@@ -5141,6 +5451,19 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception as exc:
             logger.error('[DetailWindow] _remove_from_cw: %s' % str(exc))
 
+    def _nonsc_show_key(self):
+        """Continue-Watching key for a non-SC show — must match onInit's _ep_key
+        (tv_<tmdb> when available, else tv_<title-slug>) so resume/tracking align."""
+        item = self._item
+        _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+        if _tmdb:
+            return 'tv_%s' % _tmdb
+        _slug = re.sub(r'[^a-z0-9]', '',
+                       (getattr(item, 'show', '') or
+                        getattr(item, 'contentSerieName', '') or
+                        getattr(item, 'fulltitle', '') or '').lower())
+        return ('tv_%s' % _slug) if _slug else ''
+
     def _open_episode_picker(self):
         """Open the EpisodePickerDialog (TMDB-based) and update labels on selection."""
         item = self._item
@@ -5193,19 +5516,40 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 import re as _re2
                 _title = _re2.sub(r'\s+S\d{1,2}E\d{1,4}.*$', '', _title, flags=_re2.IGNORECASE).strip()
                 _title = _re2.sub(r'\s*[-\u2013]\s*Ep\.?\s*\d+.*$', '', _title, flags=_re2.IGNORECASE).strip()
-                if _channel and _channel != 'streamingcommunity':
-                    # Pre-fill the channel search dialog with the show title
-                    if _title:
+                if _channel and _channel != 'streamingcommunity' and \
+                        getattr(item, 'action', '') == 'episodios':
+                    # Channel-based show (e.g. AnimeUnity): open the SAME season/episode
+                    # picker used for SC, but sourcing episodes from the channel itself.
+                    show_key  = self._nonsc_show_key()
+                    ep_info   = (watch_history.get_episode_info(show_key) or {}) if show_key else {}
+                    cw_season = int(ep_info.get('season', 1) or 1)
+                    cw_ep     = int(ep_info.get('episode', 1) or 1)
+                    picker = EpisodePickerDialog(
+                        'EpisodePicker.xml', config.get_runtime_path(),
+                        channel_item=item,
+                        channel=_channel,
+                        show_key=show_key,
+                        cw_season=cw_season,
+                        cw_ep=cw_ep,
+                    )
+                    picker.doModal()
+                    if picker._selected:
+                        sel_s, sel_e, sel_title = picker._selected
+                        self._selected_season  = sel_s
+                        self._selected_episode = sel_e
+                        _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
+                        _ep_lbl  = u'%s' % _ep_code
+                        if sel_title:
+                            _ep_lbl += u'  –  ' + sel_title
                         try:
-                            from core import channeltools as _cht
-                            _cht.set_channel_setting('Last_searched', _title, 'search')
+                            self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
                         except Exception:
                             pass
-                    # Close the DetailWindow first — ActivateWindow is handled in
-                    # _open_detail() after doModal() returns, so it is not blocked
-                    # by the modal dialog.
-                    self._search_item = Item(channel=_channel, action='search', title=_channel)
-                    self._initiate_close(result='open_channel_search')
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(u'GUARDA  %s' % _ep_code)
+                        except Exception:
+                            pass
+                    del picker
                 else:
                     xbmcgui.Dialog().notification(
                         u'PrippiStream',
@@ -5413,14 +5757,83 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
         self._show_key  = kwargs.pop('show_key', '')
         self._cw_season = int(kwargs.pop('cw_season', 1) or 1)
         self._cw_ep     = int(kwargs.pop('cw_ep', 1) or 1)
+        # Channel mode (e.g. AnimeUnity): episodes come from the channel's
+        # episodios() instead of TMDB. AnimeUnity shows are a flat episode list,
+        # presented as a single "Stagione 1".
+        self._channel_item = kwargs.pop('channel_item', None)
+        self._channel      = kwargs.pop('channel', '')
         self._seasons   = []      # list of season dicts from TMDB
         self._cur_season_num = self._cw_season
         self._selected  = None    # (season, episode, title) on confirmation
 
     def onInit(self):
-        t = threading.Thread(target=self._load_seasons)
+        target = self._load_seasons_channel if self._channel_item is not None else self._load_seasons
+        t = threading.Thread(target=target)
         t.daemon = True
         t.start()
+
+    def _load_seasons_channel(self):
+        """Channel mode: single 'Stagione 1' tab + episodes from the channel."""
+        try:
+            li = xbmcgui.ListItem(label=u'Stagione 1')
+            li.setProperty('season_number', '1')
+            try:
+                ctrl = self.getControl(EP_SEASON_LIST)
+                ctrl.addItems([li])
+                ctrl.selectItem(0)
+            except Exception as exc:
+                logger.error('[EpisodePicker] channel season tab: %s' % str(exc))
+            self._cur_season_num = 1
+            self._load_episodes_channel()
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_seasons_channel: %s' % str(exc))
+
+    def _load_episodes_channel(self):
+        """Populate the episode list from the channel's episodios() (single season)."""
+        try:
+            ep_list = _get_channel_episodes(self._channel_item)
+            watched = set(
+                tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
+                if len(w) == 2
+            ) if self._show_key else set()
+            items   = []
+            sel_pos = 0
+            for ep in ep_list:
+                try:
+                    ep_num = int(getattr(ep, 'episode', 0) or 0)
+                except Exception:
+                    ep_num = 0
+                # Strip BBCode/typo markup from the channel's episode title
+                ep_title = re.sub(r'\[/?[^\]]+\]', '', getattr(ep, 'title', '') or '').strip()
+                ep_code  = u'S01E%02d' % ep_num
+                is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
+                if is_current:
+                    label = u'[B]%s[/B]' % ep_code if not ep_title else u'[B]%s  –  %s[/B]' % (ep_code, ep_title)
+                    sel_pos = len(items)
+                elif (1, ep_num) in watched:
+                    label = (u'[COLOR FF22C55E]✓[/COLOR] '
+                             u'[COLOR FF888888]%s[/COLOR]' % ep_code)
+                else:
+                    label = ep_code if not ep_title else u'%s  –  %s' % (ep_code, ep_title)
+                _li = xbmcgui.ListItem(label=label, offscreen=True)
+                if getattr(ep, 'thumbnail', ''):
+                    _li.setArt({'thumb': ep.thumbnail})
+                _li.setProperty('ep_num',     str(ep_num))
+                _li.setProperty('season_num', '1')
+                _li.setProperty('ep_title',   ep_title)
+                _li.setProperty('overview',   (getattr(ep, 'plot', '') or '')[:200])
+                _li.setProperty('runtime',    '')
+                items.append(_li)
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                ctrl.reset()
+                ctrl.addItems(items)
+                if items:
+                    ctrl.selectItem(sel_pos)
+            except Exception as exc:
+                logger.error('[EpisodePicker] channel ep list populate: %s' % str(exc))
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_episodes_channel: %s' % str(exc))
 
     def _load_seasons(self):
         try:
