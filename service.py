@@ -316,7 +316,7 @@ if __name__ == "__main__":
     def _show_changelog_popup(ver, news_text):
         import xbmcgui
         xbmc.sleep(5000)  # wait for Kodi UI to settle after startup
-        xbmcgui.Dialog().textviewer(
+        xbmcgui.Dialog().ok(
             u'PrippiStream v%s — Novit\xe0' % ver,
             news_text
         )

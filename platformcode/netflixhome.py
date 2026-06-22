@@ -2144,16 +2144,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 # User picked a specific episode in the EpisodePicker.
                 # _play_episode_direct uses SC's JSON API — only for SC items.
                 # CW episode items carry _cw_show_url (always SC).
-                _show_url = (getattr(item, '_cw_show_url', '') or
-                             (item.url if getattr(item, 'action', '') == 'episodios' else ''))
                 _is_sc = getattr(item, 'channel', '') == 'streamingcommunity'
-                if _show_url and (_is_sc or getattr(item, '_cw_show_url', '')):
+                _item_action = getattr(item, 'action', '') or ''
+                _cw_show_url = getattr(item, '_cw_show_url', '') or ''
+                if _is_sc:
                     t_ep = threading.Thread(target=self._play_episode_direct,
                                             args=(item, sel_s, sel_e))
                     t_ep.daemon = True
                     t_ep.start()
-                elif getattr(item, 'action', '') == 'episodios' and not _is_sc:
-                    # Non-SC show (e.g. AnimeUnity): play the chosen episode directly.
+                elif _item_action == 'episodios' or _cw_show_url:
+                    # Non-SC show (e.g. AnimeUnity), including CW items (action='findvideos'
+                    # but _cw_show_url is set).
                     t_ep = threading.Thread(target=self._play_episode_direct_nonsc,
                                             args=(item, sel_e))
                     t_ep.daemon = True
@@ -3080,7 +3081,23 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
 
-            ep_list = _get_channel_episodes(item)
+            # CW episode items have url=episode-URL and _cw_show_url=show-URL.
+            # episodios() uses item.url as the base for building episode URLs,
+            # so we must pass the show-level item, not the episode item.
+            _show_url = getattr(item, '_cw_show_url', '') or ''
+            if _show_url and getattr(item, 'action', '') != 'episodios':
+                import re as _re_sh2
+                _show_item = item.clone(url=_show_url, action='episodios')
+                if not getattr(_show_item, 'api_ep_url', ''):
+                    _aid = _re_sh2.search(r'/anime/(\d+)-', _show_url)
+                    _hst = _re_sh2.match(r'(https?://[^/]+)', _show_url)
+                    if _aid and _hst:
+                        _show_item.api_ep_url = '%s/info_api/%s/' % (
+                            _hst.group(1), _aid.group(1))
+            else:
+                _show_item = item
+
+            ep_list = _get_channel_episodes(_show_item)
 
             if busy:
                 try:
@@ -5516,17 +5533,33 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 import re as _re2
                 _title = _re2.sub(r'\s+S\d{1,2}E\d{1,4}.*$', '', _title, flags=_re2.IGNORECASE).strip()
                 _title = _re2.sub(r'\s*[-\u2013]\s*Ep\.?\s*\d+.*$', '', _title, flags=_re2.IGNORECASE).strip()
+                _item_action = getattr(item, 'action', '') or ''
+                _cw_show_url = getattr(item, '_cw_show_url', '') or ''
                 if _channel and _channel != 'streamingcommunity' and \
-                        getattr(item, 'action', '') == 'episodios':
+                        (_item_action == 'episodios' or _cw_show_url):
                     # Channel-based show (e.g. AnimeUnity): open the SAME season/episode
                     # picker used for SC, but sourcing episodes from the channel itself.
+                    # CW items have action='findvideos' and url=episode-URL; restore the
+                    # show-level item so _get_channel_episodes gets the correct show URL.
+                    import re as _re_sh
+                    if _cw_show_url and _item_action != 'episodios':
+                        show_item = item.clone(url=_cw_show_url, action='episodios')
+                        # Rebuild api_ep_url if missing (AnimeUnity: /anime/{id}-{slug})
+                        if not getattr(show_item, 'api_ep_url', ''):
+                            _aid = _re_sh.search(r'/anime/(\d+)-', _cw_show_url)
+                            _host = _re_sh.match(r'(https?://[^/]+)', _cw_show_url)
+                            if _aid and _host:
+                                show_item.api_ep_url = '%s/info_api/%s/' % (
+                                    _host.group(1), _aid.group(1))
+                    else:
+                        show_item = item
                     show_key  = self._nonsc_show_key()
                     ep_info   = (watch_history.get_episode_info(show_key) or {}) if show_key else {}
                     cw_season = int(ep_info.get('season', 1) or 1)
                     cw_ep     = int(ep_info.get('episode', 1) or 1)
                     picker = EpisodePickerDialog(
                         'EpisodePicker.xml', config.get_runtime_path(),
-                        channel_item=item,
+                        channel_item=show_item,
                         channel=_channel,
                         show_key=show_key,
                         cw_season=cw_season,
