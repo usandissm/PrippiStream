@@ -1479,6 +1479,16 @@ def get_video_seleccionado(item, seleccion, video_urls, autoplay=False):
     if 'hls' in video_urls[seleccion][0]:
         hls = True
 
+    # Safety net: a resolved URL that points at an image (e.g. a host returning
+    # a CDN poster/thumbnail instead of the real stream) is NOT playable — Kodi
+    # opens it, hits EOF immediately and "nothing plays". Treat it as no media so
+    # the autoplay fallback moves on to the next mirror/server.
+    if mediaurl:
+        _IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+        if mediaurl.split('|', 1)[0].split('?', 1)[0].lower().endswith(_IMAGE_EXT):
+            logger.info("Discarding image URL as non-playable: " + mediaurl)
+            mediaurl = ""
+
     # If there is no mediaurl it is because the video is not there :)
     logger.debug("mediaurl=" + mediaurl)
     if mediaurl == "" and not autoplay:

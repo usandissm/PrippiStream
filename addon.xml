@@ -3,7 +3,15 @@
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
-    <import addon="plugin.video.youtube" optional="true"/>
+    <!-- inputstream stack declared explicitly so Kodi installs+enables it WITH
+         the addon, instead of relying on it being pulled transitively through the
+         (optional) youtube import. Without this, a fresh install that skips the
+         optional youtube branch ends up without ISA/helper and re-prompts to
+         download them on first playback. -->
+    <import addon="inputstream.adaptive"/>
+    <import addon="inputstream.ffmpegdirect"/>
+    <import addon="script.module.inputstreamhelper"/>
+    <import addon="plugin.video.youtube"/>
     <import addon="metadata.themoviedb.org" optional="true"/>
     <import addon="metadata.tvshows.themoviedb.org" optional="true"/>
     <!-- <import addon="metadata.tvdb.com"/> -->

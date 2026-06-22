@@ -96,16 +96,23 @@ def get_video_url(page_url, premium=False, user="", password="", video_password=
         logger.error('mixdrop.get_video_url jsunpack error: %s' % e)
         return video_urls
 
-    # mixdrop like to change var name very often, hoping that will catch every
-    list_vars = scrapertools.find_multiple_matches(unpacked, r'MDCore\.\w+\s*=\s*"([^"]+)"')
-    media_url = ''
-    for var in list_vars:
-        if '.mp4' in var or var.startswith('//'):
-            media_url = var
-            break
+    # The real stream is MDCore.wurl; MDCore.poster is the thumbnail (.jpg).
+    # Prefer wurl explicitly so we never hand Kodi the poster image.
+    media_url = scrapertools.find_single_match(unpacked, r'MDCore\.wurl\s*=\s*"([^"]+)"')
+
+    # Fallback heuristic: mixdrop renames vars often, so scan them all — but
+    # skip poster/thumbnail images, otherwise '//....jpg' gets picked first.
+    if not media_url:
+        list_vars = scrapertools.find_multiple_matches(unpacked, r'MDCore\.\w+\s*=\s*"([^"]+)"')
+        for var in list_vars:
+            if 'thumb' in var or var.rsplit('?', 1)[0].endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                continue
+            if '.mp4' in var or var.startswith('//'):
+                media_url = var
+                break
 
     if not media_url:
-        logger.info('mixdrop.get_video_url: MDCore vars found but no video URL: %s' % list_vars)
+        logger.info('mixdrop.get_video_url: MDCore vars found but no video URL')
         return video_urls
 
     if not media_url.startswith('http'):

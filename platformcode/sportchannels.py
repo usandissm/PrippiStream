@@ -502,19 +502,29 @@ def _sky_channel_valid(par):
 
 
 def _freeshot_ok(code):
-    """True if the freeshot page currently exposes a stream token.
+    """True only if the freeshot stream actually delivers a manifest right now.
 
-    NOTE: a token doesn't guarantee ISA can play the lovetier.bz stream (it can
-    return a valid-looking m3u8 that ISA still rejects).  We deliberately do NOT
-    fetch the m3u8 here — that doubled the probe time and over-rejected without
-    actually predicting ISA's behaviour.  Channels that pass this check but fail
-    to play are caught by the deny-list (mark_dead) on their first failed click."""
-    page = _cf_get("https://popcdn.day/player/" + code,
-                   headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                   timeout=10)
-    ok = bool(page and re.search(r'currentToken:\s*"(.*?)"', page))
-    logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else ('no token' if page else 'no page')))
-    return ok
+    A token alone is NOT enough: the lovetier.bz CDN routinely hands out a valid
+    token while serving no segments, so ISA opens the m3u8, stalls and fails on
+    click (curl timeout 28).  We therefore resolve the full URL and verify the CDN
+    returns a real HLS manifest (#EXTM3U) within a short timeout — dead channels
+    stay off the row instead of showing as online and failing on click.  Costs one
+    extra round-trip per channel, but the probe runs all channels in parallel."""
+    url = resolve_freeshot(code)
+    if not url:
+        logger.debug('[Sport] freeshot_ok %s: no token/url' % code)
+        return False
+    try:
+        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA,
+                                             'Referer': _FREESHOT_REFERER}), timeout=6)
+        head = resp.read(64) or b''
+        resp.close()
+        ok = b'#EXTM3U' in head
+        logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else 'CDN served no manifest'))
+        return ok
+    except Exception as exc:
+        logger.debug('[Sport] freeshot_ok %s: CDN fetch failed (%s)' % (code, exc))
+        return False
 
 
 def _iptvorg_ok(display_name):

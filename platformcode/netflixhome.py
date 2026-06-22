@@ -34,28 +34,21 @@ _VALID_ACTIONS = frozenset(['findvideos', 'episodios', 'check', 'findvideos_find
 # Sources used to enrich each SC row by content type.
 # Items are fetched ONCE per type (cached); per-row dedup runs at enrichment time.
 # SC items always come first; extra items are appended only if not already in that row.
+#
+# Trimmed to the sources that actually return items AND resolve at playback. The
+# rest were either returning 0 items (dead/changed host: filmpertutti, filmstreaming,
+# piratestreaming, mondoserietv, casacinema, cinemalibero, dinostreaming, eurostreaming)
+# or raising import/param errors (ilgeniodellostreaming, italiaserie, guardaserieclick).
+# Keeping only working sources avoids polluting the carousels with unplayable items
+# and removes per-source thread+timeout cost on every home open. Re-add a channel here
+# once its newest()/host is fixed.
 _ENRICH_SOURCE_MAP = {
     'peliculas': [
         ('cineblog01',            'peliculas'),
         ('altadefinizione01',     'peliculas'),
-        ('filmpertutti',          'peliculas'),
-        ('filmstreaming',         'peliculas'),
-        ('ilgeniodellostreaming', 'peliculas'),
-        ('piratestreaming',       'peliculas'),
-        ('mondoserietv',          'peliculas'),
-        ('casacinema',            'peliculas'),
-        ('cinemalibero',          'peliculas'),
-        ('dinostreaming',         'peliculas'),
     ],
     'series': [
-        ('eurostreaming',         'series'),
-        ('ilgeniodellostreaming', 'series'),
-        ('mondoserietv',          'series'),
-        ('piratestreaming',       'series'),
         ('cineblog01',            'series'),
-        ('italiaserie',           'series'),
-        ('guardaserieclick',      'series'),
-        ('filmstreaming',         'series'),
     ],
 }
 # anime sources removed — carousel not yet implemented
