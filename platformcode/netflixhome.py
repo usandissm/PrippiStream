@@ -4380,6 +4380,19 @@ def _fetch_anime_row(limit=20):
                 it.infoLabels['_enr'] = 1
             except Exception:
                 pass
+            # AnimeUnity lists ITA (dubbed) and Sub-ITA versions of the same show
+            # as separate entries with the SAME clean title (e.g. two "One Piece"
+            # with different posters). peliculas() puts the language only in
+            # item.title, but the home renders item.fulltitle/show — so both look
+            # identical. Tag the display title with the language so they are
+            # distinguishable (and CW tracks them separately).
+            _lang = getattr(it, 'contentLanguage', '') or ''
+            if _lang:
+                _suffix = u' [%s]' % _lang
+                for _attr in ('fulltitle', 'show', 'contentSerieName', 'contentTitle'):
+                    _val = getattr(it, _attr, '') or ''
+                    if _val and _suffix not in _val:
+                        setattr(it, _attr, _val + _suffix)
             items.append(it)
             if len(items) >= limit:
                 break
