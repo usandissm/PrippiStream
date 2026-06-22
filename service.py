@@ -245,7 +245,7 @@ if __name__ == "__main__":
     # can trigger an immediate install while RunAddon is still initialising the addon,
     # causing Kodi to show the "Add-on required: PrippiStream" popup.
     def _deferred_update_repos():
-        xbmc.sleep(30000)
+        xbmc.sleep(20000)
         xbmc.executebuiltin('UpdateAddonRepos')
     run_threaded(_deferred_update_repos, ())
 
