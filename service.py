@@ -240,6 +240,10 @@ if __name__ == "__main__":
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 
+    # Check for addon updates AFTER launching the plugin so there is no race
+    # condition between the repo download and the RunAddon call above.
+    xbmc.executebuiltin('UpdateAddonRepos')
+
     # port old db to new
     old_db_name = filetools.join(config.get_data_path(), "prippistream_db.sqlite")
     if filetools.isfile(old_db_name):
