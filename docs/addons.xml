@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.0.82" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.1.0" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -12,6 +12,11 @@
     <import addon="inputstream.adaptive"/>
     <import addon="inputstream.ffmpegdirect"/>
     <import addon="script.module.inputstreamhelper"/>
+    <!-- Optional fast AES. NOTE: script.module.pycryptodome is NOT in the
+         official Kodi repo, so it must stay optional (a hard require would make
+         the addon unresolvable). Offline-download AES uses Kodi's bundled
+         OpenSSL via ctypes (core/native_aes.py); pyaes is the final fallback. -->
+    <import addon="script.module.pycryptodome" optional="true"/>
     <import addon="plugin.video.youtube"/>
     <import addon="metadata.themoviedb.org" optional="true"/>
     <import addon="metadata.tvshows.themoviedb.org" optional="true"/>
@@ -31,8 +36,9 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Bug Fix
-- Aggiunta la sezione Anime in fondo alla schermata principale
+      <news>- Bug fix.
+- Upgrade vari.
+- Aggiunta della funzione Download offline: scarica film ed episodi e guardali senza connessione dalla sezione "I miei download", con scelta della qualità, selezione multipla degli episodi e avanzamento rapido durante la riproduzione.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]

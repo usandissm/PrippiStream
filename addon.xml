@@ -35,9 +35,9 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- NOVITA' v2.0: Download offline! Scarica film ed episodi (pulsante SCARICA nella scheda) e guardali senza connessione dalla sezione "I miei download".
-- Scelta della qualita' (risoluzione) ad ogni download e selezione multipla degli episodi per le serie.
-- File protetti e legati al dispositivo (cifratura AES o XOR selezionabile nelle impostazioni Download).
+      <news>- Bug fix.
+- Upgrade vari.
+- Aggiunta della funzione Download offline: scarica film ed episodi e guardali senza connessione dalla sezione "I miei download", con scelta della qualità, selezione multipla degli episodi e avanzamento rapido durante la riproduzione.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
