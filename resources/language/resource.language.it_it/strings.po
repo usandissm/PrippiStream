@@ -6556,3 +6556,19 @@ msgstr "Cerca con PrippiStream"
 msgctxt "#90006"
 msgid "Elementum is already installed"
 msgstr "Elementum è già installato"
+
+msgctxt "#32100"
+msgid "Download protection"
+msgstr "Protezione file scaricati"
+
+msgctxt "#32101"
+msgid "Parallel downloads"
+msgstr "Download simultanei"
+
+msgctxt "#32102"
+msgid "Download subtitles"
+msgstr "Scarica sottotitoli (se disponibili)"
+
+msgctxt "#32103"
+msgid "Show downloads row"
+msgstr "Mostra sezione 'I miei download'"

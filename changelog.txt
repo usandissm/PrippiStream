@@ -1,0 +1,8 @@
+## Prossima
+- Bug fix.
+- Upgrade vari.
+- Aggiunta della funzione Download offline: scarica film ed episodi e guardali senza connessione dalla sezione "I miei download", con scelta della qualità, selezione multipla degli episodi e avanzamento rapido durante la riproduzione.
+
+## 1.0.80
+- Aggiunta la sezione Anime in fondo alla schermata principale.
+- Vari bug fix.

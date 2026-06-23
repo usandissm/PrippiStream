@@ -312,27 +312,32 @@ if __name__ == "__main__":
     run_threaded(_update_channels_json, ())
 
     # ── Addon update notification ──
-    # Parse <news> from addon.xml and show a dialog popup when the version changes.
-    def _show_changelog_popup(ver, news_text):
+    # Show the CUMULATIVE release notes (every version the user hasn't seen yet,
+    # not just the latest) in a scrollable viewer when the version changes. Notes
+    # live in changelog.txt; the popup appears only when there is something new,
+    # so routine patch bumps without notes don't nag the user.
+    def _show_changelog_popup(news_text):
         import xbmcgui
         xbmc.sleep(5000)  # wait for Kodi UI to settle after startup
-        xbmcgui.Dialog().ok(
-            u'PrippiStream v%s — Novit\xe0' % ver,
-            news_text
-        )
+        xbmcgui.Dialog().textviewer(u'PrippiStream — Novit\xe0', news_text)
 
     try:
+        from platformcode import changelog as _changelog
         current_ver = config.get_addon_version(with_fix=False)
         last_ver    = config.get_setting('last_notified_version', default='')
         if current_ver != last_ver:
-            import re as _re
-            addon_xml_path = os.path.join(config.get_runtime_path(), 'addon.xml')
-            with open(addon_xml_path, 'r', encoding='utf-8') as _f:
-                _xml = _f.read()
-            _m = _re.search(r'<news>(.*?)</news>', _xml, _re.DOTALL)
-            news_text = _m.group(1).strip() if _m else u'Nuova versione disponibile.'
+            _cl_path = os.path.join(config.get_runtime_path(), 'changelog.txt')
+            _cl_text = ''
+            try:
+                with open(_cl_path, 'r', encoding='utf-8') as _f:
+                    _cl_text = _f.read()
+            except Exception:
+                pass
+            notes = _changelog.pending_notes(last_ver, current_ver, _cl_text)
+            # Persist regardless so the popup never repeats for the same version.
             config.set_setting('last_notified_version', current_ver)
-            run_threaded(_show_changelog_popup, (current_ver, news_text))
+            if notes:
+                run_threaded(_show_changelog_popup, (notes,))
     except Exception:
         logger.error(traceback.format_exc())
 

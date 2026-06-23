@@ -291,6 +291,11 @@ def _pre_play_set_lang(item):
 # Label for the Continue Watching row (must match what _refresh_cw_row checks).
 _CW_ROW_LABEL = u'Continua a guardare'
 
+# Label for the offline Downloads row ("I miei download"). Items are sourced
+# locally from downloads_db and play from disk (decrypted on the fly by the
+# local stream server when protected) — never from the network.
+_DL_ROW_LABEL = u'I miei download'
+
 # Live-channel row labels (SKY, Sport Live).  These keep their title visible even
 # when empty — an empty live row means "no channel online right now", which we
 # show as a bare titled row rather than hiding it like the other empty rows.
@@ -353,6 +358,7 @@ DW_BTN_PLAY      = 210
 DW_BTN_AUDIO_SUB = 211   # formerly LIST — now opens audio/subtitle picker
 DW_BTN_CLOSE     = 212
 DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
+DW_BTN_DOWNLOAD  = 214   # "SCARICA" — offline download (VOD only; SC/AnimeUnity)
 DW_CAST_PANEL    = 220   # horizontal cast cards panel
 DW_CAST_HDR      = 221   # "CAST" section header label
 DW_EP_INFO       = 223   # "Continua S02E05" episode info label (tvshow only)
@@ -374,6 +380,7 @@ ACTION_SELECT_ITEM  = 7
 ACTION_WHEEL_UP     = 104
 ACTION_WHEEL_DOWN   = 105
 ACTION_MOUSE_MOVE   = 107
+ACTION_CONTEXT_MENU = 117
 
 # ── Search window control IDs ────────────────────────────────
 SEARCH_BTN_HOME    = 109   # search button in NetflixHome top bar
@@ -568,6 +575,75 @@ def _build_cw_items():
     return items
 
 
+def _build_dl_items():
+    """Build Items for the offline Downloads row from downloads_db.
+
+    Movies become one tile each; episodes are grouped into a single tile per
+    series (clicking it lists the downloaded episodes). Items carry is_download
+    so the home plays them from disk instead of opening the detail card, and the
+    '_enr' sentinel so TMDB enrichment leaves their local posters alone.
+    """
+    from platformcode import downloads_db
+    try:
+        entries = downloads_db.get_all()
+    except Exception as exc:
+        logger.error('[DL] get_all: %s' % str(exc))
+        return []
+    if not entries:
+        return []
+
+    items = []
+    shows = {}   # show_key -> aggregate dict
+    for e in entries:
+        if e.get('type') == 'episode' and e.get('show_key'):
+            sk = e['show_key']
+            agg = shows.get(sk)
+            if agg is None:
+                agg = {'title': e.get('show_title', '') or 'Serie',
+                       'thumb': e.get('thumbnail', ''),
+                       'fanart': e.get('fanart', ''),
+                       'count': 0, 'done': 0, 'ts': 0}
+                shows[sk] = agg
+            agg['count'] += 1
+            if e.get('status') == 'done':
+                agg['done'] += 1
+            agg['ts'] = max(agg['ts'], e.get('timestamp', 0) or 0)
+            if not agg['thumb'] and e.get('thumbnail'):
+                agg['thumb'] = e['thumbnail']
+            continue
+        # Movie tile
+        it = Item(contentType='movie')
+        label = e.get('title', '') or 'Film'
+        if e.get('status') != 'done':
+            label = u'%s  (%d%%)' % (label, int(e.get('progress', 0) or 0))
+        it.title = it.fulltitle = label
+        it.thumbnail = e.get('thumbnail', '') or ''
+        it.fanart = e.get('fanart', '') or it.thumbnail
+        it.is_download = True
+        it.dl_db_key = e.get('key', '')
+        it.dl_file_path = e.get('file_path', '') or ''
+        it.dl_protection = e.get('protection', 'none')
+        it.dl_status = e.get('status', '')
+        it._dl_ts = e.get('timestamp', 0) or 0
+        it.infoLabels['_enr'] = 1
+        items.append(it)
+
+    for sk, agg in shows.items():
+        it = Item(contentType='tvshow')
+        it.title = it.fulltitle = u'%s  (%d ep.)' % (agg['title'], agg['count'])
+        it.thumbnail = agg['thumb'] or ''
+        it.fanart = agg['fanart'] or it.thumbnail
+        it.is_download = True
+        it.dl_show_key = sk
+        it.dl_show_title = agg['title']
+        it._dl_ts = agg['ts']
+        it.infoLabels['_enr'] = 1
+        items.append(it)
+
+    items.sort(key=lambda x: getattr(x, '_dl_ts', 0), reverse=True)
+    return items
+
+
 class NetflixHomeWindow(xbmcgui.WindowXML):
 
     def __init__(self, *args, **kwargs):
@@ -672,6 +748,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
 
+        # Offline Downloads row — reserved right after CW so it always sits at a
+        # fixed, easy-to-find position. When empty it auto-collapses (hidden);
+        # _refresh_dl_row() reveals/updates it in place as downloads arrive.
+        try:
+            if config.get_setting('show_downloads_row') is not False:
+                self.rows_data.append((_DL_ROW_LABEL, _build_dl_items()))
+        except Exception as exc:
+            logger.error('[NetflixHome] downloads row build: %s' % str(exc))
+
         # Live-channel rows (Sport Live, then SKY) — right after CW.  Items play
         # directly on click (handled in onClick), never opening DetailWindow.
         for _row_key in ('sky', 'sport'):
@@ -703,7 +788,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
         # Sync CW progress into every non-CW row (skip the live-channel rows —
         # live channels have no watch progress).
-        _live_labels = (_CW_ROW_LABEL, sportchannels.row_label('sport'),
+        _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
                         sportchannels.row_label('sky'))
         if cw_items:
             for row_label, row_items in self.rows_data:
@@ -988,6 +1073,21 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t4k.daemon = True
             t4k.start()
 
+        # Resume any downloads interrupted by a previous session.
+        if self._alive:
+            tdl = threading.Thread(target=self._resume_downloads)
+            tdl.daemon = True
+            tdl.start()
+
+    def _resume_downloads(self):
+        try:
+            from platformcode import download_manager
+            mgr = download_manager.get_manager()
+            mgr.on_change = self._refresh_dl_row
+            mgr.resume_pending()
+        except Exception as exc:
+            logger.error('[NetflixHome] _resume_downloads: %s' % str(exc))
+
     def _enrich_visible_rows_sync(self, progress_lo=60, progress_hi=98, max_rows=8):
         """Enrich the first visible SC rows SYNCHRONOUSLY (before the first paint).
 
@@ -1047,6 +1147,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     continue
                 if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
                     return
+                # Yield to active downloads: heavy TMDB enrichment (many requests
+                # + large JSON parsing) would starve the download's worker/writer
+                # threads of the Python GIL. Pause until downloads finish.
+                while _dl_active() and self._alive and not mon.abortRequested():
+                    xbmc.sleep(1500)
                 if not items:
                     continue
                 # Skip CW row only — 4K is now enriched here like SC rows.
@@ -1306,6 +1411,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         """
         try:
             _monitor_bg = xbmc.Monitor()
+
+            # Yield to active downloads before doing GIL-heavy enrichment fetches.
+            while _dl_active() and self._alive and not _monitor_bg.abortRequested():
+                xbmc.sleep(1500)
 
             # Step 1: collect which content types are needed across all SC rows
             needed_types = set()
@@ -1725,6 +1834,21 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self.close()
             return
 
+        # Context menu (C / long-press) on a download tile → offer to delete it.
+        if aid == ACTION_CONTEXT_MENU:
+            try:
+                i = self._row_from_fid(self.getFocusId())
+                if i >= 0 and i < len(self.rows_data) and \
+                        self.rows_data[i][0] == _DL_ROW_LABEL:
+                    pos = int(self.getControl(
+                        ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+                    items = self.rows_data[i][1]
+                    if 0 <= pos < len(items):
+                        self._delete_download_item(items[pos])
+            except Exception as exc:
+                logger.error('[NetflixHome] context-menu delete: %s' % str(exc))
+            return
+
         # Mouse wheel → navigate between rows
         if aid == ACTION_WHEEL_UP:
             new_row = max(0, self._last_focused_row - 1)
@@ -1976,6 +2100,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         _it = items[item_idx]
                         if getattr(_it, 'is_live_channel', False):
                             self._play_channel_stream(_it, i, item_idx)
+                        elif getattr(_it, 'is_download', False):
+                            self._play_download(_it)
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
@@ -2012,6 +2138,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         _it = self.rows_data[i][1][pos]
                         if getattr(_it, 'is_live_channel', False):
                             self._play_channel_stream(_it, i, pos)
+                        elif getattr(_it, 'is_download', False):
+                            self._play_download(_it)
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
@@ -2106,6 +2234,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             sel_s       = getattr(win, '_selected_season',  None)
             sel_e       = getattr(win, '_selected_episode', None)
             search_item = getattr(win, '_search_item', None)
+            dl_eps      = getattr(win, '_download_eps', None)
             del win
         finally:
             self._bg_ui_pause.set()
@@ -2171,6 +2300,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         elif result == 'removed_cw':
             # Item was removed from CW — refresh the CW row immediately
             self._refresh_cw_row()
+        elif result == 'download':
+            # Offline download: probe qualities, ask resolution, enqueue. Runs on
+            # a background thread so the GUI stays responsive (resolve is network).
+            t_dl = threading.Thread(target=self._start_download, args=(item, dl_eps))
+            t_dl.daemon = True
+            t_dl.start()
 
     def _enforce_scroll_pos(self, wl_id, pos):
         """Background thread: hammer selectItem every 80ms for 0.4s to defeat skin scroll animations."""
@@ -2714,6 +2849,186 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _refresh_cw_row: %s' % str(exc))
 
+    # ── Offline downloads: row refresh + local playback + removal ────────────
+
+    def _refresh_dl_row(self):
+        """Rebuild the Downloads row in place (it is reserved after CW at load)."""
+        try:
+            dl_items = _build_dl_items()
+            idx = None
+            with self._rows_lock:
+                for i, (lbl, _items) in enumerate(self.rows_data):
+                    if lbl == _DL_ROW_LABEL:
+                        idx = i
+                        break
+                if idx is not None:
+                    self.rows_data[idx] = (_DL_ROW_LABEL, dl_items)
+                elif dl_items:
+                    idx = len(self.rows_data)
+                    self.rows_data.append((_DL_ROW_LABEL, dl_items))
+                    self._num_rows = min(len(self.rows_data), MAX_ROWS)
+            if idx is None or idx >= self._num_rows:
+                return
+            try:
+                self.getControl(ROW_WRAPLIST_BASE + idx * ROW_STEP).reset()
+                xbmc.sleep(60)
+            except Exception:
+                pass
+            self._populated.discard(idx)
+            self._populate_single_row(idx)
+            # Reveal the row group if it now has items (it collapses while empty).
+            if dl_items:
+                try:
+                    self.getControl(ROW_GROUP_BASE + idx * ROW_STEP).setVisible(True)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[NetflixHome] _refresh_dl_row: %s' % str(exc))
+
+    def _play_download(self, item):
+        """Play a downloaded item from disk. Movies play directly; series tiles
+        open a list of their downloaded episodes."""
+        try:
+            if getattr(item, 'dl_show_key', ''):
+                self._play_download_series(item)
+                return
+            # Re-read live state from the DB: the home-row item is cached and can
+            # predate completion (a download that just finished would otherwise
+            # still show "in corso" and offer to cancel it).
+            from platformcode import downloads_db
+            key = getattr(item, 'dl_db_key', '')
+            entry = (downloads_db.get(key) if key else None) or {}
+            status = entry.get('status') or getattr(item, 'dl_status', '') or ''
+            if status != 'done':
+                # Download still running/queued → offer to cancel it.
+                if xbmcgui.Dialog().yesno(
+                        u'PrippiStream',
+                        u'Download in corso. Vuoi annullarlo ed eliminarlo?'):
+                    self._cancel_download(key)
+                return
+            self._play_local_file(
+                entry.get('file_path') or getattr(item, 'dl_file_path', ''),
+                entry.get('protection') or getattr(item, 'dl_protection', 'none'),
+                key,
+                getattr(item, 'fulltitle', '') or getattr(item, 'title', ''))
+        except Exception as exc:
+            logger.error('[NetflixHome] _play_download: %s' % str(exc))
+
+    def _play_download_series(self, item):
+        from platformcode import downloads_db
+        show_key = getattr(item, 'dl_show_key', '')
+        eps = downloads_db.get_by_show(show_key)
+        if not eps:
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Nessun episodio scaricato',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+            self._refresh_dl_row()
+            return
+        labels = []
+        for e in eps:
+            code = u'S%02dE%02d' % (int(e.get('season', 0) or 0),
+                                    int(e.get('episode', 0) or 0))
+            tag = (u'✓' if e.get('status') == 'done'
+                   else u'%d%%' % int(e.get('progress', 0) or 0))
+            labels.append(u'%s  %s  %s' % (code, tag, e.get('title', '')))
+        labels.append(u'\U0001F5D1  Elimina tutta la serie')
+        idx = xbmcgui.Dialog().select(getattr(item, 'dl_show_title', u'Episodi'), labels)
+        if idx < 0:
+            return
+        if idx == len(labels) - 1:
+            if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                      u'Eliminare tutti gli episodi scaricati di questa serie?'):
+                downloads_db.remove_show(show_key)
+                self._refresh_dl_row()
+            return
+        e = eps[idx]
+        if e.get('status') != 'done':
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Episodio ancora in corso',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+            return
+        self._play_local_file(e.get('file_path', ''), e.get('protection', 'none'),
+                              e.get('key', ''), e.get('title', ''))
+
+    def _play_local_file(self, file_path, protection, db_key, title):
+        """Play a local download. A multi-track bundle plays via its local HLS
+        master (Kodi muxes video + audio + subtitle renditions, native track
+        selection); a single encrypted .ts streams through the loopback decrypt
+        server; a plaintext .ts plays straight from disk."""
+        import os as _os
+        try:
+            from platformcode import local_stream_server
+            is_bundle = local_stream_server.is_bundle(db_key)
+        except Exception:
+            is_bundle = False
+        if not is_bundle and (not file_path or not _os.path.exists(file_path)):
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'File non trovato (forse rimosso)',
+                xbmcgui.NOTIFICATION_WARNING, 3000)
+            return
+        try:
+            if is_bundle:
+                play_url = local_stream_server.url_for(db_key)  # …/master.m3u8
+                mime = 'application/vnd.apple.mpegurl'
+            elif protection in ('aes', 'xor'):
+                play_url = local_stream_server.url_for(db_key)
+                mime = 'video/mp2t'
+            else:
+                play_url = file_path
+                mime = 'video/mp2t'
+            li = xbmcgui.ListItem(title or u'Download', path=play_url)
+            li.setMimeType(mime)
+            li.setContentLookup(False)
+            xbmc.Player().play(play_url, li)
+        except Exception as exc:
+            logger.error('[NetflixHome] _play_local_file: %s' % str(exc))
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Errore di riproduzione',
+                xbmcgui.NOTIFICATION_WARNING, 3000)
+
+    def _delete_download_item(self, item):
+        """Remove a focused download (movie tile or whole series), cancelling any
+        active job first."""
+        from platformcode import downloads_db, download_manager
+        try:
+            mgr = download_manager.get_manager()
+            if getattr(item, 'dl_show_key', ''):
+                if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                          u'Eliminare tutti gli episodi scaricati di questa serie?'):
+                    for e in downloads_db.get_by_show(item.dl_show_key):
+                        mgr.cancel(e['key'])
+                    downloads_db.remove_show(item.dl_show_key)
+                    self._refresh_dl_row()
+            elif getattr(item, 'dl_db_key', ''):
+                if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                          u'Eliminare questo download?'):
+                    mgr.cancel(item.dl_db_key)
+                    downloads_db.remove(item.dl_db_key)
+                    self._refresh_dl_row()
+        except Exception as exc:
+            logger.error('[NetflixHome] _delete_download_item: %s' % str(exc))
+
+    def _cancel_download(self, key):
+        """Cancel an in-progress/queued download and drop it from the library."""
+        from platformcode import downloads_db, download_manager
+        try:
+            if not key:
+                return
+            mgr = download_manager.get_manager()
+            mgr.cancel(key)
+            downloads_db.remove(key)
+            self._refresh_dl_row()
+            # Close/refresh the background progress bar now the entry is gone.
+            try:
+                mgr._update_bg()
+            except Exception:
+                pass
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Download annullato',
+                xbmcgui.NOTIFICATION_INFO, 2000)
+        except Exception as exc:
+            logger.error('[NetflixHome] _cancel_download: %s' % str(exc))
+
     def _select_episode(self, item):
         """Episode picker for TV shows (runs in a background thread)."""
         try:
@@ -3167,6 +3482,204 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     busy.close()
                 except Exception:
                     pass
+
+    # ── Offline download orchestration ──────────────────────────────────────
+
+    def _start_download(self, item, dl_eps):
+        """Resolve quality and enqueue download(s). Runs on a background thread.
+        For a series, dl_eps is the list of (season, episode, title) chosen in the
+        multiselect; a single quality is asked once and applied to all."""
+        try:
+            from platformcode import download_manager
+            ct = getattr(item, 'contentType', '') or ''
+            if ct == 'tvshow' and dl_eps:
+                jobs = self._build_episode_jobs(item, dl_eps)
+            else:
+                page_url = self._download_page_url(item)
+                jobs = [(item, page_url)] if page_url else []
+            if not jobs:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Impossibile preparare il download',
+                    xbmcgui.NOTIFICATION_WARNING, 3500)
+                return
+
+            # Probe available resolutions from the first job and ask the user.
+            try:
+                busy = xbmcgui.DialogBusy(); busy.create()
+            except Exception:
+                busy = None
+            try:
+                tracks = download_manager.probe_tracks(jobs[0][1])
+            finally:
+                if busy:
+                    try: busy.close()
+                    except Exception: pass
+            variants = (tracks or {}).get('variants') or []
+            if not variants:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Stream non disponibile per il download',
+                    xbmcgui.NOTIFICATION_WARNING, 4000)
+                return
+
+            target_height = self._ask_quality(variants)
+            if target_height is None:
+                return
+
+            # Audio/subtitle track selection (only when there's a real choice).
+            audio_langs, sub_langs = self._ask_tracks(
+                tracks.get('audios') or [], tracks.get('subtitles') or [])
+            if audio_langs is None and sub_langs is None:
+                return  # cancelled
+
+            mgr = download_manager.get_manager()
+            mgr.on_change = self._refresh_dl_row
+            for (jitem, page_url) in jobs:
+                entry = download_manager._entry_from_item(jitem)
+                mgr.enqueue(jitem.clone(url=page_url), target_height,
+                            db_entry=entry, audio_langs=audio_langs,
+                            sub_langs=sub_langs)
+
+            xbmcgui.Dialog().notification(
+                u'PrippiStream',
+                (u'Download avviato' if len(jobs) == 1
+                 else u'%d episodi in coda' % len(jobs)),
+                xbmcgui.NOTIFICATION_INFO, 3000)
+            # Refresh the downloads row so the new entries appear.
+            try:
+                self._refresh_dl_row()
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[NetflixHome] _start_download: %s' % str(exc))
+
+    def _ask_quality(self, variants):
+        """Show the resolution picker. Returns the chosen height (0 = auto/best)
+        or None if cancelled."""
+        labels, heights = [], []
+        for v in variants:
+            h = int(v.get('height', 0) or 0)
+            labels.append((u'%dp' % h) if h else u'Auto')
+            heights.append(h)
+        idx = xbmcgui.Dialog().select(u'Qualità del download', labels)
+        if idx is None or idx < 0:
+            return None
+        return heights[idx]
+
+    def _ask_tracks(self, audios, subs):
+        """Pick which audio (separate renditions) and subtitle languages to
+        download. Returns (audio_langs, sub_langs):
+          * lists of language codes to include, or None = all available;
+          * (None, None) signals the user cancelled.
+        Only shows a dialog when there is an actual choice (≥2 audios or any
+        subs); a lone separate-audio rendition is auto-included (otherwise the
+        video would be silent), and muxed-audio streams need no dialog."""
+        if len(audios) < 2 and not subs:
+            # No real choice: include the single separate audio if present.
+            return ([a.get('language', '') for a in audios] or None), []
+        options, meta, pre = [], [], []
+        for a in audios:
+            pre.append(len(options))
+            options.append(u'🔊  Audio: %s' % (a.get('label')
+                           or a.get('language') or '?'))
+            meta.append(('a', a.get('language', '')))
+        for s in subs:
+            pre.append(len(options))
+            options.append(u'💬  Sottotitoli: %s' % (s.get('label')
+                           or s.get('language') or '?'))
+            meta.append(('s', s.get('language', '')))
+        sel = xbmcgui.Dialog().multiselect(
+            u'Tracce audio e sottotitoli da scaricare', options, preselect=pre)
+        if sel is None:
+            return None, None
+        a_langs = [meta[k][1] for k in sel if meta[k][0] == 'a']
+        s_langs = [meta[k][1] for k in sel if meta[k][0] == 's']
+        if audios and not a_langs:
+            # Never leave the video silent — keep the default/first audio.
+            adef = next((a for a in audios if a.get('default')), audios[0])
+            a_langs = [adef.get('language', '')]
+        return a_langs, s_langs
+
+    def _download_page_url(self, item):
+        """Resolvable page URL for a movie / single item, per channel convention."""
+        ch  = (getattr(item, 'channel', '') or '').lower()
+        url = getattr(item, 'url', '') or ''
+        if ch == 'streamingcommunity' or (not ch and '/watch/' in url):
+            return url.replace('/watch/', '/iframe/')
+        return url
+
+    def _build_episode_jobs(self, item, dl_eps):
+        """Build (episode_item, page_url) jobs for the chosen episodes."""
+        jobs = []
+        tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+        channel = (getattr(item, 'channel', '') or '').lower()
+        show_name = (getattr(item, 'fulltitle', '') or getattr(item, 'show', '') or
+                     getattr(item, 'contentSerieName', '') or '')
+        show_name = re.sub(r'\[/?[A-Za-z][^\]]*\]', '', show_name).strip()
+
+        # Channel-based show (e.g. AnimeUnity): episode page URL is ep.url.
+        if not tmdb_id and channel and channel != 'streamingcommunity':
+            show_item = item if getattr(item, 'action', '') == 'episodios' \
+                else item.clone(action='episodios')
+            by_num = {}
+            for ep in _get_channel_episodes(show_item):
+                try:
+                    by_num[int(getattr(ep, 'episode', 0) or 0)] = ep
+                except Exception:
+                    pass
+            for (s, e, title) in dl_eps:
+                ep = by_num.get(e)
+                if not ep:
+                    continue
+                jitem = item.clone(
+                    contentType='episode', contentSeason=1, season=1,
+                    contentEpisodeNumber=e, episode=e,
+                    contentSerieName=show_name, contentTitle=title,
+                    url=ep.url, action='findvideos',
+                    thumbnail=getattr(ep, 'thumbnail', '') or getattr(item, 'thumbnail', ''))
+                jobs.append((jitem, ep.url))
+            return jobs
+
+        # StreamingCommunity: fetch each needed season once, build iframe URLs.
+        import channels.streamingcommunity as _sc
+        _show_url = getattr(item, '_cw_show_url', '') or item.url
+        try:
+            data = _get_data(_show_url)
+            seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+        except Exception as exc:
+            logger.error('[DL] seasons fetch: %s' % str(exc))
+            seasons = []
+        season_meta = {}
+        for s in sorted(set(_s for (_s, _e, _t) in dl_eps)):
+            chosen = next((x for x in seasons if x.get('number') == s), None)
+            if not chosen:
+                continue
+            try:
+                sdata = _get_data(_show_url + '/season-%d' % s)
+                episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            except Exception as exc:
+                logger.error('[DL] season %d fetch: %s' % (s, str(exc)))
+                continue
+            season_meta[s] = {
+                'title_id': str(chosen.get('title_id', '')),
+                'eps': {int(ep.get('number', 0) or 0): ep for ep in episodes},
+            }
+        for (s, e, title) in dl_eps:
+            meta = season_meta.get(s)
+            if not meta:
+                continue
+            ep = meta['eps'].get(e)
+            if not ep:
+                continue
+            page_url = '%s/it/iframe/%s?episode_id=%s' % (
+                _sc.host, meta['title_id'], ep['id'])
+            jitem = item.clone(
+                contentType='episode', contentSeason=s, season=s,
+                contentEpisodeNumber=e, episode=e,
+                contentSerieName=show_name, contentTitle=title,
+                url=page_url, action='findvideos')
+            jitem._cw_show_url = _show_url
+            jobs.append((jitem, page_url))
+        return jobs
 
 # ── Non-SC channel episode list (shared by picker + direct play) ──
 
@@ -3890,15 +4403,47 @@ def _strip_html_fields(s):
     return ''.join(result)
 
 
+_cf_scraper = None
+
+
+def _cf_scrape(url):
+    """Last-resort SC fetch: cloudscraper (solves Cloudflare's JS challenge) over
+    the DoH + browser-cipher adapter, so archive rows don't vanish when the Google
+    Translate proxy is blocked/slow on the user's network. Shared scraper; returns
+    the page text or '' on any failure."""
+    global _cf_scraper
+    if _shutdown_event.is_set():
+        return ''
+    if _cf_scraper is None:
+        from lib import cloudscraper
+        s = cloudscraper.create_scraper()
+        try:
+            from core import resolverdns
+            try:
+                from urllib.parse import urlsplit as _us
+            except Exception:
+                from urlparse import urlsplit as _us
+            s.mount('https://', resolverdns.CipherSuiteAdapter(
+                domain=_us(url).netloc,
+                override_dns=config.get_setting('resolver_dns'),
+                verify_ssl=False))
+        except Exception as _me:
+            logger.error('[NetflixHome] cf adapter mount: %s' % str(_me))
+        s.verify = False
+        _cf_scraper = s
+    r = _cf_scraper.get(url, timeout=25)
+    return r.text if getattr(r, 'status_code', 0) < 400 else ''
+
+
 def _get_data(url):
     """
     Extract data-page JSON from SC HTML page.
-    Pipeline:
-      1. httptools.downloadpage (with CF bypass via Google Translate proxy)
-      2. brace-counting to extract the full JSON object (immune to bare " in SVG)
-      3. html.unescape to decode &quot; entities
-      4. _strip_html_fields to remove SVG banner content (has thousands of bare ")
-      5. json.loads
+    Pipeline (each tier only runs if the previous returned nothing):
+      1. httptools.downloadpage  — direct (DoH + browser ciphers)
+      2. proxytranslate          — Google Translate CF-bypass proxy
+      3. _cf_scrape              — cloudscraper + DoH (solves CF directly, no
+                                   dependency on translate.google.com)
+    then: brace-count the data-page JSON, unescape, strip SVG fields, json.loads.
     """
     import json as _json
     import html as _html
@@ -3917,6 +4462,13 @@ def _get_data(url):
                 raw_html = proxy_result.get('data', '') if proxy_result else ''
             except Exception as _pte:
                 logger.error('[NetflixHome] proxytranslate failed: %s' % str(_pte))
+                raw_html = ''
+        if not raw_html:
+            logger.info('[NetflixHome] proxytranslate empty, trying cloudscraper for %s' % url)
+            try:
+                raw_html = _cf_scrape(url) or ''
+            except Exception as _cfe:
+                logger.error('[NetflixHome] cloudscraper fallback failed: %s' % str(_cfe)[:140])
                 raw_html = ''
         if not raw_html:
             logger.error('[NetflixHome] empty response for %s' % url)
@@ -4024,6 +4576,19 @@ def _extract_item_title(it):
     return re.sub(r'\[/?[A-Za-z][^\]]*\]', '', title).strip()
 
 
+def _dl_active():
+    """True while a download is running. The home pauses its GIL-heavy
+    background work (TMDB enrichment, YouTube trailer search) during downloads
+    so the download worker threads are not starved of the Python GIL.
+
+    Reads a Kodi window property (set by download_manager) rather than a module
+    global, so the flag is observed reliably across threads/modules."""
+    try:
+        return xbmcgui.Window(10000).getProperty('prippistream_dl_active') == '1'
+    except Exception:
+        return False
+
+
 def _tmdb_get_trailer(tmdb_id, ctype='movie'):
     """
     Fetch the official YouTube trailer ID from the TMDB /videos endpoint.
@@ -4031,7 +4596,7 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
     Returns YouTube video_id string, or None.
     Prefers Italian; falls back to English.
     """
-    if not tmdb_id or _shutdown_event.is_set():
+    if not tmdb_id or _shutdown_event.is_set() or _dl_active():
         return None
     try:
         from core import httptools
@@ -4074,6 +4639,8 @@ def _youtube_search_trailer(title, year=''):
     Search YouTube for an Italian trailer using the YouTube internal API (youtubei v1).
     No API key required. Returns the YouTube video_id string or None.
     """
+    if _dl_active():
+        return None
     try:
         from core import httptools
         import json as _json
@@ -4414,6 +4981,10 @@ def _fetch_enrich_items(ctype):
     from time import time
     global _enrich_cache
 
+    # Yield to active downloads (heavy network + JSON parsing competes for GIL).
+    if _dl_active():
+        return []
+
     now = time()
     cached = _enrich_cache.get(ctype)
     if cached and (now - cached['ts']) < _CACHE_TTL:
@@ -4501,6 +5072,12 @@ def _tmdb_enrich_validated(items):
     word-overlapping mismatches. On a hit we strip tmdb_id/imdb_id and restore
     SC's own (self-consistent) poster/title/plot."""
     if not items:
+        return
+    # Hard choke point: skip ALL TMDB enrichment while a download runs. TMDB
+    # responses are large JSON; parsing them holds the Python GIL for long
+    # stretches and starves the download's writer thread.
+    if _dl_active():
+        logger.info('[NetflixHome] enrich skipped — download active')
         return
     from core import tmdb as _tmdb
 
@@ -4867,6 +5444,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         self._selected_episode = None  # int: episode selected in EpisodePicker
         self._default_season   = 1     # int: default season (from CW or S01)
         self._default_episode  = 1     # int: default episode (from CW or E01)
+        self._download_eps     = None  # list[(season, episode, title)] for batch download
         # Cinema mode: True while the menu/overlay is hidden during a trailer.
         # While hidden, the FIRST key (arrows/center/back) only brings the menu
         # back — it must NOT perform its normal action (play, navigate, close).
@@ -5093,6 +5671,19 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         # Show/hide the "Remove from CW" button via window property
         try:
             self.setProperty('show_remove_cw', '1' if is_cw_item else '')
+        except Exception:
+            pass
+
+        # Show/hide the "SCARICA" (download) button — VOD only (SC/AnimeUnity).
+        # Live channels (SKY/Sport) are never downloadable; gating on contentType
+        # already excludes them, and we only enable channels the HLS resolver
+        # supports.
+        try:
+            _dl_ch = (getattr(item, 'channel', '') or '').lower()
+            _dl_ok = (ct in ('movie', 'tvshow', 'episode') and
+                      _dl_ch in ('', 'streamingcommunity', 'animeunity') and
+                      not getattr(item, 'is_4k', False))
+            self.setProperty('is_downloadable', '1' if _dl_ok else '')
         except Exception:
             pass
 
@@ -5494,6 +6085,92 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         getattr(item, 'fulltitle', '') or '').lower())
         return ('tv_%s' % _slug) if _slug else ''
 
+    def _open_download_episode_picker(self):
+        """Multi-select which episodes to download, using Kodi's native dialogs
+        (robust on every platform). Returns a list of (season, episode, title)
+        tuples, or None if the user cancelled. The first multiselect entry is a
+        "whole season" shortcut."""
+        item = self._item
+        if not item:
+            return None
+        try:
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if tmdb_id:
+                return self._download_pick_sc(tmdb_id)
+            return self._download_pick_channel()
+        except Exception as exc:
+            logger.error('[DLPicker] %s' % str(exc))
+            return None
+
+    def _download_pick_sc(self, tmdb_id):
+        from core.tmdb import Tmdb as _Tmdb, host as _h, api as _a
+        data = _Tmdb.get_json('%s/tv/%s?api_key=%s&language=it-IT' % (_h, tmdb_id, _a)) or {}
+        seasons = [s for s in data.get('seasons', []) if s.get('season_number', 0) > 0]
+        if not seasons:
+            self._dl_no_eps()
+            return None
+        if len(seasons) == 1:
+            season_num = seasons[0].get('season_number', 1)
+        else:
+            labels = [s.get('name') or (u'Stagione %d' % s.get('season_number', i + 1))
+                      for i, s in enumerate(seasons)]
+            idx = xbmcgui.Dialog().select(u'Stagione da scaricare', labels)
+            if idx < 0:
+                return None
+            season_num = seasons[idx].get('season_number', idx + 1)
+        sdata = _Tmdb.get_json('%s/tv/%s/season/%d?api_key=%s&language=it-IT' % (
+            _h, tmdb_id, season_num, _a)) or {}
+        eps = []
+        for ep in sdata.get('episodes', []):
+            num = int(ep.get('episode_number', 0) or 0)
+            if num:
+                eps.append((int(season_num), num,
+                            ep.get('name') or (u'Episodio %d' % num)))
+        return self._multiselect_eps(eps)
+
+    def _download_pick_channel(self):
+        item = self._item
+        show_item = item
+        if getattr(item, 'action', '') != 'episodios':
+            _url = getattr(item, '_cw_show_url', '') or getattr(item, 'url', '') or ''
+            show_item = item.clone(url=_url, action='episodios')
+            if not getattr(show_item, 'api_ep_url', ''):
+                _aid = re.search(r'/anime/(\d+)-', _url)
+                _host = re.match(r'(https?://[^/]+)', _url)
+                if _aid and _host:
+                    show_item.api_ep_url = '%s/info_api/%s/' % (_host.group(1), _aid.group(1))
+        ep_list = _get_channel_episodes(show_item)
+        if not ep_list:
+            self._dl_no_eps()
+            return None
+        eps = []
+        for ep in ep_list:
+            num = int(getattr(ep, 'episode', 0) or 0)
+            t = re.sub(r'\[/?[^\]]+\]', '', getattr(ep, 'title', '') or '').strip()
+            eps.append((1, num, t or (u'Episodio %d' % num)))
+        return self._multiselect_eps(eps)
+
+    def _multiselect_eps(self, eps):
+        if not eps:
+            self._dl_no_eps()
+            return None
+        labels = [u'» Tutta la stagione «']
+        labels += [u'S%02dE%02d  –  %s' % (s, e, t) for (s, e, t) in eps]
+        sel = xbmcgui.Dialog().multiselect(u'Episodi da scaricare', labels)
+        if not sel:
+            return None
+        if 0 in sel:                       # "whole season" sentinel
+            return eps
+        return [eps[i - 1] for i in sel if 1 <= i <= len(eps)]
+
+    def _dl_no_eps(self):
+        try:
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Nessun episodio disponibile per il download',
+                xbmcgui.NOTIFICATION_INFO, 3000)
+        except Exception:
+            pass
+
     def _open_episode_picker(self):
         """Open the EpisodePickerDialog (TMDB-based) and update labels on selection."""
         item = self._item
@@ -5782,6 +6459,17 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             self._remove_from_cw()
         elif control_id == DW_BTN_EP_SEL:
             self._open_episode_picker()
+        elif control_id == DW_BTN_DOWNLOAD:
+            item = self._item
+            ct = getattr(item, 'contentType', '') or ''
+            if ct == 'tvshow':
+                # Pick which episodes to download (multi-select). Only proceed
+                # to the actual download if the user confirmed a selection.
+                eps = self._open_download_episode_picker()
+                if not eps:
+                    return
+                self._download_eps = eps
+            self._initiate_close(result='download')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

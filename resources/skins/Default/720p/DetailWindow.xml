@@ -240,20 +240,34 @@
                 <label>[B]AUDIO / SUB[/B]</label>
                 <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FF0D0D0D</focusedcolor>
                 <align>center</align>
-                <onup>215</onup><onleft>210</onleft><onright>213</onright>
+                <onup>215</onup><onleft>210</onleft><onright>214</onright>
+                <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
+                <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
+            </control>
+
+            <!-- SCARICA id=214 — offline download (VOD only) -->
+            <control type="button" id="214">
+                <left>424</left><top>682</top><width>176</width><height>34</height>
+                <texturefocus colordiffuse="C81E90FF">white.png</texturefocus>
+                <texturenofocus colordiffuse="281E90FF">white.png</texturenofocus>
+                <label>[B]SCARICA[/B]</label>
+                <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+                <align>center</align>
+                <onup>215</onup><onleft>211</onleft><onright>213</onright>
+                <visible>!String.IsEmpty(Window.Property(is_downloadable))</visible>
                 <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
                 <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>
             </control>
 
             <!-- TOGLI DAI RECENTI id=213 -->
             <control type="button" id="213">
-                <left>424</left><top>682</top><width>196</width><height>34</height>
+                <left>612</left><top>682</top><width>196</width><height>34</height>
                 <texturefocus colordiffuse="AAFF3333">white.png</texturefocus>
                 <texturenofocus colordiffuse="22FF3333">white.png</texturenofocus>
                 <label>[B]TOGLI DAI RECENTI[/B]</label>
                 <font>font12</font><textcolor>FFAAAAAA</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
                 <align>center</align>
-                <onup>215</onup><onleft>211</onleft><onright>212</onright>
+                <onup>215</onup><onleft>214</onleft><onright>212</onright>
                 <visible>!String.IsEmpty(Window.Property(show_remove_cw))</visible>
                 <animation effect="zoom" start="100" end="106" center="auto" time="130" tween="sine" easing="out">Focus</animation>
                 <animation effect="zoom" start="106" end="100" center="auto" time="100" tween="sine" easing="in">Unfocus</animation>

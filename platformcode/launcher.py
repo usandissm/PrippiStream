@@ -63,14 +63,17 @@ def run(item=None):
             elif item.action == 'filterchannels': # Action for channel listing on channelselector
                 itemlist = channelselector.filterchannels(item.channel_type)
             elif item.action == 'open_netflix_home': # Netflix-style StreamingCommunity home
-                # Render the main menu into the container FIRST so it's ready when skin closes.
-                import channelselector as _cs
-                _mainlist = _cs.getmainlist()
-                _parent = Item(channel='channelselector', action='getmainlist', viewmode='movie')
-                platformtools.render_items(_mainlist, _parent)
-                # Now open the skin (blocking until user closes it).
+                # The home skin is the ONLY UI — no channelselector menu behind it
+                # (settings open from the skin's gear button). We still end the
+                # plugin directory (empty) so Kodi's call completes, then open the
+                # skin; when the user closes it we jump straight to Kodi's Home
+                # instead of revealing a menu.
+                import xbmcplugin
+                xbmcplugin.endOfDirectory(int(sys.argv[1]), succeeded=True,
+                                          updateListing=False, cacheToDisc=False)
                 from platformcode import netflixhome
                 netflixhome.open_netflix_home()
+                xbmc.executebuiltin('ActivateWindow(Home)')
                 return
             platformtools.render_items(itemlist, item)
 

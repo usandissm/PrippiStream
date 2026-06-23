@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <keymap>
-  <!-- Remap Back/Backspace to Stop in fullscreen video so pressing Back
-       stops playback instead of returning to home with video still running. -->
+  <!-- Remap Back/Backspace AND Esc to Stop in fullscreen video so they all
+       stop playback instead of returning to home with video still running.
+       Esc is mapped too so it behaves identically to Back (which it does not
+       by default: Esc would just leave fullscreen with the video still playing). -->
   <FullscreenVideo>
     <keyboard>
       <backspace>Stop</backspace>
+      <escape>Stop</escape>
     </keyboard>
     <remote>
       <back>Stop</back>

@@ -25,10 +25,21 @@ dns_providers = {'cloudflare': { 'host': '1.0.0.1', 'path' : '/dns-query'}, 'goo
 
 class CipherSuiteAdapter(HTTPAdapter):
 
-    def __init__(self, domain, ssl_options=ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1, override_dns = True, ssl_ciphers = CIPHERS, **kwargs):
+    def __init__(self, domain, ssl_options=ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1, override_dns = True, ssl_ciphers = CIPHERS, verify_ssl = True, **kwargs):
         self.ssl_options = ssl_options
         self.ssl_ciphers = ssl_ciphers
-        super(CipherSuiteAdapter, self).__init__(**kwargs) 
+        # When False the pool is built with CERT_NONE so requests' verify=False is
+        # actually honoured — a custom ssl_context (below) otherwise overrides it
+        # and keeps verifying. Needed for hosts that serve an incomplete cert
+        # chain (e.g. animeunity: "unable to get local issuer certificate").
+        self.verify_ssl = verify_ssl
+        if not verify_ssl:
+            try:
+                import urllib3
+                urllib3.disable_warnings()
+            except Exception:
+                pass
+        super(CipherSuiteAdapter, self).__init__(**kwargs)
         if override_dns:
 
             # hack[1/3] to patch urllib3 create connection
@@ -93,7 +104,10 @@ class CipherSuiteAdapter(HTTPAdapter):
         db['dnscache'][domain] = {'ip': ip, 'datetime': current_date}
 
     def init_poolmanager(self, *pool_args, **pool_kwargs):
-        ctx = create_urllib3_context(ciphers=self.ssl_ciphers, cert_reqs=ssl.CERT_REQUIRED, options=self.ssl_options)
+        cert_reqs = ssl.CERT_REQUIRED if getattr(self, 'verify_ssl', True) else ssl.CERT_NONE
+        ctx = create_urllib3_context(ciphers=self.ssl_ciphers, cert_reqs=cert_reqs, options=self.ssl_options)
+        if not getattr(self, 'verify_ssl', True):
+            ctx.check_hostname = False
         self.poolmanager = PoolManager(*pool_args, ssl_context=ctx, **pool_kwargs)
 
     def send(self, request, flushedDns=False, **kwargs):

@@ -11,36 +11,109 @@ from platformcode import autorenumber, logger, config
 
 def findhost(url):
     # url is a stable redirector (e.g. animeunity.to) that redirects to current domain
-    # follow_redirects=True so we get the final URL after all hops
-    resp = httptools.downloadpage(url, follow_redirects=True)
+    # follow_redirects=True so we get the final URL after all hops. verify=False:
+    # animeunity edges sometimes serve an incomplete cert chain.
+    resp = httptools.downloadpage(url, follow_redirects=True, verify=False)
     final = getattr(resp, 'url', '') or ''
     return final.rstrip('/') if final and not final.startswith('https://animeunity.to') else url.rstrip('/')
 
 host = config.get_channel_url(name='animeunity')  # explicit name avoids inspect-stack mis-detection when imported from netflixhome
 
-# CSRF token and session headers are fetched lazily on first use (not at import
-# time) so importing this module never triggers an HTTP request.
-_headers = None
-_archivio_data = None
+_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+       '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
 
-def _ensure_init():
-    """Fetch the /archivio page once to obtain the CSRF token + session cookie."""
+# AnimeUnity is Cloudflare-fronted. A browser keeps the cookies it gets on the
+# first page (cf_clearance, XSRF-TOKEN, laravel_session) and replays them on the
+# get-animes XHR. We therefore use ONE PERSISTENT session for both the /archivio
+# GET and the get-animes POST so the cookie jar carries over — the old code used
+# two separate requests and forwarded cookies by hand, which Cloudflare rejects
+# (403). The session mounts the same DoH + browser-cipher adapter as the rest of
+# the addon (so blocked DNS still resolves) with verify disabled (animeunity
+# edges sometimes serve an incomplete cert chain). Everything is lazy so importing
+# the module triggers no network.
+_session = None
+_headers = None        # headers for the get-animes XHR (built after a successful init)
+_archivio_data = None  # raw /archivio HTML (genres/years parse it)
+
+
+def _get_session():
+    global _session
+    if _session is not None:
+        return _session
+    from lib import requests
+    s = requests.session()
+    try:
+        from core import resolverdns
+        netloc = host.split('://', 1)[-1].split('/', 1)[0]
+        s.mount('https://', resolverdns.CipherSuiteAdapter(
+            domain=netloc, override_dns=config.get_setting('resolver_dns'),
+            verify_ssl=False))
+    except Exception as exc:
+        logger.error('[AnimeUnity] adapter mount failed: %s' % str(exc))
+    s.verify = False
+    s.headers.update({'User-Agent': _UA, 'Accept-Language': 'it-IT,it;q=0.9'})
+    _session = s
+    return s
+
+
+def _reset_session():
+    global _session, _headers, _archivio_data
+    _session = None
+    _headers = None
+    _archivio_data = None
+
+
+def _refresh_host():
+    """Re-discover the current AnimeUnity domain via the findhost redirector and
+    update the module-level *host*. Called lazily on a fetch failure so a changed
+    domain self-heals on the next attempt (no network at import time)."""
+    global host
+    try:
+        new_host = config.get_channel_url(findhost, name='animeunity', forceFindhost=True)
+        if new_host:
+            if new_host != host:
+                logger.info('[AnimeUnity] host re-discovered: %s' % new_host)
+            host = new_host
+            _reset_session()   # rebuild the session against the new domain
+            return True
+    except Exception as exc:
+        logger.error('[AnimeUnity] host refresh failed: %s' % str(exc))
+    return False
+
+
+def _ensure_init(_retry=True):
+    """GET /archivio once on the persistent session to grab the CSRF token and the
+    Cloudflare/session cookies (kept in the session jar for the XHR). Self-healing:
+    on failure it re-discovers the domain via findhost and retries once. Leaves
+    _headers None (falsy) on terminal failure so a later call retries instead of
+    caching the broken state."""
     global _headers, _archivio_data
-    if _headers is not None:
+    if _headers:   # truthy only after a successful init
         return
     try:
-        response = httptools.downloadpage(host + '/archivio')
-        csrf_token = support.match(response.data, patron='name="csrf-token" content="([^"]+)"').match
+        s = _get_session()
+        r = s.get(host + '/archivio', timeout=20)
+        data = r.text or ''
+        token = support.match(data, patron='name="csrf-token" content="([^"]+)"').match
+        logger.info('[AnimeUnity] /archivio code=%s csrf=%s cookies=%s len=%d'
+                    % (r.status_code, 'yes' if token else 'NO',
+                       [c.name for c in s.cookies], len(data)))
+        if r.status_code >= 400 or not token:
+            raise Exception('archivio code=%s csrf=%s' % (r.status_code, bool(token)))
+        _archivio_data = data
         _headers = {
-            'content-type': 'application/json;charset=UTF-8',
-            'x-csrf-token': csrf_token,
-            'Cookie': '; '.join([x.name + '=' + x.value for x in response.cookies]),
+            'Content-Type': 'application/json;charset=UTF-8',
+            'X-CSRF-TOKEN': token,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': host + '/archivio',
+            'Origin': host,
         }
-        _archivio_data = response.data
     except Exception as exc:
         logger.error('[AnimeUnity] _ensure_init failed: %s' % str(exc))
-        _headers = {}
-        _archivio_data = ''
+        if _retry and _refresh_host():
+            return _ensure_init(_retry=False)
+        _headers = None
+        _archivio_data = None
 
 
 @support.menu
@@ -178,10 +251,13 @@ def news(item):
     return itemlist
 
 
-def peliculas(item):
+def peliculas(item, _retry=True):
     support.info()
     _ensure_init()
     itemlist = []
+    if not _headers:
+        logger.error('[AnimeUnity] peliculas: init failed (no CSRF/session)')
+        return itemlist
 
     page = item.page if item.page else 0
     item.args['offset'] = page * 30
@@ -192,7 +268,25 @@ def peliculas(item):
         item.args['order'] = order_list[order]
 
     payload = json.dumps(item.args)
-    records = httptools.downloadpage(host + '/archivio/get-animes', headers=_headers, post=payload).json['records']
+    records = None
+    code = '?'
+    try:
+        s = _get_session()
+        r = s.post(host + '/archivio/get-animes', data=payload, headers=_headers, timeout=20)
+        code = r.status_code
+        if code < 400:
+            jdata = r.json()
+            records = jdata.get('records') if isinstance(jdata, dict) else None
+    except Exception as exc:
+        logger.error('[AnimeUnity] get-animes request failed: %s' % str(exc)[:160])
+    if not records:
+        logger.error('[AnimeUnity] peliculas: no records (code=%s)' % code)
+        if _retry:
+            # blocked/stale session → rebuild it (and re-discover the domain via
+            # _ensure_init's findhost fallback), then retry once.
+            _reset_session()
+            return peliculas(item, _retry=False)
+        return itemlist
 
     for it in records:
         if not it['title']:
