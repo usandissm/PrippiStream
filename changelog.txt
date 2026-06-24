@@ -1,4 +1,4 @@
-## Prossima
+## 1.1.1
 - Sbloccati molti più film e serie, ora partono contenuti che prima non si riproducevano.
 - Download offline esteso ad altri contenuti.
 - Download: ora scarica sempre tutte le tracce audio e i sottotitoli disponibili, senza più chiedere.
