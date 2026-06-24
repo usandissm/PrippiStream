@@ -6,6 +6,10 @@
       {
         "pattern": "(https?://maxstream.video/(?:[^/]+/)?([a-zA-Z0-9]+))",
         "url": "\\1"
+      },
+      {
+        "pattern": "(https?://(?:www\\.)?uprot\\.net/ms[a-z]+/[A-Za-z0-9]+)",
+        "url": "\\1"
       }
     ]
   },

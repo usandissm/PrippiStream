@@ -75,6 +75,8 @@ def _default_lookup(download_id):
 
 
 _MIME = {'.m3u8': 'application/vnd.apple.mpegurl', '.vtt': 'text/vtt'}
+_MIME_VIDEO = {'.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mkv': 'video/x-matroska',
+               '.webm': 'video/webm', '.avi': 'video/x-msvideo', '.ts': 'video/mp2t'}
 
 
 def _bundle_track_file(bundle_dir, resource):
@@ -163,7 +165,9 @@ class _Handler(BaseHTTPRequestHandler):
             if tf:
                 return tf, True, _CONTENT_TYPE
             return None, False, ''
-        return info['file_path'], True, _CONTENT_TYPE
+        fp = info['file_path']
+        ctype = _MIME_VIDEO.get(os.path.splitext(fp)[1].lower(), _CONTENT_TYPE)
+        return fp, True, ctype
 
     def do_HEAD(self):
         info, resource = self._route()

@@ -1834,7 +1834,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             self.close()
             return
 
-        # Context menu (C / long-press) on a download tile → offer to delete it.
+        # Context menu (C / long-press) on a download tile → same Play/Delete menu
+        # as a left-click (see _show_download_menu).
         if aid == ACTION_CONTEXT_MENU:
             try:
                 i = self._row_from_fid(self.getFocusId())
@@ -1844,9 +1845,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
                     items = self.rows_data[i][1]
                     if 0 <= pos < len(items):
-                        self._delete_download_item(items[pos])
+                        self._show_download_menu(items[pos])
             except Exception as exc:
-                logger.error('[NetflixHome] context-menu delete: %s' % str(exc))
+                logger.error('[NetflixHome] context-menu: %s' % str(exc))
             return
 
         # Mouse wheel → navigate between rows
@@ -2101,7 +2102,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         if getattr(_it, 'is_live_channel', False):
                             self._play_channel_stream(_it, i, item_idx)
                         elif getattr(_it, 'is_download', False):
-                            self._play_download(_it)
+                            self._show_download_menu(_it)
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
@@ -2139,14 +2140,18 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         if getattr(_it, 'is_live_channel', False):
                             self._play_channel_stream(_it, i, pos)
                         elif getattr(_it, 'is_download', False):
-                            self._play_download(_it)
+                            self._show_download_menu(_it)
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
                     logger.error('[NetflixHome] onClick row %d: %s' % (i, str(exc)))
                 break
 
-    def _launch(self, item):
+    def _launch(self, item, source_window=None):
+        # source_window: when the play was started from the SEARCH overlay, this
+        # is that NetflixSearchWindow. After playback _wait_and_restore then
+        # restores focus to the search results (last-clicked card) instead of the
+        # home rows. None = normal home flow.
         # Suppress the server-selection popup that mark_auto_as_watched would
         # otherwise show after playback ends.  We manage resume/next-ep ourselves.
         try:
@@ -2188,7 +2193,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             _pre_play_set_lang(item)
 
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
-            t = threading.Thread(target=self._wait_and_restore, args=(item,))
+            t = threading.Thread(target=self._wait_and_restore, args=(item,),
+                                 kwargs={'source_window': source_window})
             t.daemon = True
             t.start()
         elif item.action == 'episodios':
@@ -2211,7 +2217,8 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # which handles all custom actions correctly without opening a container.
             _pre_play_set_lang(item)
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
-            t = threading.Thread(target=self._wait_and_restore, args=(item,))
+            t = threading.Thread(target=self._wait_and_restore, args=(item,),
+                                 kwargs={'source_window': source_window})
             t.daemon = True
             t.start()
 
@@ -2348,8 +2355,31 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _restore_home: %s' % str(exc))
 
-    def _wait_and_restore(self, item=None, next_ep_ctx=None):
-        """Wait for playback to start/end, track progress for CW, then restore home."""
+    def _restore_search_window(self, sw):
+        """After playback that was launched from the SEARCH overlay, bring the
+        search results back to front with focus on the last-clicked card —
+        instead of stealing focus to the home rows (the default _restore_home).
+        The search WindowXML is still alive underneath (its doModal is blocking)."""
+        try:
+            xbmc.sleep(600)            # let the player-close transition settle
+            try:
+                sw.show()              # re-activate the search overlay
+            except Exception:
+                pass
+            xbmc.sleep(200)
+            pos = getattr(sw, '_last_pos', 0) or 0
+            try:
+                sw.getControl(SEARCH_WL_SC).selectItem(pos)
+                sw.setFocusId(SEARCH_WL_SC)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[NetflixHome] _restore_search_window: %s' % str(exc))
+
+    def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+        """Wait for playback to start/end, track progress for CW, then restore the
+        home rows — or, when source_window is a search overlay, restore focus to
+        the search results (last-clicked card). CW logic is identical either way."""
         player  = _AvReadyPlayer()
         monitor = xbmc.Monitor()
 
@@ -2718,6 +2748,19 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     t_nx.start()
                     return
 
+        # When the play was launched from the SEARCH overlay, restore focus to the
+        # search results (last-clicked card) instead of the home rows. All CW
+        # tracking above already ran identically; only the window restore differs.
+        if source_window is not None and getattr(source_window, '_alive', True):
+            self._restore_search_window(source_window)
+            if _played_url and self._alive:
+                xbmc.sleep(1500)
+                try:
+                    _clear_kodi_resume(_played_url)
+                except Exception as exc:
+                    logger.error('[CW] post-watch _clear_kodi_resume: %s' % str(exc))
+            return
+
         # Set the pending flag BEFORE _restore_home() / setFocusId() so that
         # onFocus (which fires when setFocusId posts its message to the GUI thread)
         # always finds the flag already True — eliminating the race condition where
@@ -2885,6 +2928,22 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[NetflixHome] _refresh_dl_row: %s' % str(exc))
 
+    def _show_download_menu(self, item):
+        """Clicking a downloaded tile (left-click or context menu) opens a small
+        Play/Delete menu instead of playing directly. Delete confirms via
+        _delete_download_item (which already shows a yesno prompt)."""
+        try:
+            title = (getattr(item, 'fulltitle', '') or getattr(item, 'title', '')
+                     or u'Download')
+            idx = xbmcgui.Dialog().select(
+                title, [u'▶  Riproduci', u'\U0001F5D1  Elimina'])
+            if idx == 0:
+                self._play_download(item)
+            elif idx == 1:
+                self._delete_download_item(item)
+        except Exception as exc:
+            logger.error('[NetflixHome] _show_download_menu: %s' % str(exc))
+
     def _play_download(self, item):
         """Play a downloaded item from disk. Movies play directly; series tiles
         open a list of their downloaded episodes."""
@@ -2967,15 +3026,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 xbmcgui.NOTIFICATION_WARNING, 3000)
             return
         try:
+            _VMIME = {'.mp4': 'video/mp4', '.m4v': 'video/mp4',
+                      '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+                      '.avi': 'video/x-msvideo', '.ts': 'video/mp2t'}
+            vmime = _VMIME.get(_os.path.splitext(file_path or '')[1].lower(),
+                               'video/mp2t')
             if is_bundle:
                 play_url = local_stream_server.url_for(db_key)  # …/master.m3u8
                 mime = 'application/vnd.apple.mpegurl'
             elif protection in ('aes', 'xor'):
                 play_url = local_stream_server.url_for(db_key)
-                mime = 'video/mp2t'
+                mime = vmime
             else:
                 play_url = file_path
-                mime = 'video/mp2t'
+                mime = vmime
             li = xbmcgui.ListItem(title or u'Download', path=play_url)
             li.setMimeType(mime)
             li.setContentLookup(False)
@@ -3491,8 +3555,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         multiselect; a single quality is asked once and applied to all."""
         try:
             from platformcode import download_manager
-            ct = getattr(item, 'contentType', '') or ''
-            if ct == 'tvshow' and dl_eps:
+            # If the user picked episodes (series, incl. a series opened from CW),
+            # build per-episode jobs regardless of the item's contentType (a CW
+            # series item is an 'episode', not a 'tvshow').
+            if dl_eps:
                 jobs = self._build_episode_jobs(item, dl_eps)
             else:
                 page_url = self._download_page_url(item)
@@ -3509,7 +3575,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 busy = None
             try:
-                tracks = download_manager.probe_tracks(jobs[0][1])
+                _j0 = jobs[0]
+                tracks = download_manager.probe_tracks(
+                    _j0[1], channel=(getattr(_j0[0], 'channel', '') or ''),
+                    item=_j0[0])
             finally:
                 if busy:
                     try: busy.close()
@@ -3525,11 +3594,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if target_height is None:
                 return
 
-            # Audio/subtitle track selection (only when there's a real choice).
-            audio_langs, sub_langs = self._ask_tracks(
-                tracks.get('audios') or [], tracks.get('subtitles') or [])
-            if audio_langs is None and sub_langs is None:
-                return  # cancelled
+            # Always download ALL available audio + subtitle tracks (None = keep
+            # all in download_manager._select_tracks). No track-selection prompt.
+            audio_langs, sub_langs = None, None
 
             mgr = download_manager.get_manager()
             mgr.on_change = self._refresh_dl_row
@@ -3564,40 +3631,6 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if idx is None or idx < 0:
             return None
         return heights[idx]
-
-    def _ask_tracks(self, audios, subs):
-        """Pick which audio (separate renditions) and subtitle languages to
-        download. Returns (audio_langs, sub_langs):
-          * lists of language codes to include, or None = all available;
-          * (None, None) signals the user cancelled.
-        Only shows a dialog when there is an actual choice (≥2 audios or any
-        subs); a lone separate-audio rendition is auto-included (otherwise the
-        video would be silent), and muxed-audio streams need no dialog."""
-        if len(audios) < 2 and not subs:
-            # No real choice: include the single separate audio if present.
-            return ([a.get('language', '') for a in audios] or None), []
-        options, meta, pre = [], [], []
-        for a in audios:
-            pre.append(len(options))
-            options.append(u'🔊  Audio: %s' % (a.get('label')
-                           or a.get('language') or '?'))
-            meta.append(('a', a.get('language', '')))
-        for s in subs:
-            pre.append(len(options))
-            options.append(u'💬  Sottotitoli: %s' % (s.get('label')
-                           or s.get('language') or '?'))
-            meta.append(('s', s.get('language', '')))
-        sel = xbmcgui.Dialog().multiselect(
-            u'Tracce audio e sottotitoli da scaricare', options, preselect=pre)
-        if sel is None:
-            return None, None
-        a_langs = [meta[k][1] for k in sel if meta[k][0] == 'a']
-        s_langs = [meta[k][1] for k in sel if meta[k][0] == 's']
-        if audios and not a_langs:
-            # Never leave the video silent — keep the default/first audio.
-            adef = next((a for a in audios if a.get('default')), audios[0])
-            a_langs = [adef.get('language', '')]
-        return a_langs, s_langs
 
     def _download_page_url(self, item):
         """Resolvable page URL for a movie / single item, per channel convention."""
@@ -5674,14 +5707,13 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception:
             pass
 
-        # Show/hide the "SCARICA" (download) button — VOD only (SC/AnimeUnity).
-        # Live channels (SKY/Sport) are never downloadable; gating on contentType
-        # already excludes them, and we only enable channels the HLS resolver
-        # supports.
+        # Show/hide the "SCARICA" (download) button — any VOD (movie/show/episode).
+        # Live channels (SKY/Sport) are excluded by contentType already; the
+        # download resolver is channel-aware (SC, AnimeUnity, CB01, …) and falls
+        # back gracefully per-title when a source can't be downloaded.
         try:
-            _dl_ch = (getattr(item, 'channel', '') or '').lower()
             _dl_ok = (ct in ('movie', 'tvshow', 'episode') and
-                      _dl_ch in ('', 'streamingcommunity', 'animeunity') and
+                      not getattr(item, 'is_live_channel', False) and
                       not getattr(item, 'is_4k', False))
             self.setProperty('is_downloadable', '1' if _dl_ok else '')
         except Exception:
@@ -6462,7 +6494,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         elif control_id == DW_BTN_DOWNLOAD:
             item = self._item
             ct = getattr(item, 'contentType', '') or ''
-            if ct == 'tvshow':
+            # A series — including one opened from Continue Watching (which is an
+            # 'episode' item carrying _cw_show_url) — always shows the season/
+            # episode picker. Only standalone movies download directly.
+            if ct in ('tvshow', 'episode') or getattr(item, '_cw_show_url', ''):
                 # Pick which episodes to download (multi-select). Only proceed
                 # to the actual download if the user confirmed a selection.
                 eps = self._open_download_episode_picker()
@@ -6769,6 +6804,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         self._items     = []             # flat list of all results
         self._hero_item = None           # item currently shown in hero
         self._last_pos  = 0              # last selected grid position (restored after trailer)
+        self._alive     = True           # False once closed (HOME._restore_search_window guard)
         self._search_started = False     # guard: onInit may fire again after a fullscreen trailer
         self._search_done = threading.Event()
         self._lock      = threading.Lock()
@@ -6841,6 +6877,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
     def onAction(self, action):
         aid = action.getId()
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
+            self._alive = False
             self._cancelled.set()
             self._pf_cancelled.set()  # cancel all prefetch workers on back/close
             self.close()
@@ -6856,11 +6893,13 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
     def onClick(self, control_id):
         if control_id in (SEARCH_BTN_BACK, SEARCH_CLOSE):
+            self._alive = False
             self._cancelled.set()
             self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
             return
         if control_id == SEARCH_QUERY_BTN:
+            self._alive = False
             self._cancelled.set()
             self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
@@ -6957,6 +6996,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             result = getattr(dw, '_result', None)
             sel_s  = getattr(dw, '_selected_season',  None)
             sel_e  = getattr(dw, '_selected_episode', None)
+            dl_eps = getattr(dw, '_download_eps', None)
             del dw
             if result == 'play':
                 if sel_s is not None and sel_e is not None:
@@ -6970,11 +7010,19 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                         t_ep.daemon = True
                         t_ep.start()
                     elif self._parent_window is not None:
-                        self._parent_window._launch(item)
+                        self._parent_window._launch(item, source_window=self)
                     else:
                         self._launch_item(item)
                 else:
                     self._launch_item(item)
+            elif result == 'download' and self._parent_window is not None:
+                # SCARICA from a search detail card: delegate to the home's
+                # downloader (same flow as a home-launched download).
+                t_dl = threading.Thread(
+                    target=self._parent_window._start_download,
+                    args=(item, dl_eps))
+                t_dl.daemon = True
+                t_dl.start()
         except Exception as exc:
             logger.error('[NetflixSearch] _open_detail: %s' % str(exc))
 
@@ -6993,7 +7041,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             # in Kodi's native demuxer ("Error creating demuxer") and never started.
             if getattr(item, '_search_channel', 'sc') != 'sc':
                 if self._parent_window is not None:
-                    self._parent_window._launch(item)
+                    self._parent_window._launch(item, source_window=self)
                 else:
                     _pre_play_set_lang(item)
                     xbmc.executebuiltin(
@@ -7033,7 +7081,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
             # ── Normal path (SC item or no prefetch event) ──────────────────────
             if self._parent_window is not None:
-                self._parent_window._launch(item)
+                self._parent_window._launch(item, source_window=self)
             else:
                 xbmc.executebuiltin(
                     'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl()

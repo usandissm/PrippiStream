@@ -161,22 +161,17 @@ class Kdicc():
         return rslt
 
     def view_Advise(self, txt = '' ):
-        ip = self.check_Ip()
-        if ip:
-            txt += '\nIP: %s\n' % self.ip_addr
-            txt += '\nDNS: %s\n' % (self.dns)
-        else:
-            txt += '\nIP: %s' % self.ip_addr
-
-        dialog = xbmcgui.Dialog()
-        if config.get_setting('checkdns'):
-            risposta= dialog.yesno(addonname, txt, nolabel=config.get_localized_string(707403), yeslabel=config.get_localized_string(707404))
-            if risposta == False:
-                config.set_setting('checkdns', False)
-                dialog.textviewer(addonname+' '+config.get_localized_string(707405), config.get_localized_string(707406))
-        else:
-            txt = config.get_localized_string(707402)
-            dialog.notification(addonname, txt, xbmcgui.NOTIFICATION_INFO, 10000)
+        # NON-BLOCKING only. A modal dialog here runs at startup (the addon
+        # auto-opens via RunAddon); when there is no connection it would block the
+        # home window from activating ("Activate of window 13000 refused because
+        # there are active modal dialogs"), so the user can't reach the addon — and
+        # therefore can't watch OFFLINE downloads. Show a brief notification only.
+        try:
+            dialog = xbmcgui.Dialog()
+            dialog.notification(addonname, config.get_localized_string(707402),
+                                xbmcgui.NOTIFICATION_WARNING, 6000)
+        except Exception:
+            pass
 
 
 def test_conn(is_exit, check_dns, view_msg,

@@ -1,3 +1,10 @@
+## Prossima
+- Sbloccati molti più film e serie, ora partono contenuti che prima non si riproducevano.
+- Download offline esteso ad altri contenuti.
+- Download: ora scarica sempre tutte le tracce audio e i sottotitoli disponibili, senza più chiedere.
+- Contenuti scaricati: cliccandoli si apre un menu "Riproduci / Elimina" (con conferma prima di eliminare).
+- DNS Google attivo di default: migliore raggiungibilità dei siti.
+
 ## 1.1.0
 - Bug fix.
 - Upgrade vari.

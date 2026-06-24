@@ -224,6 +224,13 @@ if __name__ == "__main__":
     # These are always overwritten so the user never has to set them manually.
     config.set_setting('autostart', True)       # launch at Kodi start
     config.set_setting('default_action', 2)     # video quality = High (0=Ask, 1=Low, 2=High)
+    # Force the in-addon DoH resolver to use Google DNS (8.8.4.4) for EVERY install,
+    # so users never have to set it by hand. This overrides only the addon's own
+    # name resolution (NOT the OS DNS) — exactly the lever that bypasses ISP DNS
+    # blocking of the streaming domains. If Google DoH is unreachable, resolverdns
+    # falls back to the system DNS automatically.
+    config.set_setting('resolver_dns', True)
+    config.set_setting('resolver_dns_provider', 'Google')
 
     # Suppress the YouTube addon setup wizard so it never appears to the user.
     # The wizard key is 'kodion.setup_wizard'; setting it to 'false' prevents it
@@ -316,10 +323,12 @@ if __name__ == "__main__":
     # not just the latest) in a scrollable viewer when the version changes. Notes
     # live in changelog.txt; the popup appears only when there is something new,
     # so routine patch bumps without notes don't nag the user.
-    def _show_changelog_popup(news_text):
+    def _show_changelog_popup(ver, news_text):
         import xbmcgui
         xbmc.sleep(5000)  # wait for Kodi UI to settle after startup
-        xbmcgui.Dialog().textviewer(u'PrippiStream — Novit\xe0', news_text)
+        # Dialog().ok keeps a clear OK button (and scrolls long text with up/down),
+        # unlike textviewer which can only be dismissed with Back/Esc.
+        xbmcgui.Dialog().ok(u'PrippiStream v%s — Novit\xe0' % ver, news_text)
 
     try:
         from platformcode import changelog as _changelog
@@ -337,7 +346,7 @@ if __name__ == "__main__":
             # Persist regardless so the popup never repeats for the same version.
             config.set_setting('last_notified_version', current_ver)
             if notes:
-                run_threaded(_show_changelog_popup, (notes,))
+                run_threaded(_show_changelog_popup, (current_ver, notes))
     except Exception:
         logger.error(traceback.format_exc())
 

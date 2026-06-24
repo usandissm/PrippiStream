@@ -719,16 +719,12 @@ class UnshortenIt(object):
             return httptools.downloadpage(uri, only_headers=True, follow_redirects=False).headers.get('location', uri), 200
 
     def _unshorten_uprot(self, uri):
-        html = httptools.downloadpage(uri, cloudscraper=False).data
-        logger.info('_unshorten_uprot uri=%r html_len=%d' % (uri, len(html) if html else 0))
-        # Regex from S4Me upstream — matches the visible Continue button structure.
-        # When uprot shows a CAPTCHA or changes layout, find_single_match returns ''
-        # which is != uri, so the unshorten loop ends with '' and the server resolver
-        # correctly treats the link as unresolvable (no valid video URL).
-        link = scrapertools.find_single_match(html, r'--></button></[a|div]?>.+?<a[^>]+href="([^"]+)">')
-        logger.info('_unshorten_uprot extracted link=%r' % link)
-        if link != uri:
-            return link, 200
+        # uprot.net/msf now gates the maxstream link behind a 3-digit image CAPTCHA,
+        # so the old scrape returns nothing. Do NOT try to unshorten it here (and
+        # never return ''): leave the uprot.net URL untouched so the MaxStream server
+        # resolver (servers/maxstream.py, which matches uprot.net and solves the
+        # captcha via lib.uprot_captcha) turns it into the real stream.
+        logger.info('_unshorten_uprot: leaving uri to MaxStream resolver uri=%r' % uri)
         return uri, 200
 
     def _unshorten_filecrypt(self, uri):

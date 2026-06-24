@@ -320,6 +320,115 @@ def _resolve_master(page_url):
     return urls[-1][1]
 
 
+# ── Generic (any VOD channel) resolution: HLS or progressive file ───────────
+
+_IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+_HLS_PREF_SERVERS = ('maxstream',)   # prefer these (HLS) over progressive hosts
+# A URL is a progressive file ONLY if its path ends with one of these. Tokenized
+# HLS URLs (e.g. vixcloud.co/playlist/NNN?token=…) have NO .m3u8 suffix, so we
+# must NOT classify "no .m3u8" as a file — default to HLS instead.
+_PROGRESSIVE_EXT = ('.mp4', '.mkv', '.avi', '.webm', '.m4v', '.mov', '.flv')
+
+
+def _kind_for(url):
+    path = (url or '').split('?')[0].lower()
+    return 'file' if path.endswith(_PROGRESSIVE_EXT) else 'hls'
+
+
+def _is_image(url):
+    u = (url or '').split('?')[0].lower()
+    return any(u.endswith(ext) for ext in _IMAGE_EXT)
+
+
+def _media_ext(url):
+    u = (url or '').split('?')[0].lower()
+    for ext in ('.mkv', '.mp4', '.webm', '.avi', '.m4v'):
+        if u.endswith(ext):
+            return ext
+    return '.mp4'
+
+
+def _media_headers(server, url):
+    srv = (server or '').lower()
+    h = _default_headers(url)
+    if srv == 'maxstream':
+        # host-cdn.net segments validate against the embed origin, not the CDN host.
+        h['Referer'] = 'https://maxstream.video/'
+        h['Origin'] = 'https://maxstream.video'
+    return h
+
+
+def _channel_server_items(item):
+    """Call the item's channel findvideos()/action → list of server items
+    (mirrors netflixhome's search prefetch _fetch_servers)."""
+    ch_name = (getattr(item, 'channel', '') or '').lower()
+    if not ch_name:
+        return []
+    try:
+        ch = __import__('channels.' + ch_name, fromlist=[ch_name])
+        act = getattr(item, 'action', '') or 'findvideos'
+        if act == 'check' and hasattr(ch, 'check'):
+            sv = ch.check(item)
+        elif act and act not in ('play', 'findvideos') and hasattr(ch, act):
+            sv = getattr(ch, act)(item)
+        elif hasattr(ch, 'findvideos'):
+            sv = ch.findvideos(item)
+        else:
+            return []
+        return [i for i in (sv or []) if getattr(i, 'server', None)]
+    except Exception as exc:
+        logger.error('[DLManager] _channel_server_items ch=%s: %s'
+                     % (ch_name, str(exc)[:160]))
+        return []
+
+
+def _order_dl_servers(items):
+    """HLS-capable servers first (better seeking/quality), then favorite order."""
+    try:
+        from core.servertools import sort_servers
+        items = sort_servers(list(items))
+    except Exception:
+        items = list(items)
+    return sorted(items, key=lambda s: 0 if (getattr(s, 'server', '') or '').lower()
+                  in _HLS_PREF_SERVERS else 1)
+
+
+def _resolve_media(page_url, channel='', item=None):
+    """Resolve a content reference to a final media URL.
+    Returns (media_url, kind, headers) with kind in {'hls','file'}.
+    SC keeps the streamingcommunityws path; other channels resolve via their
+    findvideos() server items + servertools.resolve_video_urls_for_playing."""
+    from core import servertools
+    ch = (channel or '').lower()
+    logger.info('[DLManager] _resolve_media ch=%r page=%.80s' % (ch, page_url or ''))
+    if ch in ('', 'streamingcommunity'):
+        u = _resolve_master(page_url)
+        return u, _kind_for(u), _default_headers(u)
+    if item is None:
+        raise RuntimeError('non-SC resolve needs the source item')
+    server_items = _channel_server_items(item)
+    logger.info('[DLManager] _resolve_media ch=%s -> %d server items: %s'
+                % (ch, len(server_items),
+                   [getattr(s, 'server', '?') for s in server_items][:6]))
+    if not server_items:
+        raise RuntimeError('channel %s returned no server links' % ch)
+    last_err = ''
+    for si in _order_dl_servers(server_items):
+        srv = (getattr(si, 'server', '') or '').lower()
+        try:
+            urls, ok, _ = servertools.resolve_video_urls_for_playing(srv, si.url)
+            if ok and urls:
+                u = urls[-1][1]
+                if _is_image(u):
+                    continue
+                logger.info('[DLManager] resolved %s via %s -> %.60s'
+                            % (ch, srv, u))
+                return u, _kind_for(u), _media_headers(srv, u)
+        except Exception as exc:
+            last_err = str(exc)[:120]
+    raise RuntimeError('no playable url for %s (%s)' % (ch, last_err or 'none'))
+
+
 def probe_qualities(page_url):
     """Resolve *page_url* and return its available variants (best-first):
     [{'height','resolution','bandwidth','url'}, ...]. [] on failure."""
@@ -373,20 +482,33 @@ def _lang_label(track):
     return _LANG_NAMES.get(lang, name or (lang.upper() if lang else u'Traccia'))
 
 
-def probe_tracks(page_url):
-    """Resolve *page_url* and return the full track set for the SCARICA dialog:
-      {'variants':[...], 'audios':[...], 'subtitles':[...], 'master_url':str}
-    audios/subtitles carry a 'label' for display. {} on failure."""
+def probe_tracks(page_url, channel='', item=None):
+    """Resolve *page_url* (channel-aware) and return the track set for the SCARICA
+    dialog: {'variants':[...], 'audios':[...], 'subtitles':[...], 'master_url',
+    'kind':'hls'|'file', 'media_url', 'headers'}. {} on failure.
+    For a progressive (non-HLS) source the result has kind='file' and a single
+    pseudo-variant; for a plain HLS without #EXT-X-STREAM-INF a pseudo-variant is
+    synthesized so the UI doesn't treat it as 'no stream'."""
     try:
-        master_url = _resolve_master(page_url)
-        headers = _default_headers(master_url)
-        text = _http_get(master_url, headers=headers).decode('utf-8', 'ignore')
-        info = hls_downloader.parse_master(text, master_url)
+        media_url, kind, headers = _resolve_media(page_url, channel, item)
+        if kind == 'file':
+            return {'variants': [{'height': 0, 'resolution': 'auto',
+                                  'bandwidth': 0, 'url': media_url}],
+                    'audios': [], 'subtitles': [], 'master_url': media_url,
+                    'kind': 'file', 'media_url': media_url, 'headers': headers}
+        text = _http_get(media_url, headers=headers).decode('utf-8', 'ignore')
+        info = hls_downloader.parse_master(text, media_url)
+        if not info.get('variants'):
+            # Single-rendition media playlist (no master) — expose one variant.
+            info['variants'] = [{'height': 0, 'resolution': 'auto',
+                                 'bandwidth': 0, 'url': media_url}]
         for a in info.get('audios', []):
             a['label'] = _lang_label(a)
         for s in info.get('subtitles', []):
             s['label'] = _lang_label(s)
-        info['master_url'] = master_url
+        info['master_url'] = media_url
+        info['kind'] = 'hls'
+        info['headers'] = headers
         return info
     except Exception as exc:
         logger.error('[DLManager] probe_tracks: %s' % str(exc)[:160])
@@ -700,29 +822,36 @@ class DownloadManager(object):
 
         entry = downloads_db.get(key) or {}
         page_url = item.url
+        channel = (getattr(item, 'channel', '') or '')
 
-        # Full resolve: video variants + separate audio renditions + subtitles.
-        info = probe_tracks(page_url)
+        # Full resolve (channel-aware): video variants + separate audio + subs.
+        info = probe_tracks(page_url, channel=channel, item=item)
         variants = info.get('variants') or []
         if not variants:
-            mu = info.get('master_url') or _resolve_master(page_url)
-            variants = [{'height': 0, 'resolution': 'auto', 'bandwidth': 0,
-                         'url': mu, 'codecs': '', 'audio_group': ''}]
+            raise RuntimeError('no playable variant (resolve failed)')
         variant = _pick_variant(variants, job['target_height'])
         if not variant:
             raise RuntimeError('no playable variant')
-        headers = _default_headers(variant['url'])
+        headers = info.get('headers') or _default_headers(variant['url'])
         quality_lbl = ('%dp' % variant['height']) if variant.get('height') else 'auto'
-
-        audios = info.get('audios') or []
-        subs = info.get('subtitles') or []
-        chosen_audios = _select_tracks(audios, job.get('audio_langs'))
-        want_subs = config.get_setting('download_subs') in (True, 'true', None)
-        chosen_subs = _select_tracks(subs, job.get('sub_langs')) if want_subs else []
 
         out_dir = _download_dir()
         fname = _output_basename(entry)
         cipher = download_crypto.get_cipher(job['protection'])
+
+        # Progressive (non-HLS) source (e.g. mixdrop .mp4): stream the file,
+        # encrypt-on-write, single output file. No separate audio/subtitle tracks.
+        if info.get('kind') == 'file':
+            self._run_file(job, key, entry, variant['url'], headers, out_dir,
+                           fname, quality_lbl, cipher, cancel_evt)
+            return
+
+        audios = info.get('audios') or []
+        subs = info.get('subtitles') or []
+        chosen_audios = _select_tracks(audios, job.get('audio_langs'))
+        want_subs = True   # always download all subtitle tracks (no prompt)
+        chosen_subs = _select_tracks(subs, job.get('sub_langs')) if want_subs else []
+
         try:
             import xbmc
             xbmc.log('[DLcrypto] encrypt protection=%s keyfp=%s audios=%d subs=%d' % (
@@ -772,18 +901,62 @@ class DownloadManager(object):
         downloads_db.update_fields(key, status='done', progress=100.0, sub_path='')
         self._notify_done(entry)
 
-    def _fresh_url(self, page_url, target_height, kind, idx):
-        """Re-resolve the master and return a fresh (url, headers) for the given
-        track after a token expiry."""
-        info = probe_tracks(page_url)
+    def _fresh_url(self, job, kind, idx):
+        """Re-resolve (channel-aware) and return a fresh (url, headers) for the
+        given track after a token expiry."""
+        item = job['item']
+        info = probe_tracks(item.url, channel=getattr(item, 'channel', '') or '',
+                            item=item)
+        hdrs = info.get('headers')
         if kind == 'audio':
             a = (info.get('audios') or [])[idx]
-            return a['url'], _default_headers(a['url'])
+            return a['url'], hdrs or _default_headers(a['url'])
         variants = info.get('variants') or []
-        v = _pick_variant(variants, target_height)
+        v = _pick_variant(variants, job['target_height'])
         if not v:
             raise RuntimeError('no variant on re-resolve')
-        return v['url'], _default_headers(v['url'])
+        return v['url'], hdrs or _default_headers(v['url'])
+
+    def _run_file(self, job, key, entry, url, headers, out_dir, fname,
+                  quality_lbl, cipher, cancel_evt):
+        """Download a progressive media file (mp4/mkv), encrypting on write, into a
+        single output file played back via the local server (range-decrypt)."""
+        from core import file_downloader
+        ext = _media_ext(url)
+        out_path = os.path.join(out_dir, fname + ext)
+        downloads_db.update_fields(key, file_path=out_path, quality=quality_lbl,
+                                   bundle=False)
+        try:
+            import xbmc
+            xbmc.log('[DLcrypto] encrypt(file) protection=%s keyfp=%s ext=%s' % (
+                job['protection'], download_crypto.key_fingerprint(), ext),
+                xbmc.LOGINFO)
+        except Exception:
+            pass
+        import time as _t
+        prog_state = {'t': 0.0}
+
+        def _progress(done, total, nbytes):
+            now = _t.time()
+            if (now - prog_state['t']) < 1.0 and done < total:
+                return
+            prog_state['t'] = now
+            pct = (done * 100.0 / total) if total else 0
+            downloads_db.update_fields(key, progress=round(pct, 1),
+                                       total_bytes=nbytes)
+
+        try:
+            file_downloader.download_file(
+                url, headers, out_path, progress_cb=_progress,
+                cancel_evt=cancel_evt, encrypt=cipher.process)
+        except file_downloader.DownloadCancelled:
+            downloads_db.update_fields(key, status='paused')
+            return
+        finally:
+            self._cancels.pop(key, None)
+
+        downloads_db.update_fields(key, status='done', progress=100.0, sub_path='')
+        self._notify_done(entry)
 
     def _dl_one(self, url, headers, out_path, cipher, cancel_evt, progress_cb,
                 job, kind, idx, meta_out):
@@ -798,8 +971,7 @@ class DownloadManager(object):
                 prewarm=prewarm_dns, meta_out=meta_out)
         except hls_downloader.TokenExpiredError:
             logger.info('[DLManager] token expired (%s/%s), re-resolving' % (kind, idx))
-            url2, headers2 = self._fresh_url(job['item'].url,
-                                             job['target_height'], kind, idx)
+            url2, headers2 = self._fresh_url(job, kind, idx)
             hls_downloader.download_stream(
                 url2, headers2, out_path, progress_cb=progress_cb,
                 cancel_evt=cancel_evt, max_workers=max_workers,

@@ -87,47 +87,88 @@ def _get_embed_page(page_url):
         return _get_embed_page(real_url)
 
     if '/uprots/' in url_lower:
-        # CB01/uprot flow: follow redirect to maxthuXXX.site/watchfree/MOVIE_ID/SESSION_ID/TOKEN.
-        # Strategy: try two passes.
-        #   Pass 1 – with cloudscraper (may solve CF JS challenge).
-        #   Pass 2 – without cloudscraper (uses CF worker proxy; proxy follows redirect but
-        #            httptools forcibly resets resp.url to the original uprots URL, so we must
-        #            scan the response HTML for the watchfree URL instead of using resp.url).
-        # Dead files return "File id error" text (no CF block) → detected by _is_dead().
-        def _try_uprots(use_cloudscraper):
+        # CB01/uprot flow: maxstream.video/uprots/TOKEN 302-redirects to
+        # maxweXXX.site/watch_free/VIEW_ID/FILE_ID/TOKEN. We only need that redirect
+        # URL (to read FILE_ID); the watch_free body itself is a Cloudflare challenge.
+        # Modes, tried in order until one yields the watch_free URL:
+        #   'plain'  – use_requests=True: a vanilla requests session WITHOUT the custom
+        #              cipher/DNS adapter. CF returns a clean 302 to this fingerprint,
+        #              so this is the one that actually works. Try it first.
+        #   'cs'     – cloudscraper (may solve a JS challenge).
+        #   'default'– the cipher adapter / CF worker proxy (often CF-challenged here).
+        # Dead files return "File id error" text → detected by _is_dead().
+        def _try_uprots(mode):
+            if mode == 'raw':
+                # Bypass httptools entirely: a vanilla requests session (browser UA,
+                # system DNS, default TLS, NO custom cipher adapter, NO Cloudflare
+                # worker-proxy retry) gets a clean 302 from maxstream.video to the
+                # watch_free URL. httptools' own modes get a CF 403 and then bounce
+                # through the (also CF-blocked) worker proxy, losing the redirect.
+                try:
+                    from lib import requests as _rq
+                    _ua = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                           '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+                    sess = _rq.Session()
+                    rr = sess.get(page_url, headers={'User-Agent': _ua,
+                                                     'Referer': 'https://uprot.net/'},
+                                  timeout=20, allow_redirects=True)
+                    html = rr.text or ''
+                    furl = rr.url or ''
+                except Exception as e:
+                    logger.info('maxstream._get_embed_page uprots[raw] error: %s' % e)
+                    return None, None, False
+                logger.info('maxstream._get_embed_page uprots[raw] final_url=%r snippet=%r'
+                            % (furl, html[:100]))
+                if _is_dead(html):
+                    return None, None, True
+                if not _re.search(r'/watch_?free/', furl) and html:
+                    m = scrapertools.find_single_match(
+                        html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
+                    if m:
+                        furl = m
+                return html, furl, False
+
             kw = dict(follow_redirects=True, headers={'Referer': 'https://uprot.net/'})
-            if use_cloudscraper:
+            if mode == 'plain':
+                kw['use_requests'] = True
+            elif mode == 'cs':
                 kw['cloudscraper'] = True
-            r = httptools.downloadpage(page_url, **kw)
+            try:
+                r = httptools.downloadpage(page_url, **kw)
+            except Exception as e:
+                # cloudscraper/DNS can raise; let the caller fall back to the next mode.
+                logger.info('maxstream._get_embed_page uprots[%s] download error: %s'
+                            % (mode, e))
+                return None, None, False
             html = getattr(r, 'data', '') or ''
             furl = getattr(r, 'url', '') or ''
-            logger.info('maxstream._get_embed_page uprots[cs=%s] final_url=%r snippet=%r'
-                        % (use_cloudscraper, furl, html[:100]))
+            logger.info('maxstream._get_embed_page uprots[%s] final_url=%r snippet=%r'
+                        % (mode, furl, html[:100]))
             if _is_dead(html):
                 return None, None, True  # (html, final_url, is_dead)
             # Find watchfree URL: either resp.url (when redirect was followed),
             # or inside the HTML body (meta-refresh / JS redirect / iframe from proxy).
-            if '/watchfree/' not in furl and html:
+            # The host now uses the path "/watch_free/" (underscore); accept both.
+            if not _re.search(r'/watch_?free/', furl) and html:
                 m = scrapertools.find_single_match(
-                    html, r'(https?://[^\s"\'<>]+/watchfree/[^\s"\'<>]+)')
+                    html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
                 if m:
                     furl = m
                     logger.info('maxstream._get_embed_page uprots watchfree in HTML: %r' % furl)
             return html, furl, False
 
-        html_uprots, final_url, dead = _try_uprots(use_cloudscraper=True)
-        if dead:
-            return None
-
-        # If cloudscraper gave nothing, retry via the CF worker proxy (no cloudscraper)
-        if not html_uprots and not final_url:
-            html_uprots, final_url, dead = _try_uprots(use_cloudscraper=False)
+        final_url = ''
+        for mode in ('raw', 'plain', 'cs', 'default'):
+            html_uprots, final_url, dead = _try_uprots(mode)
             if dead:
                 return None
+            if _re.search(r'/watch_?free/', final_url or ''):
+                break
 
-        if '/watchfree/' in (final_url or ''):
-            # watchfree path: /watchfree/MOVIE_ID/SESSION_ID/TOKEN
-            # SESSION_ID (parts[2]) is the file_id used by emhuih, NOT the movie_id (parts[1])
+        if _re.search(r'/watch_?free/', final_url or ''):
+            # watchfree path: /watch_free/VIEW_ID/FILE_ID/TOKEN
+            # FILE_ID (parts[2]) is the id used by emhuih, NOT the view/movie id (parts[1]).
+            # parts[1] is session-specific and changes per request; parts[2] is stable.
             try:
                 parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
                 session_id = parts[2] if len(parts) >= 3 else None
@@ -145,11 +186,15 @@ def _get_embed_page(page_url):
         # fall through to direct download of page_url (now emhuih/SESSION_ID)
 
     elif 'uprot.net' in url_lower:
-        # uprot.net/msf/TOKEN — the page is NOT a 302 redirect but an HTML page that
-        # embeds the real maxstream.video/uprots/ links in anchor tags.
-        # Download the HTML and try all tokens in reverse order (last tends to be live).
-        html_uprot = (httptools.downloadpage(
-            page_url, headers={'Referer': 'https://uprot.net/'}).data or '')
+        # uprot.net/msf/TOKEN now gates the real maxstream.video/uprots/ links
+        # behind a 3-digit numeric image captcha (validated in the PHP session).
+        # lib.uprot_captcha solves it with a pure-stdlib OCR (decode+segment+match)
+        # and POSTs the answer, returning the HTML that embeds the /uprots/ links.
+        from lib import uprot_captcha
+        html_uprot = uprot_captcha.solve_uprot(page_url, httptools.downloadpage) or ''
+        if not html_uprot:
+            logger.info('maxstream._get_embed_page uprot/msf: captcha not solved')
+            return None
         logger.info('maxstream._get_embed_page uprot/msf html_snippet=%r' % html_uprot[:400])
 
         # Real tokens are long base64; filter out the fake placeholder '123456789012'

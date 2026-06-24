@@ -54,24 +54,24 @@ def _block(version, notes):
 
 
 def pending_notes(last_seen, current, text):
-    """Combined notes (newest first) for released versions newer than *last_seen*
-    and not above *current*. Returns None when there is nothing to show.
+    """FULL release-notes history (newest first) up to *current*, so the update
+    popup always shows the older versions too — not just the latest — letting a
+    user who skipped releases see everything that was added.
 
-    On a fresh install (no *last_seen*) returns only the latest released entry,
-    so the user gets a welcome note instead of the whole history.
+    Returns None when *current* has no changelog entry of its own (e.g. a routine
+    patch that shipped no notes) so those releases don't pop up. *last_seen* is
+    accepted for API compatibility; the caller (service.py) gates on the version
+    actually changing before calling this.
     """
     releases = [(v, n) for (v, n) in parse(text) if _is_release(v)]
     if not releases:
         return None
-    releases.sort(key=lambda e: _vkey(e[0]), reverse=True)
-
-    if not last_seen:
-        v, n = releases[0]
-        return _block(v, n)
-
-    seen_k = _vkey(last_seen)
-    cur_k = _vkey(current) if current else _vkey(releases[0][0])
-    show = [(v, n) for (v, n) in releases if seen_k < _vkey(v) <= cur_k]
-    if not show:
+    cur_k = _vkey(current) if current else None
+    # Only notify when THIS version added notes; skip no-note patch releases.
+    if cur_k is not None and not any(_vkey(v) == cur_k for (v, _) in releases):
         return None
-    return '\n\n'.join(_block(v, n) for (v, n) in show)
+    releases.sort(key=lambda e: _vkey(e[0]), reverse=True)
+    shown = [(v, n) for (v, n) in releases if cur_k is None or _vkey(v) <= cur_k]
+    if not shown:
+        return None
+    return '\n\n'.join(_block(v, n) for (v, n) in shown)

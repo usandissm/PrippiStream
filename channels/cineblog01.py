@@ -188,9 +188,29 @@ def episodios(item):
     return locals()
 
 
+def _order_cb_servers(itemlist):
+    """CB link priority: Mixdrop (no captcha, most reliable) first at its highest
+    quality, then Maxstream as the fallback at its highest quality, then any other
+    server. ITA is kept ahead of Sub-ITA. Overrides the global server-order setting
+    for this channel only."""
+    from platformcode.platformtools import calcResolution
+    prio = {'mixdrop': 0, 'maxstream': 1}
+
+    def key(it):
+        lang = 0 if (it.contentLanguage or '') == 'ITA' else 1
+        return (lang, prio.get((it.server or '').lower(), 2),
+                -calcResolution(it.quality or ''))
+
+    try:
+        itemlist.sort(key=key)
+    except Exception:
+        pass
+    return itemlist
+
+
 def findvideos(item):
     if item.serieFolder:
-        return support.server(item, data=item.url)
+        return _order_cb_servers(support.server(item, data=item.url))
     if item.contentType == "episode":
         return findvid_serie(item)
 
@@ -199,12 +219,9 @@ def findvideos(item):
         logger.info('CB01 load_links [%s] streaming_snippet=%r' % (desc_txt, streaming[:300] if streaming else ''))
         matches = support.match(streaming, patron = r'<td><a.*?href=([^ ]+) [^>]+>([^<]+)<').matches
         for scrapedurl, scrapedtitle in matches:
-            # uprot.net (Maxstream) is now permanently behind a 5-digit image CAPTCHA,
-            # so it can never resolve — skip it. Every CB01 film also carries a
-            # stayonline.pro/Mixdrop mirror that DOES resolve, so nothing is lost.
-            if 'uprot.net' in scrapedurl:
-                logger.info("CB01 findvideos %s ## SKIP dead uprot/Maxstream url=%s" % (desc_txt, scrapedurl))
-                continue
+            # uprot.net (Maxstream) gates its links behind a 3-digit image CAPTCHA
+            # that servers/maxstream.py now solves automatically (lib.uprot_captcha),
+            # so these are offered again as a backup to the stayonline.pro/Mixdrop mirror.
             logger.info("CB01 findvideos %s ## url=%s ## title=%s ##" % (desc_txt, scrapedurl, scrapedtitle))
             itemlist.append(item.clone(action="play", title=scrapedtitle, url=scrapedurl, server=scrapedtitle, quality=quality))
 
@@ -228,7 +245,7 @@ def findvideos(item):
 
     # Extract the quality format
     patronvideos = r'([\w.]+)</strong></div></td>'
-    return support.server(item, itemlist=itemlist, patronTag=patronvideos)
+    return _order_cb_servers(support.server(item, itemlist=itemlist, patronTag=patronvideos))
 
     # Estrae i contenuti - Download
     # load_links(itemlist, '<strong>Download:</strong>(.*?)<tableclass=cbtable height=30>', "aqua", "Download")
@@ -241,7 +258,7 @@ def findvid_serie(item):
     logger.debug()
     data = re.sub(r'((?:<p>|<strong>)?[^\d]*\d*(?:&#215;|Ã)[0-9]+[^<]+)', '', item.other)
 
-    return support.server(item, data=data)
+    return _order_cb_servers(support.server(item, data=data))
 
 
 def play(item):
