@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.1.1" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.2.0" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -36,11 +36,11 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Sbloccati molti più film e serie, ora partono contenuti che prima non si riproducevano.
-- Download offline esteso ad altri contenuti.
-- Download: ora scarica sempre tutte le tracce audio e i sottotitoli disponibili, senza più chiedere.
-- Contenuti scaricati: cliccandoli si apre un menu "Riproduci / Elimina" (con conferma prima di eliminare).
-- DNS Google attivo di default: migliore raggiungibilità dei siti.
+      <news>- Nuova schermata "Sfoglia": esplora il catalogo per categoria (Film, Serie TV, K-Drama, Anime) e per genere.
+- Ricerca rinnovata: nuova grafica, filtri (Tutti / Film / Serie / Anime) ed etichette di tipo sui titoli.
+- Migliorata la selezione con le frecce nelle righe SKY e Sport.
+- Migliorata l'affidabilità di alcuni contenuti.
+- Vari miglioramenti e correzioni.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]

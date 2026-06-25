@@ -1,4 +1,4 @@
-## Prossima
+## 1.2.0
 - Nuova schermata "Sfoglia": esplora il catalogo per categoria (Film, Serie TV, K-Drama, Anime) e per genere.
 - Ricerca rinnovata: nuova grafica, filtri (Tutti / Film / Serie / Anime) ed etichette di tipo sui titoli.
 - Migliorata la selezione con le frecce nelle righe SKY e Sport.
