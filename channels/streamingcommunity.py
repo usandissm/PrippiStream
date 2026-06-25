@@ -22,6 +22,46 @@ else:
 # Il dominio viene aggiornato automaticamente tramite daily sync di channels.json.
 host = config.get_channel_url()
 
+
+def findhost(url):
+    """Best-effort runtime re-discovery of the current SC domain.
+
+    Follows redirects from the seed URL (the old domain usually 301/302s to the
+    new one when SC moves). Returns scheme+host only; falls back to the seed
+    (never empty) so callers always get a usable host.
+    """
+    try:
+        resp = httptools.downloadpage(url, follow_redirects=True, verify=False)
+        final = (getattr(resp, 'url', '') or '').rstrip('/')
+        if final:
+            from core import scrapertools as _st
+            dom = _st.get_domain_from_url(final)
+            if dom:
+                return 'https://' + dom
+    except Exception:
+        pass
+    return url.rstrip('/')
+
+
+def _refresh_host():
+    """Re-discover the SC domain on a fetch failure and self-heal the module host.
+
+    Primary host stays the cron-updated `direct` value; this only kicks in when a
+    request comes back empty (domain moved between daily syncs). Mirrors the
+    AnimeUnity pattern. Returns True if the host changed.
+    """
+    global host
+    try:
+        new_host = config.get_channel_url(findhost, name='streamingcommunity',
+                                          forceFindhost=True)
+        if new_host and new_host.rstrip('/') != (host or '').rstrip('/'):
+            logger.info('[SC] host re-discovered: %s' % new_host)
+            host = new_host
+            return True
+    except Exception as exc:
+        logger.error('[SC] host refresh failed: %s' % str(exc))
+    return False
+
 # def getHeaders(forced=False):
 #     global headers
 #     global host
@@ -67,8 +107,19 @@ def mainlist(item):
 
 
 def get_data(url):
-    return jsontools.load(
-        support.scrapertools.decodeHtmlentities(support.match(url, patron='data-page="([^"]+)', debug=False).match))
+    raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
+    # Self-heal: empty page usually means the SC domain moved. Re-discover via
+    # findhost, rebuild the URL against the new host and retry once.
+    if not raw and _refresh_host():
+        try:
+            old_dom = support.scrapertools.get_domain_from_url(url)
+            new_dom = support.scrapertools.get_domain_from_url(host)
+            if old_dom and new_dom and old_dom != new_dom:
+                url = url.replace(old_dom, new_dom)
+        except Exception:
+            pass
+        raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
+    return jsontools.load(support.scrapertools.decodeHtmlentities(raw))
 
 
 def genres(item):
@@ -205,6 +256,52 @@ def makeItem(n, it, item):
         itm.url = host + '/it/titles/%s-%s' % (it['id'], it['slug'])
     itm.n = n
     return itm
+
+
+# South Korea country id in the SC archive (used by the K-Drama category).
+KOREA_COUNTRY_ID = 118
+
+
+def archive_total(url):
+    """Return the total title count for an archive URL (filters in the URL).
+    One lightweight page-1 fetch; no item building / TMDB enrichment."""
+    try:
+        sep = '&' if '?' in url else '?'
+        dp = get_data('%s%spage=1' % (url, sep))
+        return int(((dp or {}).get('props', {}) or {}).get('totalCount', 0) or 0)
+    except Exception as exc:
+        logger.error('[SC] archive_total: %s' % str(exc)[:120])
+        return 0
+
+
+def browse(item):
+    """Archive pagination for the category browser.
+
+    item.url already carries the filters (type, genre[], country[]); item.page is
+    1-based. SC serves 60 titles/page sorted by release_date (newest first).
+    Returns (itemlist_enriched, total_count). Reuses makeItem + TMDB enrichment so
+    items behave exactly like normal SC results (play/detail unchanged).
+    """
+    page = item.page if item.page else 1
+    sep = '&' if '?' in item.url else '?'
+    data_page = get_data('%s%spage=%d' % (item.url, sep, page))
+    props = (data_page or {}).get('props', {}) if isinstance(data_page, dict) else {}
+    records = props.get('titles', []) or []
+    try:
+        total = int(props.get('totalCount', 0) or 0)
+    except Exception:
+        total = 0
+    seed = item.clone(records=[], page=0)   # clean seed for makeItem clones
+    itemlist = []
+    with futures.ThreadPoolExecutor() as executor:
+        futs = [executor.submit(makeItem, i, it, seed) for i, it in enumerate(records)]
+        for res in futures.as_completed(futs):
+            if res.result():
+                itemlist.append(res.result())
+    itemlist.sort(key=lambda x: x.n)
+    if itemlist:
+        support.tmdb.set_infoLabels_itemlist(itemlist, seekTmdb=True)
+    return itemlist, total
 
 
 def episodios(item):

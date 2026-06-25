@@ -321,6 +321,7 @@ HERO_META          = 104
 HERO_PLOT          = 105
 CLOSE_BTN          = 108
 SETTINGS_BTN       = 107   # ⚙ settings button in top bar
+BROWSE_BTN_HOME    = 106   # "Sfoglia" (category browser) button in top bar
 BTN_PLAY           = 110   # PLAY CTA button in hero
 BTN_INFO           = 111   # MORE INFO CTA button in hero
 LOADING_LBL        = 200
@@ -383,22 +384,31 @@ ACTION_MOUSE_MOVE   = 107
 ACTION_CONTEXT_MENU = 117
 
 # ── Search window control IDs ────────────────────────────────
-SEARCH_BTN_HOME    = 109   # search button in NetflixHome top bar
-SEARCH_BTN_BACK    = 109   # same id reused in NetflixSearch (back ←)
-SEARCH_QUERY_BTN   = 120   # clickable query display / re-search button
-SEARCH_PROGRESS    = 121   # progress label
-SEARCH_CLOSE       = 122   # close ✕ button
-SEARCH_PLAY        = 135   # GUARDA button
-SEARCH_INFO        = 136   # INFO  button
-SEARCH_BADGE_SC    = 150   # result count badge for SC row
-SEARCH_BADGE_FILM  = 151   # result count badge for Film row
-SEARCH_BADGE_TV    = 152   # result count badge for TV row
-SEARCH_WL_SC       = 160   # wraplist: SC results
-SEARCH_WL_FILM     = 161   # wraplist: Film (altri canali)
-SEARCH_WL_TV       = 162   # wraplist: Serie TV (altri canali)
-SEARCH_LOADING     = 170   # loading indicator group
-SEARCH_NORESULTS   = 171   # no-results label
-SEARCH_STATUS_LBL  = 172   # "Ricerca in corso..." text inside loading group
+SEARCH_BTN_HOME     = 109   # search button in NetflixHome top bar
+SEARCH_BTN_BACK     = 109   # (legacy) back; ESC/Back key handled in onAction
+SEARCH_CTX_POSTER   = 131   # hero box: focused item mini poster
+SEARCH_CTX_TITLE    = 132   # hero box: focused item title
+SEARCH_CTX_META     = 133   # hero box: focused item meta (type · year · rating)
+SEARCH_CTX_PLOT     = 134   # hero box: focused item plot (2 lines)
+SEARCH_QUERY_BTN    = 120   # clickable query display / re-search button
+SEARCH_PROGRESS     = 121   # result-count / progress label
+SEARCH_CLOSE        = 122   # close ✕ button
+SEARCH_FILTER_ALL   = 140   # filter chip: Tutti
+SEARCH_FILTER_FILM  = 141   # filter chip: Film
+SEARCH_FILTER_SERIE = 142   # filter chip: Serie
+SEARCH_FILTER_ANIME = 143   # filter chip: Anime
+SEARCH_WL_SC        = 160   # poster grid panel
+SEARCH_LOADING      = 170   # loading indicator group
+SEARCH_NORESULTS    = 171   # no-results label
+SEARCH_STATUS_LBL   = 172   # "Ricerca in corso..." text inside loading group
+
+# Map filter chip control id → search-type key
+SEARCH_FILTER_MAP = {
+    SEARCH_FILTER_ALL:   'all',
+    SEARCH_FILTER_FILM:  'film',
+    SEARCH_FILTER_SERIE: 'serie',
+    SEARCH_FILTER_ANIME: 'anime',
+}
 
 
 # ── Continue Watching helpers ────────────────────────────────
@@ -2089,6 +2099,12 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             _open_search(parent_window=self)
             return
 
+        # ── Browse button → open category browser ──
+        if control_id == BROWSE_BTN_HOME:
+            xbmc.log('[NetflixHome] onClick BROWSE_BTN_HOME (106) triggered', xbmc.LOGINFO)
+            _open_browse(parent_window=self)
+            return
+
         # ── Overlay button click (mouse click on card) → open detail window ──
         for i in range(self._num_rows):
             if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
@@ -2152,14 +2168,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # is that NetflixSearchWindow. After playback _wait_and_restore then
         # restores focus to the search results (last-clicked card) instead of the
         # home rows. None = normal home flow.
-        # Suppress the server-selection popup that mark_auto_as_watched would
-        # otherwise show after playback ends.  We manage resume/next-ep ourselves.
-        try:
-            from core import db as _db_launch
-            _db_launch['player']['suppress_server_popup'] = True
-            _db_launch.close()
-        except Exception:
-            pass
+        # Note: the post-playback "choose another server" popup is suppressed by
+        # default in xbmc_videolibrary.mark_auto_as_watched (Netflix-only UI), so
+        # no per-launch flag is needed here anymore. We manage resume/next-ep ourselves.
 
         # ── 4K check (movies only) ────────────────────────────────────────
         ct = getattr(item, 'contentType', '') or ''
@@ -6779,6 +6790,47 @@ def _open_search(parent_window=None):
             parent_window._bg_ui_pause.set()
 
 
+# ── Search result classification (anime / film / serie) ──────────────────────
+# A result is ANIME when its source channel is a *pure*-anime channel
+# (categories include 'anime' but neither 'movie' nor 'tvshow'). Mixed channels
+# (e.g. cineblog01: anime+movie+tvshow) classify by the item's own mediatype.
+_chan_is_anime_cache = {}
+
+def _channel_is_anime(ch_name):
+    """True if *ch_name* is a pure-anime channel. Cached (reads channel JSON once)."""
+    if ch_name in _chan_is_anime_cache:
+        return _chan_is_anime_cache[ch_name]
+    res = False
+    try:
+        from core import channeltools
+        cats = channeltools.get_channel_parameters(ch_name).get('categories', []) or []
+        cats = [str(c).lower() for c in cats]
+        res = ('anime' in cats) and not ('movie' in cats or 'tvshow' in cats)
+    except Exception:
+        res = False
+    _chan_is_anime_cache[ch_name] = res
+    return res
+
+def _classify_search_item(item):
+    """Return 'anime' | 'film' | 'serie' for a search result item.
+
+    Priority Anime: a title from a pure-anime channel is ANIME regardless of
+    its mediatype. Otherwise classify by mediatype/contentType (movie→film,
+    tvshow/season/episode→serie), defaulting to 'film' when unknown.
+    """
+    ch = getattr(item, '_search_channel', '') or ''
+    if ch and ch != 'sc' and _channel_is_anime(ch):
+        return 'anime'
+    info = getattr(item, 'infoLabels', None) or {}
+    mt = str(info.get('mediatype', '') or '').lower()
+    ct = str(getattr(item, 'contentType', '') or '').lower()
+    if mt == 'movie' or ct == 'movie':
+        return 'film'
+    if mt in ('tvshow', 'season', 'episode') or ct in ('tvshow', 'season', 'episode'):
+        return 'serie'
+    return 'film'
+
+
 xbmc.log('[NetflixSearch] MODULE: about to define NetflixSearchWindow', xbmc.LOGINFO)
 
 
@@ -6801,8 +6853,10 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         super().__init__(xmlFilename, scriptPath, **kwargs)
         self._query          = query
         self._parent_window  = parent_window   # NetflixHomeWindow — for CW/launch delegation
-        self._items     = []             # flat list of all results
-        self._hero_item = None           # item currently shown in hero
+        self._items     = []             # currently displayed results (after filter)
+        self._all_items = []             # full result set (all types) — filter source
+        self._active_filter = 'all'      # active filter chip: all|film|serie|anime
+        self._hero_item = None           # item currently shown in the context line
         self._last_pos  = 0              # last selected grid position (restored after trailer)
         self._alive     = True           # False once closed (HOME._restore_search_window guard)
         self._search_started = False     # guard: onInit may fire again after a fullscreen trailer
@@ -6818,6 +6872,8 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
     def onInit(self):
         try:
+            # Highlight the active filter chip (defaults to "Tutti")
+            self.setProperty('filter', self._active_filter)
             # Show query text in the query button
             self.getControl(SEARCH_QUERY_BTN).setLabel(
                 '[COLOR FF888888]' + chr(0x1F50D) + '  [/COLOR]' + self._query
@@ -6905,13 +6961,8 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self.close()
             _open_search()
             return
-        if control_id == SEARCH_PLAY:
-            if self._hero_item:
-                self._launch_item(self._hero_item)
-            return
-        if control_id == SEARCH_INFO:
-            if self._hero_item:
-                self._open_detail(self._hero_item)
+        if control_id in SEARCH_FILTER_MAP:
+            self._apply_filter(SEARCH_FILTER_MAP[control_id])
             return
         if control_id == SEARCH_WL_SC:   # panel grid id=160
             try:
@@ -6947,40 +6998,110 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         except Exception:
             pass
 
-    # ── Hero panel ────────────────────────────────────────────────────────
+    # ── Context line (focused item summary) ───────────────────────────────
+
+    _TYPE_LABELS = {
+        'anime': '[COLOR FFA78BFA]ANIME[/COLOR]',
+        'film':  '[COLOR FF38BDF8]FILM[/COLOR]',
+        'serie': '[COLOR FF4ADE80]SERIE[/COLOR]',
+    }
 
     def _update_hero(self, item):
-        """Populate the hero panel with data from *item*."""
+        """Update the bottom hero box (mini poster + title + meta + plot) for *item*."""
         if item is None:
+            try:
+                self.getControl(SEARCH_CTX_POSTER).setImage('')
+                self.getControl(SEARCH_CTX_TITLE).setLabel('')
+                self.getControl(SEARCH_CTX_META).setLabel('')
+                self.getControl(SEARCH_CTX_PLOT).setLabel('')
+            except Exception:
+                pass
             return
         try:
             self._hero_item = item
-            # Poster
-            thumb = item.thumbnail or ''
-            self.getControl(131).setImage(thumb)
-            # Fanart (background) — use fanart if available, else poster
-            fanart = getattr(item, 'fanart', '') or thumb
-            if fanart:
-                self.getControl(130).setImage(fanart)
-            # Title
+            # Mini poster
+            try:
+                self.getControl(SEARCH_CTX_POSTER).setImage(item.thumbnail or '')
+            except Exception:
+                pass
             title = item.fulltitle or item.title or ''
-            self.getControl(132).setLabel(title)
-            # Meta
+            self.getControl(SEARCH_CTX_TITLE).setLabel(title)
             info = item.infoLabels or {}
-            year  = str(info.get('year', '')) if info.get('year') else ''
-            rating = ('%.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
-            media  = info.get('mediatype', '')
-            parts  = [p for p in [year, rating, media.upper()] if p]
-            # 4K badge
-            _tmdb_h = str(item.infoLabels.get('tmdb_id') or '').strip()
+            year   = str(info.get('year', '')) if info.get('year') else ''
+            rating = ('★ %.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
+            stype  = getattr(item, '_search_type', '') or _classify_search_item(item)
+            tlabel = self._TYPE_LABELS.get(stype, '')
+            # 4K badge (movies only)
+            extra = ''
+            _tmdb_h = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
             if getattr(item, 'contentType', '') == 'movie' and _tmdb_h and _fourk.is_4k_available(_tmdb_h):
-                parts.append('[COLOR FFE50914]4K[/COLOR]')
-            self.getControl(133).setLabel('  ·  '.join(parts))
-            # Plot
-            plot = str(info.get('plot', ''))[:200]
-            self.getControl(134).setLabel(plot)
+                extra = '[COLOR FFE50914]4K[/COLOR]'
+            parts = [p for p in [tlabel, year, rating, extra] if p]
+            self.getControl(SEARCH_CTX_META).setLabel('   ·   '.join(parts))
+            # Plot (trimmed; the label wraps to 2 lines)
+            plot = str(info.get('plot', '') or '').strip()
+            if len(plot) > 240:
+                plot = plot[:237].rstrip() + '…'
+            self.getControl(SEARCH_CTX_PLOT).setLabel(plot)
         except Exception as exc:
             logger.error('[NetflixSearch] _update_hero: %s' % str(exc))
+
+    # ── Filters ───────────────────────────────────────────────────────────
+
+    def _count_by_type(self, items):
+        """Return (n_all, n_film, n_serie, n_anime) for *items*."""
+        n_film = n_serie = n_anime = 0
+        for it in items:
+            t = getattr(it, '_search_type', '')
+            if   t == 'anime': n_anime += 1
+            elif t == 'serie': n_serie += 1
+            else:              n_film  += 1
+        return len(items), n_film, n_serie, n_anime
+
+    def _update_count_label(self):
+        """Refresh the result-count label (id=121) from the full result set."""
+        with self._lock:
+            base = list(self._all_items)
+        n_all, n_film, n_serie, n_anime = self._count_by_type(base)
+        txt = ('[B]%d[/B] risultati   ·   %d film · %d serie · '
+               '[COLOR FFA78BFA]%d anime[/COLOR]' % (n_all, n_film, n_serie, n_anime))
+        try:
+            self.getControl(SEARCH_PROGRESS).setLabel(txt)
+        except Exception:
+            pass
+
+    def _apply_filter(self, ftype):
+        """Filter the full result set by content type and re-populate the grid."""
+        self._active_filter = ftype
+        self.setProperty('filter', ftype)
+        with self._lock:
+            base = list(self._all_items)
+        if ftype == 'all':
+            items = base
+        else:
+            items = [it for it in base if getattr(it, '_search_type', 'film') == ftype]
+        with self._lock:
+            self._items = items
+        try:
+            self.getControl(SEARCH_WL_SC).reset()
+        except Exception:
+            pass
+        self._populate_grid(items)
+        try:
+            self.getControl(SEARCH_NORESULTS).setVisible(not items)
+        except Exception:
+            pass
+        if items:
+            self._last_pos = 0
+            self._update_hero(items[0])
+            try:
+                self.getControl(SEARCH_WL_SC).selectItem(0)
+                self.setFocusId(SEARCH_WL_SC)
+            except Exception:
+                pass
+        else:
+            self._update_hero(None)
+        self._update_count_label()
 
     # ── Detail / play ──────────────────────────────────────────────────────
 
@@ -7100,6 +7221,9 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
             li.setArt({'thumb': it.thumbnail or ''})
             li.setProperty('thumbnail', it.thumbnail or '')
+            # Type badge (ANIME / FILM / SERIE) — drives the coloured pill in the skin
+            stype = getattr(it, '_search_type', '') or _classify_search_item(it)
+            li.setProperty('stype', stype.upper())
             list_items.append(li)
         try:
             self.getControl(SEARCH_WL_SC).addItems(list_items)
@@ -7142,6 +7266,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                         and (it.thumbnail or '').strip().lower() not in ('none', 'false', 'null', 'n/a')]
             for it in sc_items:
                 it._search_channel = 'sc'
+                it._search_type = _classify_search_item(it)
                 tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
                 if tmdb:
                     sc_tmdb_ids.add(str(tmdb))
@@ -7153,6 +7278,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
         # Show SC results immediately in the grid (user sees something right away)
         with self._lock:
+            self._all_items = list(sc_items)
             self._items = list(sc_items)
         self._populate_grid(sc_items)
         if sc_items:
@@ -7241,6 +7367,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                             ch_name, _r_norm[:40], _q_norm_raw))
                         continue
                     r._search_channel = ch_name
+                    r._search_type = _classify_search_item(r)
                     filtered.append(r)
                 logger.debug('[NetflixSearch] %s: %d results' % (ch_name, len(filtered)))
                 return filtered
@@ -7306,10 +7433,13 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             t = (it.thumbnail or '').strip()
             return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
 
-        # Dedup: first occurrence (highest priority) wins per tmdb_id;
-        # ALSO dedup by normalized title regardless of whether tmdb_id is present.
-        seen_tmdb  = set()
-        seen_title = set()
+        # Dedup by tmdb_id and by normalized title. Priority Anime: when the same
+        # title appears from both an anime source and a non-anime one, the anime
+        # version wins (keeps the anime source so playback uses the anime channel).
+        # The kept item takes the original (highest-relevance) slot, so cross-title
+        # ordering is preserved — only the per-title winner changes.
+        seen_tmdb  = {}   # tmdb  → index in deduped
+        seen_title = {}   # title → index in deduped
         deduped    = []
         for it in combined:
             # Skip items with no valid thumbnail — they render as blank cards
@@ -7317,37 +7447,50 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 continue
             nt   = _norm_title(it)
             tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
-            if tmdb:
-                key = str(tmdb)
-                if key in seen_tmdb:
-                    continue
-                # Even if tmdb_id is unique, skip if another item with same title already shown
-                if nt and nt in seen_title:
-                    continue
-                seen_tmdb.add(key)
-            else:
-                if not nt:
-                    continue   # skip items with no usable title
-                if nt in seen_title:
-                    continue
+            tkey = str(tmdb) if tmdb else None
+            # Locate an already-kept duplicate (by tmdb first, then by title)
+            dup_idx = None
+            if tkey is not None and tkey in seen_tmdb:
+                dup_idx = seen_tmdb[tkey]
+            elif nt and nt in seen_title:
+                dup_idx = seen_title[nt]
+            if dup_idx is not None:
+                # Duplicate: replace the kept item only if THIS one is anime and the
+                # kept one is not (Priority Anime).
+                prev = deduped[dup_idx]
+                if (getattr(it, '_search_type', '') == 'anime'
+                        and getattr(prev, '_search_type', '') != 'anime'):
+                    deduped[dup_idx] = it
+                continue
+            if tkey is None and not nt:
+                continue   # no tmdb and no usable title → skip
+            idx = len(deduped)
+            if tkey is not None:
+                seen_tmdb[tkey] = idx
             if nt:
-                seen_title.add(nt)
+                seen_title[nt] = idx
             deduped.append(it)
 
         # Non-SC items are played via the channel flow (see _launch_item), which
         # sets up inputstream.adaptive/DRM correctly — so there is no background
         # link pre-testing here anymore (it played raw URLs that wouldn't start).
 
-        # ── Step 4b: Reset panel and re-populate with final sorted list ──
+        # ── Step 4b: store full set, apply the active filter, re-populate ──
         with self._lock:
-            self._items = deduped
+            self._all_items = deduped
+        # Honour whatever filter chip the user may have selected while loading.
+        ftype = self._active_filter
+        shown = deduped if ftype == 'all' else [
+            it for it in deduped if getattr(it, '_search_type', 'film') == ftype]
+        with self._lock:
+            self._items = shown
         try:
             self.getControl(SEARCH_WL_SC).reset()
         except Exception:
             pass
-        self._populate_grid(deduped)
-        if deduped:
-            self._update_hero(deduped[0])
+        self._populate_grid(shown)
+        if shown:
+            self._update_hero(shown[0])
 
         # ── Step 5: Finalize ───────────────────────────────────────────
         total = len(deduped)
@@ -7357,7 +7500,8 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 self.getControl(SEARCH_NORESULTS).setVisible(True)
                 self._set_progress('Nessun risultato trovato per questa ricerca.')
             else:
-                self._set_progress('[B]%d risultati[/B]  trovati tra tutti i canali' % total)
+                self.getControl(SEARCH_NORESULTS).setVisible(not shown)
+                self._update_count_label()
         except Exception:
             pass
         self._search_done.set()
@@ -7553,6 +7697,738 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
 
 xbmc.log('[NetflixSearch] MODULE: NetflixSearchWindow defined OK', xbmc.LOGINFO)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NetflixBrowseWindow — single-screen category browser (SC + CB01 + AnimeUnity)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Browse window control IDs ────────────────────────────────
+BROWSE_EXIT        = 122
+BROWSE_COUNT       = 121
+BROWSE_TAB_FILM    = 200
+BROWSE_TAB_SERIE   = 201
+BROWSE_TAB_KDRAMA  = 202
+BROWSE_TAB_ANIME   = 203
+BROWSE_BREADCRUMB  = 210
+BROWSE_SORT        = 211
+BROWSE_GENRES      = 140
+BROWSE_GRID        = 160
+BROWSE_HERO_POSTER = 150
+BROWSE_HERO_TITLE  = 151
+BROWSE_HERO_META   = 152
+BROWSE_HERO_PLOT   = 153
+BROWSE_LOADING     = 170
+BROWSE_EMPTY       = 171
+BROWSE_TAB_MAP = {BROWSE_TAB_FILM: 'film', BROWSE_TAB_SERIE: 'serie',
+                  BROWSE_TAB_KDRAMA: 'kdrama', BROWSE_TAB_ANIME: 'anime'}
+
+# Module caches (shared across re-opens of the browse window)
+_br_genre_cache   = {}              # macro -> list[genre dict]
+_br_cb01_genres   = {'film': None, 'serie': None}  # key -> {norm_name: url}
+
+
+def _br_clean(s):
+    import re as _re
+    return _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', s or '').strip()
+
+
+def _br_norm_title(it):
+    import re as _re
+    raw = (getattr(it, 'fulltitle', '') or getattr(it, 'title', '') or '')
+    t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
+    t = _re.sub(r'[^a-z0-9 ]', '', t)
+    t = _re.sub(r'\s+', ' ', t).strip()
+    t = _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
+    return t
+
+
+def _br_year(it):
+    info = getattr(it, 'infoLabels', None) or {}
+    y = info.get('year') or getattr(it, 'year', '') or ''
+    try:
+        y = int(str(y)[:4])
+        if 1900 <= y <= 2100:
+            return y
+    except Exception:
+        pass
+    return 0
+
+
+def _br_valid_thumb(it):
+    t = (getattr(it, 'thumbnail', '') or '').strip()
+    return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
+
+
+def _br_is_korean(it):
+    """Best-effort K-Drama detection from TMDB-enriched infoLabels."""
+    info = getattr(it, 'infoLabels', None) or {}
+    lang = str(info.get('original_language', '') or '').lower()
+    if lang == 'ko':
+        return True
+    oc = info.get('origin_country') or info.get('country') or ''
+    if isinstance(oc, (list, tuple)):
+        oc = ','.join(str(x) for x in oc)
+    oc = str(oc)
+    return ('KR' in oc) or ('Korea' in oc) or ('Corea' in oc)
+
+
+def _br_fetch_genres(macro):
+    """Return [{'name','sc_id','anime_item'}] for *macro*. Cached per macro.
+
+    SC genres carry a 'type' (movie / tv / all). Film must use movie+all genres,
+    Serie & K-Drama tv+all — otherwise picking a wrong-type genre returns ~0
+    titles (e.g. the TV genre 'Action & Adventure' under Film gave 1 result).
+    """
+    if macro in _br_genre_cache:
+        return _br_genre_cache[macro]
+    genres = [{'name': 'Tutti', 'sc_id': None, 'anime_item': None}]
+    try:
+        from core.item import Item as _Item
+        if macro in ('film', 'serie', 'kdrama'):
+            import channels.streamingcommunity as _sc
+            dp = _sc.get_data(_sc.host + '/it/archive')
+            raw = ((dp or {}).get('props', {}) or {}).get('genres', []) or []
+            want = ('movie', 'all') if macro == 'film' else ('tv', 'all')
+            picked, seen = [], set()
+            for g in raw:
+                if g.get('type') not in want:
+                    continue
+                name = (g.get('name') or '').strip()
+                gid  = g.get('id')
+                key  = name.lower()
+                if name and gid is not None and key not in seen:
+                    seen.add(key)
+                    picked.append({'name': name, 'sc_id': str(gid), 'anime_item': None})
+            picked.sort(key=lambda d: d['name'].lower())
+            genres.extend(picked)
+        elif macro == 'anime':
+            import channels.animeunity as _au
+            seed = _Item(channel='animeunity', url=_au.host, args={})
+            for g in (_au.genres(seed) or []):
+                name = _br_clean(getattr(g, 'title', ''))
+                if name:
+                    genres.append({'name': name, 'sc_id': None, 'anime_item': g})
+    except Exception as exc:
+        logger.error('[Browse] genres %s: %s' % (macro, str(exc)[:160]))
+    _br_genre_cache[macro] = genres
+    return genres
+
+
+def _br_cb01_genre_map(macro):
+    """Return {normalized_genre_name: category_url} for CB01 film/serie. Cached."""
+    key = 'serie' if macro == 'serie' else 'film'
+    if _br_cb01_genres.get(key) is not None:
+        return _br_cb01_genres[key]
+    mp = {}
+    try:
+        import channels.cineblog01 as _cb
+        from core.item import Item as _Item
+        if key == 'film':
+            seed = _Item(channel='cineblog01', url=_cb.host,
+                         args='Film per Genere', contentType='movie')
+        else:
+            seed = _Item(channel='cineblog01', url=_cb.host.rstrip('/') + '/serietv/',
+                         args='Serie-TV x Genere', contentType='tvshow')
+        for g in (_cb.menu(seed) or []):
+            name = _br_clean(getattr(g, 'title', '')).lower()
+            url  = getattr(g, 'url', '') or ''
+            if name and url:
+                mp[name] = url
+    except Exception as exc:
+        logger.error('[Browse] cb01 genres %s: %s' % (key, str(exc)[:160]))
+    _br_cb01_genres[key] = mp
+    return mp
+
+
+def _open_browse(parent_window=None):
+    """Open the category-browser modal."""
+    _nb_cls = globals().get('NetflixBrowseWindow')
+    if _nb_cls is None:
+        return
+    try:
+        if parent_window is not None:
+            parent_window._bg_ui_pause.clear()
+        win = NetflixBrowseWindow('NetflixBrowse.xml', config.get_runtime_path(),
+                                  parent_window=parent_window)
+        win.doModal()
+        del win
+    except Exception as exc:
+        xbmc.log('[NetflixBrowse] _open_browse ERROR: %s' % str(exc), xbmc.LOGERROR)
+    finally:
+        if parent_window is not None:
+            parent_window._bg_ui_pause.set()
+
+
+class NetflixBrowseWindow(xbmcgui.WindowXML):
+    """Single-screen browser: macro tabs + genre sidebar + sort + poster grid."""
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, xmlFilename, scriptPath, parent_window=None, **kwargs):
+        super().__init__(xmlFilename, scriptPath, **kwargs)
+        self._parent_window = parent_window
+        self._macro    = 'film'
+        self._sort     = 'recent'           # recent | old
+        self._genres   = []                 # list of genre dicts for current macro
+        self._genre_idx = 0
+        self._items    = []                 # currently displayed titles (accumulated)
+        self._last_pos = 0
+        self._alive    = True
+        self._lock     = threading.Lock()
+        self._cancelled = threading.Event()
+        self._load_seq = 0                  # guards against stale background loads
+        # Pagination state (per current macro+genre+sort)
+        self._sc_page  = 1                  # next SC archive page to fetch (1-based)
+        self._sc_total = 0                  # SC totalCount for the current filter (0=unknown)
+        self._au_page  = 0                  # AnimeUnity page index
+        self._has_more = False              # more pages available → infinite scroll
+        self._loading  = False              # a load is in flight (guards load-more)
+        self._inited   = False              # guard: onInit re-fires after a fullscreen trailer/video
+
+    # ── lifecycle ─────────────────────────────────────────────────────────
+    def onInit(self):
+        try:
+            self.setProperty('macro', self._macro)
+            # Kodi re-creates this WindowXML (and re-fires onInit) when it returns
+            # to front after a fullscreen video (trailer or playback). In that case
+            # restore the cached state + last focus instead of reloading from zero.
+            if self._inited:
+                self._restore_after_reinit()
+                return
+            self._inited = True
+            self._set_macro('film', focus_genres=True)
+        except Exception as exc:
+            logger.error('[Browse] onInit: %s' % str(exc))
+
+    def _restore_after_reinit(self):
+        """Re-populate the freshly re-created sidebar + grid from cached state and
+        restore the last selected card. Never re-fetches from the network."""
+        try:
+            self.setProperty('macro', self._macro)
+            # Genre sidebar
+            try:
+                self.getControl(BROWSE_GENRES).reset()
+                self.getControl(BROWSE_GENRES).addItems(
+                    [xbmcgui.ListItem(label=g['name'], offscreen=True) for g in self._genres])
+                if 0 <= self._genre_idx < len(self._genres):
+                    self.getControl(BROWSE_GENRES).selectItem(self._genre_idx)
+            except Exception:
+                pass
+            # Breadcrumb
+            try:
+                genre = (self._genres[self._genre_idx]
+                         if 0 <= self._genre_idx < len(self._genres) else {'name': 'Tutti'})
+                crumb = self._MACRO_LABELS.get(self._macro, '') + (
+                    '  ›  ' + genre['name'] if genre.get('name') != 'Tutti' else '')
+                self.getControl(BROWSE_BREADCRUMB).setLabel('[B]%s[/B]' % crumb)
+            except Exception:
+                pass
+            # Grid
+            with self._lock:
+                items = list(self._items)
+            self._populate_grid(items)
+            try:
+                self.getControl(BROWSE_LOADING).setVisible(False)
+                self.getControl(BROWSE_EMPTY).setVisible(not items)
+                if self._sc_total:
+                    self.getControl(BROWSE_COUNT).setLabel(
+                        '[B]%d[/B] di %d titoli' % (len(items), self._sc_total))
+                else:
+                    self.getControl(BROWSE_COUNT).setLabel('[B]%d[/B] titoli' % len(items))
+            except Exception:
+                pass
+            # Restore the last selected card + focus
+            if items:
+                pos = self._last_pos if 0 <= self._last_pos < len(items) else 0
+                try:
+                    self.getControl(BROWSE_GRID).selectItem(pos)
+                    self.setFocusId(BROWSE_GRID)
+                    self._update_hero(items[pos])
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[Browse] _restore_after_reinit: %s' % str(exc))
+
+    def onAction(self, action):
+        aid = action.getId()
+        if aid in (self.ACTION_EXIT, self.ACTION_BACK):
+            self._alive = False
+            self._cancelled.set()
+            self.close()
+            return
+        if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
+                   ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+            if self.getFocusId() == BROWSE_GRID:
+                threading.Thread(target=self._deferred_hero_update, daemon=True).start()
+
+    def onClick(self, control_id):
+        if control_id == BROWSE_EXIT:
+            self._alive = False
+            self._cancelled.set()
+            self.close()
+            return
+        if control_id in BROWSE_TAB_MAP:
+            self._set_macro(BROWSE_TAB_MAP[control_id], focus_genres=True)
+            return
+        if control_id == BROWSE_GENRES:
+            try:
+                pos = int(self.getControl(BROWSE_GENRES).getSelectedPosition() or 0)
+            except Exception:
+                pos = 0
+            self._select_genre(pos)
+            return
+        if control_id == BROWSE_GRID:
+            try:
+                pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._open_detail(self._items[pos])
+            except Exception as exc:
+                logger.error('[Browse] onClick grid: %s' % str(exc))
+
+    def onFocus(self, control_id):
+        if control_id == BROWSE_GRID:
+            try:
+                pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._update_hero(self._items[pos])
+                self._maybe_load_more(pos)
+            except Exception:
+                pass
+
+    def _maybe_load_more(self, pos):
+        """Infinite scroll: load the next page when focus nears the grid end."""
+        if self._has_more and not self._loading and pos >= len(self._items) - 14:
+            self._load_titles(append=True)
+
+    def _deferred_hero_update(self):
+        xbmc.sleep(80)
+        try:
+            pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._last_pos = pos
+                self._update_hero(items[pos])
+            self._maybe_load_more(pos)
+        except Exception:
+            pass
+
+    # ── macro / genre navigation ──────────────────────────────────────────
+    def _sync_sort_label(self):
+        try:
+            self.getControl(BROWSE_SORT).setLabel(
+                'Più recenti' if self._sort == 'recent' else 'Meno recenti')
+        except Exception:
+            pass
+
+    _MACRO_LABELS = {'film': 'FILM', 'serie': 'SERIE TV',
+                     'kdrama': 'K-DRAMA', 'anime': 'ANIME'}
+
+    def _set_macro(self, macro, focus_genres=False):
+        # All network (genre list + titles) runs off the GUI thread so switching
+        # macro never blocks/freezes the addon.
+        self._macro = macro
+        self.setProperty('macro', macro)
+        try:
+            self.getControl(BROWSE_GRID).reset()
+            self.getControl(BROWSE_GENRES).reset()
+            self.getControl(BROWSE_EMPTY).setVisible(False)
+            self.getControl(BROWSE_LOADING).setVisible(True)
+            self.getControl(BROWSE_COUNT).setLabel('')
+            self.getControl(BROWSE_BREADCRUMB).setLabel(
+                '[B]%s[/B]' % self._MACRO_LABELS.get(macro, ''))
+        except Exception:
+            pass
+        self._load_seq += 1
+        seq = self._load_seq
+        threading.Thread(target=self._macro_thread,
+                         args=(macro, focus_genres, seq), daemon=True).start()
+
+    def _macro_thread(self, macro, focus_genres, seq):
+        genres = _br_fetch_genres(macro)
+        if self._cancelled.is_set() or seq != self._load_seq:
+            return
+        self._genres = genres
+        self._genre_idx = 0
+        try:
+            self.getControl(BROWSE_GENRES).reset()
+            self.getControl(BROWSE_GENRES).addItems(
+                [xbmcgui.ListItem(label=g['name'], offscreen=True) for g in genres])
+            if focus_genres:
+                self.getControl(BROWSE_GENRES).selectItem(0)
+                self.setFocusId(BROWSE_GENRES)
+        except Exception as exc:
+            logger.error('[Browse] populate genres: %s' % str(exc))
+        first = dict(genres[0]) if genres else {'name': 'Tutti', 'sc_id': None, 'anime_item': None}
+        # Load the first genre in THIS thread (seq still valid → no main-thread block)
+        self._run_load(macro, first, self._sort, seq, append=False)
+
+    def _select_genre(self, pos):
+        if not (0 <= pos < len(self._genres)):
+            pos = 0
+        self._genre_idx = pos
+        self._load_titles(append=False)
+
+    def _load_titles(self, append=False):
+        if not self._genres:
+            return
+        if append and (self._loading or not self._has_more):
+            return
+        macro = self._macro
+        genre = dict(self._genres[self._genre_idx])
+        sort  = self._sort
+        if not append:
+            self._load_seq += 1
+            crumb = self._MACRO_LABELS.get(macro, '') + (
+                '  ›  ' + genre['name'] if genre['name'] != 'Tutti' else '')
+            try:
+                self.getControl(BROWSE_BREADCRUMB).setLabel('[B]%s[/B]' % crumb)
+                self.getControl(BROWSE_GRID).reset()
+                self.getControl(BROWSE_EMPTY).setVisible(False)
+                self.getControl(BROWSE_LOADING).setVisible(True)
+                self.getControl(BROWSE_COUNT).setLabel('')
+            except Exception:
+                pass
+        seq = self._load_seq
+        threading.Thread(target=self._run_load,
+                         args=(macro, genre, sort, seq, append), daemon=True).start()
+
+    # ── data layer ────────────────────────────────────────────────────────
+    def _run_load(self, macro, genre, sort, seq, append):
+        """Fetch one batch (page) and merge/append into the grid. Background only."""
+        self._loading = True
+        try:
+            if not append:
+                self._sc_page = 1
+                self._sc_total = 0
+                self._au_page = 0
+                self._has_more = False
+                with self._lock:
+                    self._items = []
+            try:
+                sc_new, other_new = self._fetch_batch(macro, genre, append)
+            except Exception as exc:
+                logger.error('[Browse] fetch %s/%s: %s' % (
+                    macro, genre.get('name'), str(exc)[:160]))
+                sc_new, other_new = [], []
+            if self._cancelled.is_set() or seq != self._load_seq:
+                return
+            with self._lock:
+                existing = list(self._items)
+            # Keep SC's server order (release_date); just dedup the new items.
+            new_unique = self._dedup_new(existing, sc_new, other_new)
+            if self._cancelled.is_set() or seq != self._load_seq:
+                return
+            with self._lock:
+                self._items = existing + new_unique
+                loaded = len(self._items)
+            if append:
+                # Keep the user where they were — addItems can reset the panel
+                # selection to 0, which would yank focus back to the top.
+                try:
+                    keep = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                except Exception:
+                    keep = self._last_pos
+                self._append_grid(new_unique)
+                try:
+                    self.getControl(BROWSE_GRID).selectItem(keep)
+                except Exception:
+                    pass
+            else:
+                self._populate_grid(self._items)
+            try:
+                self.getControl(BROWSE_LOADING).setVisible(False)
+                if loaded:
+                    self.getControl(BROWSE_EMPTY).setVisible(False)
+                    if self._sc_total:
+                        cnt = '[B]%d[/B] di %d titoli' % (loaded, self._sc_total)
+                    else:
+                        cnt = '[B]%d[/B] titoli%s' % (loaded, '  +' if self._has_more else '')
+                    self.getControl(BROWSE_COUNT).setLabel(cnt)
+                    if not append:
+                        self._update_hero(self._items[0])
+                else:
+                    self.getControl(BROWSE_EMPTY).setVisible(True)
+                    self.getControl(BROWSE_EMPTY).setLabel('Nessun titolo per questa categoria.')
+                    self.getControl(BROWSE_COUNT).setLabel('0 titoli')
+                    self._update_hero(None)
+            except Exception:
+                pass
+        finally:
+            self._loading = False
+
+    def _fetch_batch(self, macro, genre, append):
+        """Fetch the next page → (sc_new, other_new). Updates pagination + _has_more."""
+        from concurrent.futures import ThreadPoolExecutor
+        sc_new, other_new = [], []
+        if macro == 'anime':
+            other_new = self._fetch_anime(genre, self._au_page)
+            self._au_page += 1
+            self._has_more = len(other_new) >= 28
+            return sc_new, other_new
+        # film / serie / kdrama → SC archive paged server-side (+ CB01 first page)
+        n_pages = 1 if append else 2
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_sc = pool.submit(self._fetch_sc_pages, macro, genre, n_pages)
+            f_cb = (pool.submit(self._fetch_cb01, macro, genre)
+                    if (macro in ('film', 'serie') and not append) else None)
+            try:
+                sc_new = f_sc.result() or []
+            except Exception as exc:
+                logger.error('[Browse] SC fetch: %s' % str(exc)[:160])
+            if f_cb is not None:
+                try:
+                    other_new = f_cb.result() or []
+                except Exception as exc:
+                    logger.error('[Browse] CB01 fetch: %s' % str(exc)[:160])
+        return sc_new, other_new
+
+    def _sc_archive_url(self, macro, genre):
+        import channels.streamingcommunity as _sc
+        ctype = 'movie' if macro == 'film' else 'tv'   # serie + kdrama → tv
+        url = _sc.host + '/it/archive?type=' + ctype
+        if genre.get('sc_id'):
+            url += '&genre[]=' + genre['sc_id']
+        if macro == 'kdrama':
+            url += '&country[]=%d' % _sc.KOREA_COUNTRY_ID   # South Korea
+        return url
+
+    # SC caps archive pagination: page>20 returns HTTP 503 "Page limit reached (20)".
+    # So at most 20×60 = 1200 titles are browsable per filter. Genres with ≤1200
+    # titles are fully accessible; for bigger sets (e.g. "Tutti") only the newest
+    # 1200 (recent) / oldest-of-1200 (old) are reachable — a hard site limit.
+    _MAX_SC_PAGE = 20
+
+    def _fetch_sc_pages(self, macro, genre, n_pages):
+        """Fetch up to *n_pages* SC archive pages (60 titles each) via ?page=N,
+        clamped to SC's 20-page limit. 'recent' → pages 1,2,3… ; 'old' → from the
+        last reachable page down to 1, each page reversed (oldest first)."""
+        import channels.streamingcommunity as _sc
+        from core.item import Item as _Item
+        url = self._sc_archive_url(macro, genre)
+        cap = self._MAX_SC_PAGE
+        out = []
+        for _ in range(max(1, n_pages)):
+            if self._cancelled.is_set():
+                break
+            if self._sort == 'old':
+                if not self._sc_total:
+                    self._sc_total = _sc.archive_total(url)
+                    last = max(1, (self._sc_total + 59) // 60)
+                    self._sc_page = min(cap, last)   # clamp to the page-20 limit
+                page = self._sc_page
+                if page < 1:
+                    self._has_more = False
+                    break
+            else:
+                page = self._sc_page
+                if page > cap or (self._sc_total and (page - 1) * 60 >= self._sc_total):
+                    self._has_more = False
+                    break
+            try:
+                items, total = _sc.browse(_Item(channel='streamingcommunity', url=url, page=page))
+            except Exception as exc:
+                logger.error('[Browse] SC browse p%d: %s' % (page, str(exc)[:140]))
+                items, total = [], self._sc_total
+            if total:
+                self._sc_total = total
+            if self._sort == 'old':
+                items = list(reversed(items))
+                self._sc_page = page - 1
+                self._has_more = self._sc_page >= 1
+            else:
+                self._sc_page = page + 1
+                self._has_more = (self._sc_page <= cap and bool(self._sc_total)
+                                  and (self._sc_page - 1) * 60 < self._sc_total)
+            for x in items:
+                x._search_channel = 'sc'
+            out.extend(items)
+            if not items:
+                self._has_more = False
+                break
+        return out
+
+    def _fetch_cb01(self, macro, genre):
+        import channels.cineblog01 as _cb
+        from core.item import Item as _Item
+        name = (genre.get('name') or '').lower()
+        out = []
+        try:
+            if genre.get('sc_id') is None:
+                # "Tutti" → reuse the channel's own newest() (proven path; avoids the
+                # heavy serie-newest regex that froze the addon when args='newest'
+                # was combined with /serietv/).
+                raw = _cb.newest('series' if macro == 'serie' else 'movie') or []
+            else:
+                gmap = _br_cb01_genre_map(macro)
+                url = gmap.get(name)
+                if not url:
+                    return []
+                seed = _Item(channel='cineblog01', url=url,
+                             contentType='tvshow' if macro == 'serie' else 'movie')
+                raw = _cb.peliculas(seed) or []
+            for x in raw:
+                if getattr(x, 'action', '') in ('findvideos', 'episodios'):
+                    x._search_channel = 'cineblog01'
+                    out.append(x)
+        except Exception as exc:
+            logger.error('[Browse] cb01 peliculas: %s' % str(exc)[:160])
+        return out
+
+    def _fetch_anime(self, genre, page):
+        import channels.animeunity as _au
+        from core.item import Item as _Item
+        out = []
+        try:
+            g = genre.get('anime_item')
+            if g is not None:
+                seed = g.clone(page=page)
+            else:
+                seed = _Item(channel='animeunity', url=_au.host, args={}, page=page)
+            for x in (_au.peliculas(seed) or []):
+                if getattr(x, 'action', '') in ('findvideos', 'episodios'):
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'animeunity'
+                    x._search_channel = 'animeunity'
+                    try:
+                        x.infoLabels['_enr'] = 1
+                    except Exception:
+                        pass
+                    out.append(x)
+        except Exception as exc:
+            logger.error('[Browse] animeunity peliculas: %s' % str(exc)[:160])
+        return out
+
+    def _dedup_new(self, existing, sc_new, other_new):
+        """SC-wins dedup of the NEW items against what's already shown.
+        SC listed first so its version wins on duplicate normalized titles."""
+        seen = set()
+        for it in existing:
+            nt = _br_norm_title(it)
+            if nt:
+                seen.add(nt)
+        out = []
+        for it in list(sc_new) + list(other_new):
+            if not _br_valid_thumb(it):
+                continue
+            nt = _br_norm_title(it)
+            if nt:
+                if nt in seen:
+                    continue
+                seen.add(nt)
+            out.append(it)
+        return out
+
+    # ── grid / hero ───────────────────────────────────────────────────────
+    def _make_li(self, it):
+        li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
+        li.setArt({'thumb': it.thumbnail or ''})
+        li.setProperty('thumbnail', it.thumbnail or '')
+        y = _br_year(it)
+        li.setProperty('ylabel', str(y) if y else '')
+        return li
+
+    def _populate_grid(self, items):
+        if self._cancelled.is_set():
+            return
+        try:
+            self.getControl(BROWSE_GRID).reset()
+            self.getControl(BROWSE_GRID).addItems([self._make_li(it) for it in items])
+        except Exception as exc:
+            logger.error('[Browse] populate grid: %s' % str(exc))
+
+    def _append_grid(self, items):
+        if self._cancelled.is_set() or not items:
+            return
+        try:
+            self.getControl(BROWSE_GRID).addItems([self._make_li(it) for it in items])
+        except Exception as exc:
+            logger.error('[Browse] append grid: %s' % str(exc))
+
+    def _update_hero(self, item):
+        if item is None:
+            for cid in (BROWSE_HERO_TITLE, BROWSE_HERO_META, BROWSE_HERO_PLOT):
+                try:
+                    self.getControl(cid).setLabel('')
+                except Exception:
+                    pass
+            try:
+                self.getControl(BROWSE_HERO_POSTER).setImage('')
+            except Exception:
+                pass
+            return
+        try:
+            try:
+                self.getControl(BROWSE_HERO_POSTER).setImage(item.thumbnail or '')
+            except Exception:
+                pass
+            self.getControl(BROWSE_HERO_TITLE).setLabel(item.fulltitle or item.title or '')
+            info = item.infoLabels or {}
+            year   = str(info.get('year', '')) if info.get('year') else ''
+            rating = ('★ %.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
+            ct = (getattr(item, 'contentType', '') or '').lower()
+            tlabel = ('SERIE' if ct in ('tvshow', 'season', 'episode')
+                      else ('FILM' if ct == 'movie' else ''))
+            if self._macro == 'anime':
+                tlabel = 'ANIME'
+            parts = [p for p in [tlabel, year, rating] if p]
+            self.getControl(BROWSE_HERO_META).setLabel('   ·   '.join(parts))
+            plot = str(info.get('plot', '') or '').strip()
+            if len(plot) > 240:
+                plot = plot[:237].rstrip() + '…'
+            self.getControl(BROWSE_HERO_PLOT).setLabel(plot)
+        except Exception as exc:
+            logger.error('[Browse] _update_hero: %s' % str(exc))
+
+    # ── play / detail (delegates to the home window) ──────────────────────
+    def _restore_focus(self):
+        """Re-select the last-focused card (covers backing out of the detail card
+        when the window was NOT re-created)."""
+        try:
+            with self._lock:
+                n = len(self._items)
+            if n:
+                pos = self._last_pos if 0 <= self._last_pos < n else 0
+                self.getControl(BROWSE_GRID).selectItem(pos)
+                self.setFocusId(BROWSE_GRID)
+        except Exception:
+            pass
+
+    def _open_detail(self, item):
+        try:
+            dw = DetailWindow('DetailWindow.xml', config.get_runtime_path(), item=item)
+            dw.doModal()
+            result = getattr(dw, '_result', None)
+            sel_s  = getattr(dw, '_selected_season',  None)
+            sel_e  = getattr(dw, '_selected_episode', None)
+            dl_eps = getattr(dw, '_download_eps', None)
+            del dw
+            pw = self._parent_window
+            if result == 'play':
+                if sel_s is not None and sel_e is not None and pw is not None:
+                    if getattr(item, 'channel', '') == 'streamingcommunity':
+                        threading.Thread(target=pw._play_episode_direct,
+                                         args=(item, sel_s, sel_e), daemon=True).start()
+                    else:
+                        threading.Thread(target=pw._play_episode_direct_nonsc,
+                                         args=(item, sel_e), daemon=True).start()
+                elif pw is not None:
+                    pw._launch(item, source_window=self)
+            elif result == 'download' and pw is not None:
+                threading.Thread(target=pw._start_download,
+                                 args=(item, dl_eps), daemon=True).start()
+            else:
+                # Just closed the detail card → keep the last selected card focused.
+                self._restore_focus()
+        except Exception as exc:
+            logger.error('[Browse] _open_detail: %s' % str(exc))
+
+
+xbmc.log('[NetflixBrowse] MODULE: NetflixBrowseWindow defined OK', xbmc.LOGINFO)
 
 
 def open_netflix_home():

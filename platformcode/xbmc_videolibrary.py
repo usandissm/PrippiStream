@@ -261,18 +261,20 @@ def mark_auto_as_watched(item):
         if (marked and total_time < 20) or not marked:
             platformtools.set_played_time(item.clone(played_time=actual_time))
             item.disableAutoplay=True
-            # NetflixHome sets suppress_server_popup before launching so that
-            # the "choose another server" popup never appears after CW playback.
-            _suppress = False
+            # Post-play "choose another server" popup (alfa legacy): in this
+            # Netflix-only frontend it must NEVER appear after the video closes
+            # (it surfaced e.g. with multi-server channels like CB01: mixdrop/
+            # maxstream). Failure-retry is already handled in launcher.play, so
+            # this popup is pure noise here. Off by default; opt back in only if
+            # db['player']['show_server_popup'] is explicitly True (unused).
+            _show_popup = False
             try:
                 from core import db as _db_vl
-                _suppress = bool(_db_vl['player'].get('suppress_server_popup', False))
-                if _suppress:
-                    _db_vl['player']['suppress_server_popup'] = False
+                _show_popup = bool(_db_vl['player'].get('show_server_popup', False))
                 _db_vl.close()
             except Exception:
                 pass
-            if not _suppress:
+            if _show_popup:
                 platformtools.serverWindow(item, itemlist)
 
         if next_episode and next_episode.next_ep and config.get_setting('next_ep') < 3:

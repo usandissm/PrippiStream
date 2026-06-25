@@ -272,18 +272,20 @@ def normalize_gray(w, h, m, x0, x1, gw=GW, gh=GH, scale=SCALE):
     return tuple(feat)
 
 # ----------------------------------------------------------------- recognition
-def featurize(png_bytes):
-    """Return up to 3 grayscale feature vectors (left-to-right) for a captcha."""
+def featurize(png_bytes, n=4):
+    """Return up to *n* grayscale feature vectors (left-to-right) for a captcha.
+    uprot has used both 3- and 4-digit codes; *n* is read from the page's
+    pattern="[0-9]{n}" by solve_uprot so we segment into the right count."""
     w, h, rgb = decode_png_rgb(png_bytes)
     m = build_mask(w, h, rgb)
     cm = denoise(w, h, m)
     groups = column_groups(w, h, cm)
-    groups = sorted(groups, key=lambda g: -g[2])[:3]
+    groups = sorted(groups, key=lambda g: -g[2])[:n]
     groups = sorted(groups, key=lambda g: g[0])
-    if len(groups) != 3 and groups:
+    if len(groups) != n and groups:
         x0 = min(g[0] for g in groups); x1 = max(g[1] for g in groups)
-        step = (x1 - x0) / 3.0
-        groups = [(int(x0 + k * step), int(x0 + (k + 1) * step), 0) for k in range(3)]
+        step = (x1 - x0) / float(n)
+        groups = [(int(x0 + k * step), int(x0 + (k + 1) * step), 0) for k in range(n)]
     feats = []
     for x0, x1, _ in groups:
         gm = largest_blob_in_slot(w, h, cm, x0, x1)
@@ -308,23 +310,59 @@ def _classify(feat):
         votes[ch] = votes.get(ch, 0) + 1
     return max(votes.items(), key=lambda kv: kv[1])[0]
 
-def solve_image(png_bytes):
-    """Return the 3-digit string, or None if it cannot be segmented."""
+def _auto_digit_count(png_bytes, default=4):
+    """Best-effort digit count from the IMAGE itself — fallback used when the
+    page's pattern="[0-9]{n}" is unavailable. Counts the well-separated dark
+    blobs (digit columns) so the solver adapts even if uprot changes the digit
+    count (3↔4↔5) AND the surrounding HTML."""
     try:
-        feats = featurize(png_bytes)
+        w, h, rgb = decode_png_rgb(png_bytes)
+        cm = denoise(w, h, build_mask(w, h, rgb))
+        groups = column_groups(w, h, cm)
+        if not groups:
+            return default
+        mx = max(g[2] for g in groups)
+        n = sum(1 for g in groups if g[2] >= max(35, 0.12 * mx))
+        return n if 2 <= n <= 6 else default
+    except Exception:
+        return default
+
+
+def solve_image(png_bytes, n=None):
+    """Return the n-digit code string, or None. When *n* is None the digit count
+    is auto-detected from the image (so the OCR self-adapts to 3/4/5 digits)."""
+    try:
+        if not n:
+            n = _auto_digit_count(png_bytes)
+        feats = featurize(png_bytes, n)
     except Exception as e:
         logger.error('uprot_captcha.solve_image decode error: %s' % e)
         return None
-    if len(feats) != 3:
+    if len(feats) != n:
         return None
     code = ''.join(_classify(f) or '' for f in feats)
-    return code if len(code) == 3 else None
+    return code if len(code) == n else None
 
 # ----------------------------------------------------------------- HTTP flow
 import base64 as _b64
 
 _IMG_RE = re.compile(r'data:image/png;base64,([A-Za-z0-9+/=]+)')
 _TOKEN_RE = re.compile(r'maxstream\.video/uprots/')
+# How many digits the captcha expects, e.g. pattern="[0-9]{4}". uprot has used
+# both 3 and 4; read it so the OCR segments into the right number of glyphs.
+_NDIGITS_RE = re.compile(r"""pattern=["']\[0-9\]\{(\d+)\}""")
+
+
+def _digit_count(html, default=4):
+    m = _NDIGITS_RE.search(html or '')
+    if m:
+        try:
+            n = int(m.group(1))
+            if 2 <= n <= 8:
+                return n
+        except Exception:
+            pass
+    return default
 
 
 def _has_links(html):
@@ -378,7 +416,9 @@ def solve_uprot(msf_url, downloadpage, max_attempts=6):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
-        code = solve_image(img)
+        # Digit count from the page pattern (reliable); None -> auto-detect from
+        # the image. Either way the solver self-adapts if uprot changes 3↔4↔5.
+        code = solve_image(img, _digit_count(html, default=None))
         logger.info('uprot_captcha attempt %d -> code=%s' % (attempt + 1, code))
         if not code:
             # unreadable image -> fetch a fresh one

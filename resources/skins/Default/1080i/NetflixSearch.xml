@@ -1,39 +1,30 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
-  NetflixSearch.xml — 1920×1080
-  Unified search overlay for PrippiStream.
-  Layout:
-    Top bar   (78px):  back ← | query label | progress | close ✕
-    Hero area (210px): left=poster (180×270), right=title/meta/plot/CTA
-    Divider   (3px  ):
-    Rows area (789px):  3 wraplist rows (SC / Film / Serie TV) each 261px + 3px divider
-    Status bar(30px ):  "Ricerca in corso..." or hidden
+  NetflixSearch.xml — 1920×1080  (redesign 2026-06)
+  Grid-first unified search overlay for PrippiStream.
+
+  Layout (no overlapping hero/buttons):
+    Top bar    (0–88)    : logo image | query/re-search | EXIT
+    Filter bar (88–160)  : chips Tutti/Film/Serie/Anime + result-count label
+    Divider    (160–163) :
+    Grid       (168–928) : centered poster grid (7 cols × 2 full rows) with type badge
+    Context    (936–970) : focused item — title (left) + meta type·year·rating (right)
+    Status     (996–1080): loading bar + "Ricerca in corso..." (BELOW the grid)
 
   Control IDs:
-    Top bar:
-      109 ← BACK button
-      120  query/title label
-      121  progress label  (e.g. "SC · 6/12 canali...")
-      122  CLOSE button
-    Hero:
-      130  hero fanart (background)
-      131  hero poster
-      132  hero title label
-      133  hero meta  label  (year · rating · type)
-      134  hero plot  label
-      135  PLAY/GUARDA button
-      136  INFO/DETAIL button
-    Rows:
-      150  row-label SC        (label above row 0)
-      160  wraplist SC         (id=160)
-      151  row-label Film      (label above row 1)
-      161  wraplist Film altri (id=161)
-      152  row-label Serie TV  (label above row 2)
-      162  wraplist Serie TV   (id=162)
-    State:
-      170  loading overlay group
-      171  no-results label
-      172  searching-SC label
+    109  (legacy) back — ESC/Back key handled in onAction (no button here)
+    120  query / re-search button
+    121  result-count / progress label
+    122  EXIT button
+    140  filter chip: Tutti      141  filter chip: Film
+    142  filter chip: Serie      143  filter chip: Anime
+    132  context title           133  context meta (type · year · rating)
+    160  poster grid panel
+    170  loading group           171  no-results label          172  status text
+
+  Per-card ListItem properties (set in netflixhome.py _populate_grid):
+    thumbnail  → poster URL
+    stype      → ANIME | FILM | SERIE  (drives the badge colour/visibility)
 -->
 <window>
     <defaultcontrol>160</defaultcontrol>
@@ -48,96 +39,53 @@
     <controls>
 
         <!-- ═══════════════════════════════════════════════════════════
-             BASE: full-screen semi-transparent dark overlay
+             BASE: full-screen opaque dark background
         ═══════════════════════════════════════════════════════════ -->
         <control type="image">
             <left>0</left><top>0</top>
             <width>1920</width><height>1080</height>
-            <texture colordiffuse="F00D0D0D">white.png</texture>
-        </control>
-
-        <!-- Hero fanart — blurred background, constrained to hero height -->
-        <control type="image" id="130">
-            <left>0</left><top>78</top>
-            <width>1920</width><height>210</height>
-            <texture colordiffuse="00FFFFFF">white.png</texture>
-            <aspectratio>scale</aspectratio>
-        </control>
-        <!-- Gradient overlay to keep fanart readable -->
-        <control type="image">
-            <left>0</left><top>78</top>
-            <width>1920</width><height>210</height>
-            <texture colordiffuse="CC0D0D0D">white.png</texture>
+            <texture colordiffuse="FA0D0D0D">white.png</texture>
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             TOP BAR (height=78)
+             TOP BAR (height=88)
         ═══════════════════════════════════════════════════════════ -->
         <control type="image">
             <left>0</left><top>0</top>
-            <width>1920</width><height>78</height>
+            <width>1920</width><height>88</height>
             <texture colordiffuse="E8000000">white.png</texture>
         </control>
 
-        <!-- Brand (same as home) -->
-        <control type="label">
-            <left>42</left><top>21</top>
-            <width>285</width><height>36</height>
-            <font>font14</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
-            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        <!-- Brand logo (same image as the home) -->
+        <control type="image">
+            <left>28</left><top>-4</top>
+            <width>360</width><height>96</height>
+            <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
+            <aspectratio>keep</aspectratio>
         </control>
 
-        <!-- Back button (id=109) -->
-        <control type="button" id="109">
-            <left>330</left><top>18</top>
-            <width>120</width><height>42</height>
-            <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
-            <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
-            <label>[B]BACK[/B]</label>
-            <font>font10</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <focusedcolor>FFFFFFFF</focusedcolor>
-            <align>center</align>
-            <onright>120</onright>
-            <ondown>160</ondown>
-        </control>
-
-        <!-- Query label — shows the current search text (id=120) -->
+        <!-- Query / re-search button (id=120) -->
         <control type="button" id="120">
-            <left>468</left><top>15</top>
-            <width>840</width><height>48</height>
+            <left>470</left><top>23</top>
+            <width>1000</width><height>44</height>
             <texturefocus colordiffuse="38FFFFFF">white.png</texturefocus>
-            <texturenofocus colordiffuse="20FFFFFF">white.png</texturenofocus>
+            <texturenofocus colordiffuse="1CFFFFFF">white.png</texturenofocus>
             <label></label>
             <font>font12</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>left</align>
             <aligny>center</aligny>
-            <textoffsetx>15</textoffsetx>
-            <onleft>109</onleft>
+            <textoffsetx>18</textoffsetx>
             <onright>122</onright>
-            <ondown>160</ondown>
+            <ondown>140</ondown>
         </control>
 
-        <!-- Progress info label (id=121) — e.g. "Ricerca in corso..." / "21 risultati" -->
-        <control type="label" id="121">
-            <left>470</left><top>24</top>
-            <width>1290</width><height>30</height>
-            <font>font12</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-            <align>center</align>
-        </control>
-
-        <!-- Close button (id=122) -->
+        <!-- EXIT button (id=122) -->
         <control type="button" id="122">
-            <left>1785</left><top>18</top>
-            <width>93</width><height>42</height>
-            <texturefocus colordiffuse="B0E50914">white.png</texturefocus>
+            <left>1788</left><top>23</top>
+            <width>104</width><height>44</height>
+            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="24FFFFFF">white.png</texturenofocus>
             <label>[B]EXIT[/B]</label>
             <font>font10</font>
@@ -145,126 +93,183 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <onleft>120</onleft>
-            <ondown>160</ondown>
+            <ondown>143</ondown>
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             HERO AREA (top=78, height=210)
+             FILTER BAR (top=88, height=72)
         ═══════════════════════════════════════════════════════════ -->
 
-        <!-- Poster (id=131) — 180×270 centered in 210px row (trimmed bottom) -->
-        <control type="image" id="131">
-            <left>48</left><top>84</top>
-            <width>132</width><height>198</height>
-            <texture colordiffuse="00FFFFFF">white.png</texture>
-            <aspectratio>scale</aspectratio>
-        </control>
-
-        <!-- Hero title (id=132) -->
-        <control type="label" id="132">
-            <left>204</left><top>87</top>
-            <width>1470</width><height>54</height>
-            <font>font16</font>
-            <textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label></label>
-        </control>
-
-        <!-- Hero meta: year · rating · type (id=133) -->
-        <control type="label" id="133">
-            <left>204</left><top>147</top>
-            <width>1200</width><height>27</height>
-            <font>font10</font>
-            <textcolor>FF22C55E</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
-            <label></label>
-        </control>
-
-        <!-- Hero plot (id=134) -->
-        <control type="label" id="134">
-            <left>204</left><top>177</top>
-            <width>1140</width><height>42</height>
-            <font>font10</font>
-            <textcolor>FFB8B8B8</textcolor>
-            <shadowcolor>FF000000</shadowcolor>
-            <label></label>
-            <wrapwidth>1140</wrapwidth>
-        </control>
-
-        <!-- PLAY button (id=135) -->
-        <control type="button" id="135">
-            <left>1362</left><top>135</top>
-            <width>204</width><height>42</height>
-            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
-            <texturenofocus colordiffuse="CC1A1A1A">white.png</texturenofocus>
-            <label>[B]GUARDA[/B]</label>
-            <font>font10</font>
-            <textcolor>FFFFFFFF</textcolor>
+        <!-- Chip: Tutti (id=140) -->
+        <control type="button" id="140">
+            <left>28</left><top>100</top>
+            <width>150</width><height>46</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
+            <label>TUTTI</label>
+            <font>font12</font>
+            <textcolor>FFCCCCCC</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
-            <onright>136</onright>
+            <onright>141</onright>
             <onup>120</onup>
             <ondown>160</ondown>
         </control>
+        <control type="image">
+            <left>28</left><top>148</top>
+            <width>150</width><height>3</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+            <visible>String.IsEqual(Window.Property(filter),all)</visible>
+        </control>
 
-        <!-- INFO button (id=136) -->
-        <control type="button" id="136">
-            <left>1578</left><top>135</top>
-            <width>192</width><height>42</height>
-            <texturefocus colordiffuse="36FFFFFF">white.png</texturefocus>
+        <!-- Chip: Film (id=141) -->
+        <control type="button" id="141">
+            <left>190</left><top>100</top>
+            <width>150</width><height>46</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
             <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
-            <label>[B]INFO[/B]</label>
-            <font>font10</font>
-            <textcolor>FFEBEBEB</textcolor>
+            <label>FILM</label>
+            <font>font12</font>
+            <textcolor>FFCCCCCC</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
-            <onleft>135</onleft>
+            <onleft>140</onleft>
+            <onright>142</onright>
+            <onup>120</onup>
+            <ondown>160</ondown>
+        </control>
+        <control type="image">
+            <left>190</left><top>148</top>
+            <width>150</width><height>3</height>
+            <texture colordiffuse="FF38BDF8">white.png</texture>
+            <visible>String.IsEqual(Window.Property(filter),film)</visible>
+        </control>
+
+        <!-- Chip: Serie (id=142) -->
+        <control type="button" id="142">
+            <left>352</left><top>100</top>
+            <width>160</width><height>46</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
+            <label>SERIE</label>
+            <font>font12</font>
+            <textcolor>FFCCCCCC</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onleft>141</onleft>
+            <onright>143</onright>
+            <onup>120</onup>
+            <ondown>160</ondown>
+        </control>
+        <control type="image">
+            <left>352</left><top>148</top>
+            <width>160</width><height>3</height>
+            <texture colordiffuse="FF4ADE80">white.png</texture>
+            <visible>String.IsEqual(Window.Property(filter),serie)</visible>
+        </control>
+
+        <!-- Chip: Anime (id=143) -->
+        <control type="button" id="143">
+            <left>524</left><top>100</top>
+            <width>160</width><height>46</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="18FFFFFF">white.png</texturenofocus>
+            <label>ANIME</label>
+            <font>font12</font>
+            <textcolor>FFCCCCCC</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onleft>142</onleft>
             <onup>122</onup>
             <ondown>160</ondown>
         </control>
+        <control type="image">
+            <left>524</left><top>148</top>
+            <width>160</width><height>3</height>
+            <texture colordiffuse="FFA78BFA">white.png</texture>
+            <visible>String.IsEqual(Window.Property(filter),anime)</visible>
+        </control>
+
+        <!-- Result-count / progress label (id=121) -->
+        <control type="label" id="121">
+            <left>720</left><top>106</top>
+            <width>1172</width><height>34</height>
+            <font>font12</font>
+            <textcolor>FFDDDDDD</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <align>right</align>
+            <aligny>center</aligny>
+        </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             HERO / ROWS DIVIDER
+             DIVIDER
         ═══════════════════════════════════════════════════════════ -->
         <control type="image">
-            <left>0</left><top>288</top>
-            <width>1920</width><height>2</height>
-            <texture colordiffuse="FF1F1F1F">white.png</texture>
-        </control>
-        <control type="image">
-            <left>0</left><top>290</top>
+            <left>0</left><top>160</top>
             <width>1920</width><height>3</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             GRID AREA (top=293, height=787) — Netflix-style poster grid
-             192px wide items → 10 per row, 265px tall → ~3 rows visible
+             GRID (top=168, height=760) — centered, 7 cols × 2 full rows
+             card 240×380 → poster 224×336 (2:3) + title + type badge
         ═══════════════════════════════════════════════════════════ -->
         <control type="panel" id="160">
-            <left>0</left><top>293</top>
-            <width>1920</width><height>787</height>
+            <left>120</left><top>168</top>
+            <width>1680</width><height>760</height>
             <scrolltime tween="cubic" easing="out">220</scrolltime>
             <scrollwrap>false</scrollwrap>
-            <onup>120</onup>
-            <itemlayout height="380" width="270">
+            <onup>140</onup>
+            <itemlayout height="380" width="240">
                 <!-- shadow bg -->
                 <control type="image">
-                    <left>6</left><top>4</top>
-                    <width>258</width><height>340</height>
-                    <texture colordiffuse="18000000">white.png</texture>
+                    <left>6</left><top>2</top>
+                    <width>228</width><height>340</height>
+                    <texture colordiffuse="20000000">white.png</texture>
                 </control>
                 <!-- poster -->
                 <control type="image">
-                    <left>8</left><top>5</top>
-                    <width>254</width><height>340</height>
+                    <left>8</left><top>4</top>
+                    <width>224</width><height>336</height>
                     <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                     <aspectratio>scale</aspectratio>
                 </control>
+                <!-- type badge: dark pill + coloured text (visibility by stype) -->
+                <control type="image">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <texture colordiffuse="CC000000">white.png</texture>
+                    <visible>!String.IsEmpty(ListItem.Property(stype))</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FFA78BFA</textcolor>
+                    <label>[B]ANIME[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),ANIME)</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FF38BDF8</textcolor>
+                    <label>[B]FILM[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),FILM)</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FF4ADE80</textcolor>
+                    <label>[B]SERIE[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),SERIE)</visible>
+                </control>
                 <!-- title -->
                 <control type="label">
-                    <left>8</left><top>350</top>
-                    <width>254</width><height>22</height>
+                    <left>8</left><top>346</top>
+                    <width>224</width><height>24</height>
                     <font>font10</font>
                     <textcolor>FFAAAAAA</textcolor>
                     <label>$INFO[ListItem.Label]</label>
@@ -272,44 +277,75 @@
                     <truncated>true</truncated>
                 </control>
             </itemlayout>
-            <focusedlayout height="380" width="270">
+            <focusedlayout height="380" width="240">
                 <!-- glow -->
                 <control type="image">
-                    <left>1</left><top>1</top>
-                    <width>268</width><height>372</height>
+                    <left>1</left><top>0</top>
+                    <width>238</width><height>344</height>
                     <texture colordiffuse="66000000">white.png</texture>
                     <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
                     <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
                 </control>
                 <!-- border -->
                 <control type="image">
-                    <left>2</left><top>0</top>
-                    <width>266</width><height>350</height>
+                    <left>4</left><top>0</top>
+                    <width>232</width><height>342</height>
                     <texture colordiffuse="F2FFFFFF">white.png</texture>
                     <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
                     <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
                 </control>
                 <!-- red top stripe -->
                 <control type="image">
-                    <left>2</left><top>0</top>
-                    <width>266</width><height>4</height>
+                    <left>4</left><top>0</top>
+                    <width>232</width><height>4</height>
                     <texture colordiffuse="FFE50914">white.png</texture>
                     <animation effect="fade" start="0" end="100" time="160" tween="sine">Focus</animation>
                     <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
                 </control>
                 <!-- poster with zoom -->
                 <control type="image">
-                    <left>4</left><top>2</top>
-                    <width>262</width><height>340</height>
+                    <left>6</left><top>2</top>
+                    <width>228</width><height>336</height>
                     <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                     <aspectratio>scale</aspectratio>
-                    <animation effect="zoom" start="100" end="106" center="auto" time="180" tween="sine" easing="out">Focus</animation>
-                    <animation effect="zoom" start="106" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                    <animation effect="zoom" start="100" end="105" center="auto" time="180" tween="sine" easing="out">Focus</animation>
+                    <animation effect="zoom" start="105" end="100" center="auto" time="130" tween="sine" easing="in">Unfocus</animation>
+                </control>
+                <!-- type badge -->
+                <control type="image">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <texture colordiffuse="DD000000">white.png</texture>
+                    <visible>!String.IsEmpty(ListItem.Property(stype))</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FFA78BFA</textcolor>
+                    <label>[B]ANIME[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),ANIME)</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FF38BDF8</textcolor>
+                    <label>[B]FILM[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),FILM)</visible>
+                </control>
+                <control type="label">
+                    <left>14</left><top>12</top>
+                    <width>86</width><height>26</height>
+                    <font>font10</font><align>center</align><aligny>center</aligny>
+                    <textcolor>FF4ADE80</textcolor>
+                    <label>[B]SERIE[/B]</label>
+                    <visible>String.IsEqual(ListItem.Property(stype),SERIE)</visible>
                 </control>
                 <!-- title -->
                 <control type="label">
-                    <left>4</left><top>350</top>
-                    <width>262</width><height>22</height>
+                    <left>6</left><top>346</top>
+                    <width>228</width><height>24</height>
                     <font>font10</font>
                     <textcolor>FFFFFFFF</textcolor>
                     <shadowcolor>FF000000</shadowcolor>
@@ -320,16 +356,75 @@
             </focusedlayout>
         </control>
 
-
+        <!-- ═══════════════════════════════════════════════════════════
+             HERO BOX (top=932, height=130) — focused item, contrast panel
+             so it stands out from the near-black page. Red left accent +
+             mini poster + title + meta + 2-line plot.
+        ═══════════════════════════════════════════════════════════ -->
+        <!-- panel background -->
+        <control type="image">
+            <left>0</left><top>932</top>
+            <width>1920</width><height>130</height>
+            <texture colordiffuse="FF1A1A1A">white.png</texture>
+        </control>
+        <!-- top hairline -->
+        <control type="image">
+            <left>0</left><top>932</top>
+            <width>1920</width><height>2</height>
+            <texture colordiffuse="FF2E2E2E">white.png</texture>
+        </control>
+        <!-- red left accent -->
+        <control type="image">
+            <left>0</left><top>932</top>
+            <width>6</width><height>130</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+        <!-- mini poster (id=131) -->
+        <control type="image" id="131">
+            <left>28</left><top>946</top>
+            <width>72</width><height>102</height>
+            <texture colordiffuse="00FFFFFF">white.png</texture>
+            <aspectratio>scale</aspectratio>
+        </control>
+        <!-- title (id=132) -->
+        <control type="label" id="132">
+            <left>124</left><top>944</top>
+            <width>1090</width><height>36</height>
+            <font>font13</font>
+            <textcolor>FFFFFFFF</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <aligny>center</aligny>
+        </control>
+        <!-- meta: type · year · rating (id=133) -->
+        <control type="label" id="133">
+            <left>124</left><top>982</top>
+            <width>1090</width><height>26</height>
+            <font>font11</font>
+            <textcolor>FFB8B8B8</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <aligny>center</aligny>
+        </control>
+        <!-- plot (id=134) — up to 2 lines -->
+        <control type="label" id="134">
+            <left>124</left><top>1010</top>
+            <width>1740</width><height>46</height>
+            <font>font10</font>
+            <textcolor>FF9A9A9A</textcolor>
+            <shadowcolor>CC000000</shadowcolor>
+            <label></label>
+            <wrapwidth>1740</wrapwidth>
+        </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             NO RESULTS overlay (id=171)
+             NO RESULTS overlay (id=171) — centered in grid area
         ═══════════════════════════════════════════════════════════ -->
         <control type="label" id="171">
-            <left>0</left><top>600</top>
+            <left>0</left><top>500</top>
             <width>1920</width><height>60</height>
             <font>font14</font>
-            <textcolor>FF555555</textcolor>
+            <textcolor>FF777777</textcolor>
             <label>Nessun risultato trovato.</label>
             <align>center</align>
             <aligny>center</aligny>
@@ -337,30 +432,22 @@
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
-             LOADING INDICATOR (id=170) — animated pulsing bar
+             LOADING (id=170) — thin animated line just under the top divider
+             (progress text shows in the count label id=121). No bottom overlap.
         ═══════════════════════════════════════════════════════════ -->
         <control type="group" id="170">
             <!-- Background track -->
             <control type="image">
-                <left>48</left><top>1056</top>
-                <width>1824</width><height>3</height>
-                <texture colordiffuse="FF252525">white.png</texture>
+                <left>0</left><top>163</top>
+                <width>1920</width><height>3</height>
+                <texture colordiffuse="FF2A0406">white.png</texture>
             </control>
             <!-- Animated fill bar -->
             <control type="image">
-                <left>48</left><top>1056</top>
-                <width>600</width><height>3</height>
+                <left>0</left><top>163</top>
+                <width>640</width><height>3</height>
                 <texture colordiffuse="FFE50914">white.png</texture>
-                <animation effect="fade" start="20" end="90" time="700" tween="cubic" loop="true" reversible="true">Visible</animation>
-            </control>
-            <!-- Status text -->
-            <control type="label" id="172">
-                <left>48</left><top>1032</top>
-                <width>1824</width><height>24</height>
-                <font>font10</font>
-                <textcolor>FF555555</textcolor>
-                <label>Ricerca in corso...</label>
-                <align>left</align>
+                <animation effect="slide" start="-640" end="1920" time="1100" tween="sine" loop="true">Visible</animation>
             </control>
         </control>
 

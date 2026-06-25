@@ -1,3 +1,10 @@
+## Prossima
+- Nuova schermata "Sfoglia": esplora il catalogo per categoria (Film, Serie TV, K-Drama, Anime) e per genere.
+- Ricerca rinnovata: nuova grafica, filtri (Tutti / Film / Serie / Anime) ed etichette di tipo sui titoli.
+- Migliorata la selezione con le frecce nelle righe SKY e Sport.
+- Migliorata l'affidabilità di alcuni contenuti.
+- Vari miglioramenti e correzioni.
+
 ## 1.1.1
 - Sbloccati molti più film e serie, ora partono contenuti che prima non si riproducevano.
 - Download offline esteso ad altri contenuti.

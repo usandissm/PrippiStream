@@ -116,7 +116,6 @@
         <setting id="quality" type="select" label="70240" lvalues="70241|70763|70764|70765" visible="eq(-7,true)" default="0"/>
         <setting id="download_adv" type="action" label="30030" visible="eq(-7,true)" action="RunPlugin(plugin://plugin.video.prippistream/?ew0KCSJhY3Rpb24iOiJjaGFubmVsX2NvbmZpZyIsDQoJImNvbmZpZyI6ImRvd25sb2FkcyIsDQogICAgImNoYW5uZWwiOiJzZXR0aW5nIg0KfQ==)"/>
         <!-- Offline downloads (PrippiStream home "I miei download") -->
-        <setting id="download_protection" type="select" label="32100" values="AES (forte)|XOR (leggero)|Nessuna" default="0"/>
         <setting id="download_concurrency" type="slider" label="32101" range="1,1,3" option="int" default="1"/>
         <setting id="show_downloads_row" type="bool" label="32103" default="true"/>
     </category>

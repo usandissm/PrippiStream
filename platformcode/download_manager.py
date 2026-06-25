@@ -675,8 +675,11 @@ class DownloadManager(object):
         resumed download keeps the same track selection.
         """
         if protection is None:
-            protection = download_crypto.mode_from_setting(
-                config.get_setting('download_protection'))
+            # Protection is forced to XOR for every download (device-bound
+            # anti-copy, fast on every platform). No user-facing setting — the
+            # 'download_protection' option was removed. Existing downloads keep
+            # whatever mode is stored in their DB entry, so they still play back.
+            protection = 'xor'
         entry = db_entry or _entry_from_item(item)
         entry['protection'] = protection
         entry['target_height'] = int(target_height or 0)

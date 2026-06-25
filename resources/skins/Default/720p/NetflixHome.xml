@@ -73,6 +73,22 @@
             <align>left</align>
             <aligny>center</aligny>
             <textoffsetx>8</textoffsetx>
+            <onright>106</onright>
+            <ondown>2000</ondown>
+        </control>
+
+        <!-- Browse (categories) button -->
+        <control type="button" id="106">
+            <left>790</left><top>11</top>
+            <width>150</width><height>28</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
+            <label>[B]&#x2630;[/B] [COLOR FFDDDDDD]Sfoglia[/COLOR]</label>
+            <font>font10</font>
+            <textcolor>FFDDDDDD</textcolor>
+            <focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onleft>109</onleft>
             <onright>107</onright>
             <ondown>2000</ondown>
         </control>
@@ -88,7 +104,7 @@
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
-            <onleft>109</onleft>
+            <onleft>106</onleft>
             <onright>108</onright>
             <ondown>2000</ondown>
         </control>
@@ -464,11 +480,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -493,6 +507,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -597,12 +616,11 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2020">
+                <control type="list" id="2020">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
-                    <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
-                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                    <scrolltime tween="cubic" easing="out">80</scrolltime>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -645,11 +663,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -674,6 +690,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -778,12 +799,11 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2030">
+                <control type="list" id="2030">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
-                    <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
-                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                    <scrolltime tween="cubic" easing="out">80</scrolltime>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -826,11 +846,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -855,6 +873,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1007,11 +1030,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1036,6 +1057,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1188,11 +1214,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1217,6 +1241,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1369,11 +1398,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1398,6 +1425,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1550,11 +1582,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1579,6 +1609,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1731,11 +1766,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1760,6 +1793,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -1912,11 +1950,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -1941,6 +1977,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2093,11 +2134,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -2122,6 +2161,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2274,11 +2318,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -2303,6 +2345,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2455,11 +2502,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -2484,6 +2529,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2636,11 +2686,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -2665,6 +2713,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2817,11 +2870,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -2846,6 +2897,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -2998,11 +3054,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -3027,6 +3081,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -3179,11 +3238,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -3208,6 +3265,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -3360,11 +3422,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -3389,6 +3449,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -3541,11 +3606,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -3570,6 +3633,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -3722,11 +3790,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>1</left><top>0</top>
-                        <width>183</width><height>226</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>185</width><height>226</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <!-- dark bg behind label so text is always readable -->
                     <control type="image">
@@ -3751,6 +3817,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>1</left><top>0</top><width>183</width><height>3</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>182</left><top>0</top><width>3</width><height>224</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>221</top><width>185</width><height>3</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>3</left><top>229</top>
                         <width>179</width><height>70</height>
@@ -3902,11 +3973,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3930,6 +3999,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4080,11 +4154,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4108,6 +4180,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4258,11 +4335,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4286,6 +4361,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4436,11 +4516,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4464,6 +4542,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4614,11 +4697,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4642,6 +4723,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4792,11 +4878,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4820,6 +4904,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4970,11 +5059,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4998,6 +5085,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5148,11 +5240,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5176,6 +5266,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5326,11 +5421,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5354,6 +5447,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5504,11 +5602,9 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                        <left>0</left><top>0</top>
+                        <width>278</width><height>340</height>
+                        <texture colordiffuse="FF161616">white.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5532,6 +5628,11 @@
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
                     </control>
+                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters -->
+                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
+                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
