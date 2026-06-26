@@ -367,8 +367,10 @@ DW_BTN_EP_SEL    = 215   # "STAGIONI & EPISODI" selector button (tvshow only)
 DW_OVERLAY_GROUP = 230   # cinema-mode group (fades out when trailer plays)
 
 # ── EpisodePicker dialog control IDs ─────────────────────────────────────────
-EP_SEASON_LIST   = 310   # horizontal panel of season tabs
+EP_SEASON_LIST   = 310   # (legacy) horizontal panel of season tabs — replaced
 EP_EP_LIST       = 311   # vertical list of episode rows
+EP_SEASON_BTN    = 312   # "Stagione N ▾" dropdown trigger button
+EP_SEASON_DD     = 313   # drop-down list of seasons (overlay, toggled)
 EP_BTN_CANCEL    = 321   # close / cancel button
 
 ACTION_EXIT         = 10
@@ -401,6 +403,14 @@ SEARCH_WL_SC        = 160   # poster grid panel
 SEARCH_LOADING      = 170   # loading indicator group
 SEARCH_NORESULTS    = 171   # no-results label
 SEARCH_STATUS_LBL   = 172   # "Ricerca in corso..." text inside loading group
+
+# ── One Piece "rows" mode (a dedicated, carousel layout shown only when the user
+# searches One Piece). When active, Window.Property(op_mode)=1 hides the filter
+# chips + the single grid and reveals the three carousels below.
+OP_HEADER   = 180           # "ONE PIECE" hero header label
+OP_SUBHDR   = 181           # subtitle / count
+OP_ROW_WL   = (182, 184, 186)   # carousel wraplists: Serie / Film / Speciali
+OP_ROW_LBL  = (183, 185, 187)   # row title labels
 
 # Map filter chip control id → search-type key
 SEARCH_FILTER_MAP = {
@@ -720,6 +730,15 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         _t4k = threading.Thread(target=_fourk.build_4k_index)
         _t4k.daemon = True
         _t4k.start()
+        # Background daily refresh of the One Piece index (cache-first, TTL 24h):
+        # discovers new episodes once a day at skin load so they appear by themselves.
+        try:
+            import channels.onepiece as _op_idx
+            _top = threading.Thread(target=_op_idx.build_index)
+            _top.daemon = True
+            _top.start()
+        except Exception as _exc_op:
+            logger.error('[OnePiece] index thread start: %s' % str(_exc_op))
 
     def _set_loading(self, pct, msg=None):
         """Update the dynamic loading overlay: progress-bar width + percentage.
@@ -2530,6 +2549,20 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                                 logger.info('[CW] advanced series to S%02dE%02d' % (
                                     getattr(_advance_item, 'contentSeason', 0),
                                     getattr(_advance_item, 'contentEpisodeNumber', 0)))
+                            elif next_ep_ctx.get('nonsc'):
+                                # Ongoing non-SC series (e.g. One Piece): the "last"
+                                # episode is just the latest AVAILABLE one, not the
+                                # series end. Keep it in CW pointing at the NEXT
+                                # (not-yet-released) episode at 0% so it survives the
+                                # 97% auto-prune and resumes correctly once the daily
+                                # refresh adds new episodes.
+                                _next_item = item.clone()
+                                _next_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0) + 1
+                                _next_item.contentEpisodeNumber = _next_e
+                                _next_item.episode = _next_e
+                                _next_item._cw_show_url = getattr(item, '_cw_show_url', '')
+                                _save_cw(_next_item, cw_key, 0, 0)
+                                logger.info('[CW] ongoing series kept in CW at next E%d' % _next_e)
                             else:
                                 # Last episode of last season — series is done
                                 watch_history.remove(cw_key)
@@ -3514,8 +3547,16 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 except Exception:
                     pass
             if ep_item is None:
-                ep_item = ep_list[0]
-                ep_idx  = 0
+                # Requested episode not in the list (e.g. a CW pointer to the next,
+                # not-yet-released episode of an ongoing series): clamp to the
+                # highest available episode <= ep_num, else the first.
+                _below = [(_i, ep) for _i, ep in enumerate(ep_list)
+                          if int(getattr(ep, 'episode', 0) or 0) <= int(ep_num)]
+                if _below:
+                    ep_idx, ep_item = _below[-1]
+                else:
+                    ep_item = ep_list[0]
+                    ep_idx  = 0
 
             # Carry season/episode + show identity so Continue-Watching tracking and
             # the "Continua" resume label key match the DetailWindow show item.
@@ -3729,20 +3770,97 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
 _nonsc_ep_cache = {}   # show_url -> (timestamp, [episode Items])
 
+def _animeunity_fallback_episodes(item):
+    """Resolve a show's episodes via AnimeUnity when its own channel can't.
+
+    CB01 lists some anime (e.g. "One Piece: Saga del Paese di Wa") under
+    /serietv/ with an anime-specific page layout (blocks titled SAGHE / SERIE -
+    ITA / OAV instead of "STAGIONE n") that the generic cineblog01.episodios()
+    scraper cannot parse → it returns 0 episodes → "non disponibile". AnimeUnity
+    is the authoritative anime source (same engine as the home Anime row), so we
+    match the show by title there and return its playable episode Items.
+
+    Returns episode Items (action='findvideos') or [] when there is no confident
+    match. Never raises.
+    """
+    title = _extract_item_title(item)
+    if not title:
+        return []
+    try:
+        import channels.animeunity as au
+        from core.item import Item
+        # CB01 anime titles often carry an arc suffix ("One Piece: Saga del
+        # Paese di Wa") that AnimeUnity won't match verbatim; also try the base
+        # title (text before the first ':' / '-' / '–').
+        base = re.split(r'\s*[:\-–]\s*', title, 1)[0].strip()
+        queries = [title] + ([base] if base and base.lower() != title.lower() else [])
+        want = _normalize_title(base or title)
+        best = None
+        for q in queries:
+            seed = Item(channel='animeunity', url=au.host, args={},
+                        contentType='tvshow')
+            results = au.search(seed, q) or []
+            cand = [r for r in results
+                    if getattr(r, 'action', '') in ('findvideos', 'episodios')]
+            # prefer an exact / containment normalized-title match, else first.
+            for r in cand:
+                rt = _normalize_title(_extract_item_title(r))
+                if rt and (rt == want or want in rt or rt in want):
+                    best = r
+                    break
+            if best is None and cand:
+                best = cand[0]
+            if best is not None:
+                break
+        if best is None:
+            logger.error('[NonSC-EP] animeunity fallback: no match for "%s"' % title)
+            return []
+        if not getattr(best, 'channel', ''):
+            best.channel = 'animeunity'
+        if getattr(best, 'action', '') == 'findvideos':
+            # single-part anime (movie/OAV): the item itself is the playable unit
+            return [best]
+        eps = au.episodios(best) or []
+        eps = [ep for ep in eps if getattr(ep, 'action', '') == 'findvideos']
+        logger.info('[NonSC-EP] animeunity fallback for "%s" → %d episodes'
+                    % (title, len(eps)))
+        return eps
+    except Exception as exc:
+        logger.error('[NonSC-EP] animeunity fallback failed for "%s": %s'
+                     % (title, str(exc)))
+        return []
+
+
 def _get_channel_episodes(item):
     """Fetch (and cache for 5 min) the episode list for a non-SC show *item*.
 
     Calls the owning channel's episodios() and returns the list of playable
-    episode Items (action='findvideos'). Cached by the show URL so the episode
-    picker and the subsequent direct-play don't fetch the API twice.
+    episode Items (action='findvideos'). Cached so the episode picker and the
+    subsequent direct-play don't fetch the API twice.
     """
     url = getattr(item, 'url', '') or ''
+    # channel may be missing on items built outside the routing engine (e.g. a
+    # cineblog01 newest() Item); fall back to the search-channel tag, then bail
+    # cleanly so we never import 'channels.' (empty → ImportError "channels.").
+    channel = (getattr(item, 'channel', '') or
+               getattr(item, '_search_channel', '') or '')
+    if channel == 'sc':
+        channel = 'streamingcommunity'
+    # Cache key MUST include the channel: One Piece [ITA] (channel='onepiece',
+    # TMDB-enriched episodes) and the raw AnimeUnity show share the same AU URL.
+    # Keying by URL alone let a CW/up-next rebuild (channel='animeunity', plain
+    # episodes with the show poster/plot for ALL episodes) poison the picker's
+    # cache → every ITA episode showed the same image/plot.
+    ckey = '%s|%s' % (channel, url)
     now = time.time()
-    cached = _nonsc_ep_cache.get(url)
+    cached = _nonsc_ep_cache.get(ckey)
     if cached and (now - cached[0]) < 300:
         return cached[1]
-    channel = getattr(item, 'channel', '') or ''
     ep_list = []
+    if not channel:
+        logger.error('[NonSC-EP] episodios skipped: item has no channel (url=%s)'
+                     % (url[:90] if url else ''))
+        return ep_list
     try:
         import importlib
         ch_module = importlib.import_module('channels.%s' % channel)
@@ -3751,8 +3869,12 @@ def _get_channel_episodes(item):
                    if getattr(ep, 'action', '') == 'findvideos']
     except Exception as exc:
         logger.error('[NonSC-EP] episodios(%s) failed: %s' % (channel, str(exc)))
+    # CB01 lists some anime under /serietv/ with a layout episodios() can't read
+    # (0 episodes). Retry via AnimeUnity by title so those titles still play.
+    if not ep_list and channel == 'cineblog01':
+        ep_list = _animeunity_fallback_episodes(item)
     if ep_list and url:
-        _nonsc_ep_cache[url] = (now, ep_list)
+        _nonsc_ep_cache[ckey] = (now, ep_list)
     return ep_list
 
 
@@ -4620,6 +4742,267 @@ def _extract_item_title(it):
     return re.sub(r'\[/?[A-Za-z][^\]]*\]', '', title).strip()
 
 
+def _onepiece_curate(items, want_extras=False, at_front=False, force=False):
+    """Special One Piece handling: collapse the dozens of scattered One Piece
+    results into the unified provider items (One Piece [Sub-ITA] / [ITA] + extras).
+
+    Drops the anime/CB01 One Piece SERIES clutter while KEEPING One Piece films
+    and the SC Live Action (a separate title), then injects the curated provider
+    items (channels/onepiece.py). Idempotent: if the curated items are already in
+    the list it only drops clutter. Never raises.
+
+    - want_extras: include OAV/specials/spin-offs (search) or just the 2 mains.
+    - at_front:    place the curated mains at position 0 (search) vs in place.
+    - force:       inject even if no One Piece item is present (search query=OP).
+    """
+    try:
+        import channels.onepiece as _op
+    except Exception as _e_imp:
+        logger.error('[OnePiece] curate import failed: %s' % str(_e_imp))
+        return items
+    logger.info('[OnePiece] curate ENTER force=%s at_front=%s want_extras=%s items=%d'
+                % (force, at_front, want_extras, len(items)))
+    kept = []
+    op_pos = None
+    op_present = False
+    for it in items:
+        # Drop any raw provider item (channel=onepiece) that leaked in — they are
+        # re-injected cleanly below, so the curated set is always well-ordered and
+        # never partial.
+        if (getattr(it, 'channel', '') or '').lower() == 'onepiece':
+            op_present = True
+            if op_pos is None:
+                op_pos = len(kept)
+            continue
+        nt = _normalize_title(_extract_item_title(it))
+        if not (nt.startswith('one piece') or nt == 'onepiece'):
+            kept.append(it)
+            continue
+        op_present = True
+        if op_pos is None:
+            op_pos = len(kept)
+        src   = (getattr(it, '_search_channel', '') or getattr(it, 'channel', '') or '').lower()
+        stype = getattr(it, '_search_type', '') or ''
+        ct    = (getattr(it, 'contentType', '') or '').lower()
+        # KEEP One Piece films (movies) and the SC Live Action series; only the
+        # anime/CB01 series duplicates get replaced by the unified provider items.
+        if ct == 'movie' or stype == 'film':
+            kept.append(it)
+            continue
+        if src in ('sc', 'streamingcommunity') and stype != 'anime':
+            kept.append(it)          # SC One Piece Live Action stays separate
+            continue
+        # else: anime/CB01 One Piece series clutter → drop (replaced below)
+    if not op_present and not force:
+        return items                 # no One Piece here and not forcing
+    try:
+        curated = _op.get_curated_items(want_extras=want_extras) or []
+    except Exception as exc:
+        import traceback as _tb
+        logger.error('[OnePiece] curate get_curated_items raised: %s\n%s'
+                     % (str(exc), _tb.format_exc()))
+        curated = []
+    logger.info('[OnePiece] curate get_curated_items=%d → [%s]'
+                % (len(curated), ', '.join(getattr(c, 'title', '?') for c in curated)))
+    if not curated:
+        # Index not ready yet (cold start / build in progress): leave the original
+        # items untouched rather than dropping One Piece without a replacement.
+        return items
+    # Tag so the search filter buckets them as anime and the play routing treats
+    # them as non-SC (channel flow → _play_episode_direct_nonsc).
+    for c in curated:
+        try:
+            c._search_channel = 'onepiece'
+            c._search_type = 'anime'
+        except Exception:
+            pass
+    mains  = [c for c in curated if getattr(c, 'op_key', '') in ('ITA', 'SUB')]
+    extras = [c for c in curated if getattr(c, 'op_key', '') not in ('ITA', 'SUB')]
+    if at_front:
+        # Search: a clean, ordered, One-Piece-ONLY layout —
+        #   One Piece [Sub-ITA], One Piece [ITA]  (the 2 main series)
+        #   → the films in number / release order
+        #   → other One Piece spin-offs / specials
+        #   → OAV / specials / spin-offs from the provider.
+        # Everything that is NOT One Piece (SC fuzzy noise like "One Day",
+        # "One Direction", …) is dropped from this dedicated view.
+        def _filmkey(it):
+            title = _extract_item_title(it)
+            mnum = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', title, re.I)
+            if mnum:
+                return (0, int(mnum.group(1)))
+            try:
+                y = int(str(getattr(it, 'year', '') or
+                            (getattr(it, 'infoLabels', {}) or {}).get('year') or 0)[:4])
+            except Exception:
+                y = 0
+            return (1, y or 9999)
+        op_kept = [it for it in kept
+                   if _normalize_title(_extract_item_title(it)).startswith('one piece')]
+        films, others = [], []
+        for it in op_kept:
+            ct2    = (getattr(it, 'contentType', '') or '').lower()
+            stype2 = getattr(it, '_search_type', '') or ''
+            title2 = _extract_item_title(it).lower()
+            is_film = (ct2 == 'movie' or stype2 == 'film'
+                       or 'movie' in title2 or 'film' in title2)
+            (films if is_film else others).append(it)
+        films.sort(key=_filmkey)
+        logger.info('[OnePiece] search curate: mains=%d films=%d others=%d extras=%d (dropped %d non-OP)'
+                    % (len(mains), len(films), len(others), len(extras), len(kept) - len(op_kept)))
+        return mains + films + others + extras
+    pos = op_pos if op_pos is not None else 0
+    return kept[:pos] + curated + kept[pos:]
+
+
+def _op_film_key(it):
+    """Sort key for One Piece films: by movie number when present, else by year."""
+    title = _extract_item_title(it)
+    m = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', title, re.I)
+    if m:
+        return (0, int(m.group(1)))
+    try:
+        y = int(str(getattr(it, 'year', '') or
+                    (getattr(it, 'infoLabels', {}) or {}).get('year') or 0)[:4])
+    except Exception:
+        y = 0
+    return (1, y or 9999)
+
+
+# One Piece Live Action (StreamingCommunity series id 6654 → TMDB 111110).
+_OP_LA_SC_PATH = '/it/titles/6654-one-piece'
+_OP_LA_TMDB    = '111110'
+_OP_LA_POSTER  = 'https://image.tmdb.org/t/p/w500/mgrEi9VfRoN3bAuhf863f0sWC6A.jpg'
+
+
+def _op_live_action_item():
+    """Build the One Piece Live Action SERIE item, sourced explicitly from
+    StreamingCommunity (id 6654) since its global search does not surface it.
+    Plays through the normal SC episodes flow; TMDB 111110 drives the picker."""
+    try:
+        from channels import streamingcommunity as _sc
+        from core.item import Item as _I
+        host = (getattr(_sc, 'host', '') or '').rstrip('/')
+        if not host:
+            return None
+        la = _I(channel='streamingcommunity', action='episodios', contentType='tvshow',
+                url='%s%s' % (host, _OP_LA_SC_PATH),
+                title=u'One Piece (Live Action)', fulltitle=u'One Piece (Live Action)',
+                show=u'One Piece (Live Action)', contentSerieName=u'One Piece (Live Action)',
+                thumbnail=_OP_LA_POSTER, fanart=_OP_LA_POSTER)
+        la.infoLabels = {'tmdb_id': _OP_LA_TMDB, 'mediatype': 'tvshow'}
+        la._search_channel = 'sc'
+        la._search_type = 'serie'
+        return la
+    except Exception as exc:
+        logger.error('[OnePiece] live action build: %s' % str(exc))
+        return None
+
+
+def _onepiece_groups(items, sc_items=None):
+    """Split a One Piece search result into ordered carousel groups for the rows
+    layout:
+        [('SERIE', [Sub-ITA, ITA, Live Action]),
+         ('FILM',  [the 15 films in order]),
+         ('SPECIALI · OVA · SPIN-OFF', [provider extras + spin-off series])]
+
+    The SC Live Action (real-actors Netflix series) is added to SERIE. Drops the
+    anime/CB01 main-series duplicates (the provider replaces them), the loose
+    single-episode packagings (Mediaset "One Piece 17 - Ep. 96 …") and every
+    non-One-Piece result (SC fuzzy noise like "One Day", "One Direction", …); the
+    Speciali row is de-duplicated. Returns [] if the provider index isn't ready.
+    """
+    try:
+        import channels.onepiece as _op
+        curated = _op.get_curated_items(want_extras=True) or []
+    except Exception as exc:
+        logger.error('[OnePiece] groups failed: %s' % str(exc))
+        return []
+    if not curated:
+        return []
+    for c in curated:
+        try:
+            c._search_channel = 'onepiece'
+            c._search_type = 'anime'
+        except Exception:
+            pass
+    mains  = [c for c in curated if getattr(c, 'op_key', '') in ('ITA', 'SUB')]
+    extras = [c for c in curated if getattr(c, 'op_key', '') not in ('ITA', 'SUB')]
+
+    # ── Live Action (real-actors Netflix series): sourced explicitly from SC
+    # (id 6654), since SC's global search does not return it for "one piece".
+    live_action = _op_live_action_item()
+
+    _DROP_TITLES = ('one piece', 'one piece ita', 'one piece subita', 'one piece sub ita')
+    films, others = [], []
+    for it in items:
+        if (getattr(it, 'channel', '') or '').lower() == 'onepiece':
+            continue   # raw provider leak — curated already covers it
+        if live_action is not None and it is live_action:
+            continue   # already placed in SERIE
+        title = _extract_item_title(it)
+        nt = _normalize_title(title)
+        if not nt.startswith('one piece'):
+            continue   # noise (One Day, One Direction, …)
+        if nt in _DROP_TITLES:
+            continue   # bare main-series duplicate (provider replaces it)
+        if re.search(r'one\s*piece\s+\d+\s*-\s*ep', title, re.I):
+            continue   # Mediaset single-episode packaging
+        ct    = (getattr(it, 'contentType', '') or '').lower()
+        stype = getattr(it, '_search_type', '') or ''
+        tl    = title.lower()
+        is_film = (ct == 'movie' or stype == 'film'
+                   or 'movie' in tl or 'film' in tl or 'the movie' in tl)
+        (films if is_film else others).append(it)
+    # De-duplicate films: the same movie shows up from several anime channels
+    # (e.g. "Movie 11" from both AnimeUnity and AnimeSaturn). Collapse by movie
+    # number when present, else by normalized title.
+    films.sort(key=_op_film_key)
+    seen_film, uniq_films = set(), []
+    for it in films:
+        ttl = _extract_item_title(it)
+        mnum = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', ttl, re.I)
+        fkey = ('m', int(mnum.group(1))) if mnum else ('t', _normalize_title(ttl))
+        if fkey in seen_film:
+            continue
+        seen_film.add(fkey)
+        uniq_films.append(it)
+    films = uniq_films
+
+    # ── Speciali row, de-duplicated: provider extras first, then the spin-off
+    # series, skipping exact-title repeats and themes already covered by a
+    # provider extra (Fish-Man Island, In Love, OAV).
+    prov_themes = [_normalize_title(_extract_item_title(c)) for c in extras]
+    def _covered(nt):
+        if 'fish' in nt and any('fish' in p for p in prov_themes):
+            return True
+        if 'in love' in nt and any('love' in p for p in prov_themes):
+            return True
+        if ('oav' in nt or 'ova' in nt) and any('oav' in p or 'ova' in p for p in prov_themes):
+            return True
+        return False
+    speciali = list(extras)
+    seen = set(_normalize_title(_extract_item_title(c)) for c in extras)
+    for it in others:
+        nt = _normalize_title(_extract_item_title(it))
+        if nt in seen or _covered(nt):
+            continue
+        seen.add(nt)
+        speciali.append(it)
+
+    serie = list(mains) + ([live_action] if live_action is not None else [])
+    groups = []
+    if serie:
+        groups.append((u'SERIE', serie))
+    if films:
+        groups.append((u'FILM', films))
+    if speciali:
+        groups.append((u'SPECIALI · OVA · SPIN-OFF', speciali))
+    logger.info('[OnePiece] groups: serie=%d (LA=%s) film=%d speciali=%d'
+                % (len(serie), live_action is not None, len(films), len(speciali)))
+    return groups
+
+
 def _dl_active():
     """True while a download is running. The home pauses its GIL-heavy
     background work (TMDB enrichment, YouTube trailer search) during downloads
@@ -5010,6 +5393,13 @@ def _fetch_anime_row(limit=20):
         logger.info('[NetflixHome anime] popular: %d items' % len(items))
     except Exception as exc:
         logger.error('[NetflixHome anime] fetch failed: %s' % str(exc)[:160])
+
+    # Special One Piece handling: swap the AnimeUnity One Piece entries for the
+    # unified provider items (complete ITA 1–926 / SUB 1–1167).
+    try:
+        items = _onepiece_curate(items, want_extras=False, at_front=False)
+    except Exception as exc:
+        logger.error('[NetflixHome anime] one piece curate: %s' % str(exc)[:120])
 
     if items:
         _anime_row_cache = {'items': items, 'ts': _now()}
@@ -6545,6 +6935,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
         self._seasons   = []      # list of season dicts from TMDB
         self._cur_season_num = self._cw_season
         self._selected  = None    # (season, episode, title) on confirmation
+        self._dd_open   = False   # season dropdown expanded?
 
     def onInit(self):
         target = self._load_seasons_channel if self._channel_item is not None else self._load_seasons
@@ -6552,30 +6943,113 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
         t.daemon = True
         t.start()
 
-    def _load_seasons_channel(self):
-        """Channel mode: single 'Stagione 1' tab + episodes from the channel."""
+    # ── season dropdown (replaces the old top tab bar) ─────────────────────────
+    def _set_season_btn(self, label):
         try:
+            self.getControl(EP_SEASON_BTN).setLabel(label or u'Stagione')
+        except Exception:
+            pass
+
+    def _fill_season_dd(self, items, sel_idx):
+        """Populate the season dropdown list (313) and set the trigger button (312)
+        label to the currently-selected season."""
+        try:
+            ctrl = self.getControl(EP_SEASON_DD)
+            ctrl.reset()
+            ctrl.addItems(items)
+            if 0 <= sel_idx < len(items):
+                ctrl.selectItem(sel_idx)
+        except Exception as exc:
+            logger.error('[EpisodePicker] season dd populate: %s' % str(exc))
+        try:
+            self._set_season_btn(items[sel_idx].getLabel()
+                                 if 0 <= sel_idx < len(items) else u'Stagione')
+        except Exception:
+            pass
+
+    def _toggle_dd(self):
+        if len(self._seasons) <= 1:
+            return                      # nothing to choose
+        self._dd_open = not self._dd_open
+        try:
+            self.setProperty('season_dd', '1' if self._dd_open else '0')
+        except Exception:
+            pass
+        if self._dd_open:
+            try:
+                cur = next((i for i, s in enumerate(self._seasons)
+                            if s.get('season_number') == self._cur_season_num), 0)
+                self.getControl(EP_SEASON_DD).selectItem(cur)
+                xbmc.sleep(60)   # let the overlay become visible before focusing it
+                self.setFocusId(EP_SEASON_DD)
+            except Exception:
+                pass
+
+    def _close_dd(self):
+        self._dd_open = False
+        try:
+            self.setProperty('season_dd', '0')
+        except Exception:
+            pass
+
+    def _load_seasons_channel(self):
+        """Channel mode. One Piece → one tab per SAGA; other channels → a single
+        flat 'Stagione 1' tab. Episodes always come from the channel's episodios()."""
+        try:
+            # ── One Piece: saga tabs (absolute episode numbering) ──
+            if self._channel == 'onepiece':
+                sagas = []
+                try:
+                    import channels.onepiece as _op
+                    sagas = _op.get_sagas(self._channel_item) or []
+                except Exception as exc:
+                    logger.error('[EpisodePicker] onepiece sagas: %s' % str(exc))
+                if sagas:
+                    self._seasons = [{'season_number': i + 1, 'name': s['name'],
+                                      'start': int(s['start']), 'end': int(s['end'])}
+                                     for i, s in enumerate(sagas)]
+                    items = []
+                    sel_idx = 0
+                    for i, s in enumerate(self._seasons):
+                        li = xbmcgui.ListItem(label=s['name'])
+                        li.setProperty('season_number', str(s['season_number']))
+                        items.append(li)
+                        if s['start'] <= self._cw_ep <= s['end']:
+                            sel_idx = i
+                    self._fill_season_dd(items, sel_idx)
+                    self._cur_season_num = self._seasons[sel_idx]['season_number']
+                    self._load_episodes_channel(sel_idx)
+                    return
+            # ── default: single flat season ──
+            self._seasons = [{'season_number': 1, 'name': u'Stagione 1'}]
             li = xbmcgui.ListItem(label=u'Stagione 1')
             li.setProperty('season_number', '1')
-            try:
-                ctrl = self.getControl(EP_SEASON_LIST)
-                ctrl.addItems([li])
-                ctrl.selectItem(0)
-            except Exception as exc:
-                logger.error('[EpisodePicker] channel season tab: %s' % str(exc))
+            self._fill_season_dd([li], 0)
             self._cur_season_num = 1
             self._load_episodes_channel()
         except Exception as exc:
             logger.error('[EpisodePicker] _load_seasons_channel: %s' % str(exc))
 
-    def _load_episodes_channel(self):
-        """Populate the episode list from the channel's episodios() (single season)."""
+    def _load_episodes_channel(self, saga_idx=None):
+        """Populate the episode list from the channel's episodios(). When saga_idx
+        is given (One Piece) only the episodes within that saga's absolute range
+        are shown, labelled by their absolute number."""
         try:
             ep_list = _get_channel_episodes(self._channel_item)
+            saga = None
+            saga_num = 1
+            is_op = (self._channel == 'onepiece')
+            if saga_idx is not None and 0 <= saga_idx < len(self._seasons):
+                saga = self._seasons[saga_idx]
+                saga_num = saga.get('season_number', saga_idx + 1)
+            if saga and is_op:
+                ep_list = [ep for ep in ep_list
+                           if saga['start'] <= int(getattr(ep, 'episode', 0) or 0) <= saga['end']]
             watched = set(
                 tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
                 if len(w) == 2
             ) if self._show_key else set()
+            watched_eps = set(e for (_s, e) in watched)
             items   = []
             sel_pos = 0
             for ep in ep_list:
@@ -6585,12 +7059,21 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     ep_num = 0
                 # Strip BBCode/typo markup from the channel's episode title
                 ep_title = re.sub(r'\[/?[^\]]+\]', '', getattr(ep, 'title', '') or '').strip()
-                ep_code  = u'S01E%02d' % ep_num
-                is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
+                if is_op:
+                    ep_code = u'Ep %d' % ep_num
+                    is_current = (ep_num == self._cw_ep)
+                    is_watched = (ep_num in watched_eps)
+                else:
+                    ep_code = u'S01E%02d' % ep_num
+                    is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
+                    is_watched = ((1, ep_num) in watched)
+                # One Piece main episodes have a generic "Episodio N" title → drop it
+                if is_op and re.match(r'^Episodio\s+\d+$', ep_title or ''):
+                    ep_title = ''
                 if is_current:
                     label = u'[B]%s[/B]' % ep_code if not ep_title else u'[B]%s  –  %s[/B]' % (ep_code, ep_title)
                     sel_pos = len(items)
-                elif (1, ep_num) in watched:
+                elif is_watched:
                     label = (u'[COLOR FF22C55E]✓[/COLOR] '
                              u'[COLOR FF888888]%s[/COLOR]' % ep_code)
                 else:
@@ -6599,7 +7082,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                 if getattr(ep, 'thumbnail', ''):
                     _li.setArt({'thumb': ep.thumbnail})
                 _li.setProperty('ep_num',     str(ep_num))
-                _li.setProperty('season_num', '1')
+                _li.setProperty('season_num', str(saga_num))
                 _li.setProperty('ep_title',   ep_title)
                 _li.setProperty('overview',   (getattr(ep, 'plot', '') or '')[:200])
                 _li.setProperty('runtime',    '')
@@ -6636,12 +7119,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                 items.append(li)
                 if n == self._cw_season:
                     sel_idx = i
-            try:
-                ctrl = self.getControl(EP_SEASON_LIST)
-                ctrl.addItems(items)
-                ctrl.selectItem(sel_idx)
-            except Exception as exc:
-                logger.error('[EpisodePicker] season tabs: %s' % str(exc))
+            self._fill_season_dd(items, sel_idx)
             # Load episodes for the current season
             self._cur_season_num = self._seasons[sel_idx].get('season_number',
                                                                self._cw_season)
@@ -6714,24 +7192,51 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
 
     def onAction(self, action):
         if action.getId() in (self.ACTION_EXIT, self.ACTION_BACK):
+            # Back first closes the open dropdown, only then the whole dialog.
+            if self._dd_open:
+                self._close_dd()
+                try:
+                    self.setFocusId(EP_SEASON_BTN)
+                except Exception:
+                    pass
+                return
             self.close()
 
     def onClick(self, control_id):
-        if control_id == EP_SEASON_LIST:
+        if control_id == EP_SEASON_BTN:        # open/close the season dropdown
+            self._toggle_dd()
+            return
+        if control_id == EP_SEASON_DD:         # a season picked from the dropdown
             try:
-                ctrl = self.getControl(EP_SEASON_LIST)
-                pos  = int(ctrl.getSelectedPosition() or 0)
+                pos = int(self.getControl(EP_SEASON_DD).getSelectedPosition() or 0)
+                self._close_dd()
                 if 0 <= pos < len(self._seasons):
-                    new_season = self._seasons[pos].get('season_number', 1)
+                    new_season = self._seasons[pos].get('season_number', pos + 1)
+                    try:
+                        self._set_season_btn(
+                            self.getControl(EP_SEASON_DD).getListItem(pos).getLabel())
+                    except Exception:
+                        pass
                     if new_season != self._cur_season_num:
                         self._cur_season_num = new_season
-                        t = threading.Thread(target=self._load_episodes,
-                                             args=(new_season,))
+                        # Channel mode (e.g. One Piece sagas) → reload from the
+                        # channel; TMDB mode → reload that season from TMDB.
+                        if self._channel_item is not None:
+                            t = threading.Thread(target=self._load_episodes_channel,
+                                                 args=(pos,))
+                        else:
+                            t = threading.Thread(target=self._load_episodes,
+                                                 args=(new_season,))
                         t.daemon = True
                         t.start()
+                try:
+                    self.setFocusId(EP_EP_LIST)
+                except Exception:
+                    pass
             except Exception as exc:
-                logger.error('[EpisodePicker] onClick season: %s' % str(exc))
-        elif control_id == EP_EP_LIST:
+                logger.error('[EpisodePicker] onClick season dd: %s' % str(exc))
+            return
+        if control_id == EP_EP_LIST:
             try:
                 ctrl = self.getControl(EP_EP_LIST)
                 pos  = int(ctrl.getSelectedPosition() or 0)
@@ -6856,8 +7361,11 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         self._items     = []             # currently displayed results (after filter)
         self._all_items = []             # full result set (all types) — filter source
         self._active_filter = 'all'      # active filter chip: all|film|serie|anime
+        self._op_mode   = False          # True → One Piece carousel rows layout
+        self._op_rows   = {}             # wraplist control id → list of Items
         self._hero_item = None           # item currently shown in the context line
         self._last_pos  = 0              # last selected grid position (restored after trailer)
+        self._last_hover = None          # last (control, pos) hovered by mouse (throttle)
         self._alive     = True           # False once closed (HOME._restore_search_window guard)
         self._search_started = False     # guard: onInit may fire again after a fullscreen trailer
         self._search_done = threading.Event()
@@ -6938,6 +7446,42 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self._pf_cancelled.set()  # cancel all prefetch workers on back/close
             self.close()
             return
+        # ── Mouse hover: the grid/carousel highlight follows the cursor (Kodi moves
+        # the selected position), but no focus event fires per card — so refresh the
+        # hero from the hovered position here. Throttled to selection changes. ──
+        if aid == ACTION_MOUSE_MOVE:
+            self._hover_hero()
+            return
+        # ── One Piece carousel navigation (up/down move between rows in code so
+        # empty rows are skipped; left/right scroll the row and refresh the hero) ──
+        if self._op_mode:
+            fid = self.getFocusId()
+            if fid in OP_ROW_WL:
+                idx = OP_ROW_WL.index(fid)
+                if aid == ACTION_DOWN:
+                    nxt = self._next_op_row(idx, +1)
+                    if nxt is not None:
+                        self.setFocusId(OP_ROW_WL[nxt])
+                        self._op_hero(nxt)
+                    return
+                if aid == ACTION_UP:
+                    prv = self._next_op_row(idx, -1)
+                    if prv is not None:
+                        self.setFocusId(OP_ROW_WL[prv])
+                        self._op_hero(prv)
+                    else:
+                        self.setFocusId(SEARCH_QUERY_BTN)
+                    return
+                if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+                    threading.Thread(target=self._op_deferred_hero, args=(fid,),
+                                     daemon=True).start()
+                    return
+            elif fid == SEARCH_QUERY_BTN and aid == ACTION_DOWN:
+                first = self._next_op_row(-1, +1)
+                if first is not None:
+                    self.setFocusId(OP_ROW_WL[first])
+                    self._op_hero(first)
+                    return
         # Update hero when navigating within the grid (LEFT/RIGHT/UP/DOWN/scroll wheel)
         if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
                    ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
@@ -6964,6 +7508,21 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         if control_id in SEARCH_FILTER_MAP:
             self._apply_filter(SEARCH_FILTER_MAP[control_id])
             return
+        if control_id in OP_ROW_WL:      # One Piece carousel card
+            try:
+                items = self._op_rows.get(control_id, [])
+                pos = int(self.getControl(control_id).getSelectedPosition() or 0)
+                if 0 <= pos < len(items):
+                    self._open_detail(items[pos])
+                # restore focus to this row after backing out of the detail card
+                if self._alive and self._op_mode:
+                    try:
+                        self.setFocusId(control_id)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.error('[NetflixSearch] onClick op-row: %s' % str(exc))
+            return
         if control_id == SEARCH_WL_SC:   # panel grid id=160
             try:
                 pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
@@ -6974,6 +7533,12 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 logger.error('[NetflixSearch] onClick grid: %s' % str(exc))
 
     def onFocus(self, control_id):
+        if control_id in OP_ROW_WL:      # One Piece carousel card
+            try:
+                self._op_hero(OP_ROW_WL.index(control_id))
+            except Exception:
+                pass
+            return
         if control_id == SEARCH_WL_SC:   # panel grid id=160
             try:
                 pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
@@ -6995,6 +7560,30 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             if 0 <= pos < len(items):
                 self._last_pos = pos
                 self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    def _hover_hero(self):
+        """Refresh the hero from the card currently under the mouse cursor — both
+        the flat grid and the One Piece carousels. Throttled: only fires when the
+        hovered (control, position) actually changed."""
+        try:
+            fid = self.getFocusId()
+            if self._op_mode and fid in OP_ROW_WL:
+                pos = int(self.getControl(fid).getSelectedPosition() or 0)
+                if (fid, pos) != self._last_hover:
+                    self._last_hover = (fid, pos)
+                    self._op_hero(OP_ROW_WL.index(fid))
+                return
+            if fid == SEARCH_WL_SC:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if (fid, pos) != self._last_hover:
+                    self._last_hover = (fid, pos)
+                    with self._lock:
+                        items = list(self._items)
+                    if 0 <= pos < len(items):
+                        self._last_pos = pos
+                        self._update_hero(items[pos])
         except Exception:
             pass
 
@@ -7122,16 +7711,24 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             if result == 'play':
                 if sel_s is not None and sel_e is not None:
                     # User picked a specific episode in the EpisodePicker.
+                    _is_sc = (getattr(item, 'channel', '') == 'streamingcommunity'
+                              or getattr(item, '_search_channel', '') == 'sc')
                     _show_url = (getattr(item, '_cw_show_url', '') or
                                  (item.url if getattr(item, 'action', '') == 'episodios' else ''))
-                    if _show_url and self._parent_window is not None:
+                    if _is_sc and _show_url and self._parent_window is not None:
                         t_ep = threading.Thread(
                             target=self._parent_window._play_episode_direct,
                             args=(item, sel_s, sel_e))
                         t_ep.daemon = True
                         t_ep.start()
                     elif self._parent_window is not None:
-                        self._parent_window._launch(item, source_window=self)
+                        # Non-SC (AnimeUnity / One Piece / …): play the chosen
+                        # episode via the channel flow.
+                        t_ep = threading.Thread(
+                            target=self._parent_window._play_episode_direct_nonsc,
+                            args=(item, sel_e))
+                        t_ep.daemon = True
+                        t_ep.start()
                     else:
                         self._launch_item(item)
                 else:
@@ -7229,6 +7826,93 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             self.getControl(SEARCH_WL_SC).addItems(list_items)
         except Exception as exc:
             logger.error('[NetflixSearch] _populate_grid: %s' % str(exc))
+
+    # ── One Piece carousel rows ───────────────────────────────────────────────
+    @staticmethod
+    def _make_op_li(it):
+        li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
+        li.setArt({'thumb': it.thumbnail or ''})
+        li.setProperty('thumbnail', it.thumbnail or '')
+        return li
+
+    def _show_op_rows(self, groups):
+        """Switch the search overlay into the dedicated One Piece carousel layout:
+        a header + up to three horizontal rows (Serie / Film / Speciali). Hides the
+        filter chips and the flat grid via Window.Property(op_mode)."""
+        self._op_mode = True
+        self._op_rows = {}
+        try:
+            self.setProperty('op_mode', '1')
+        except Exception:
+            pass
+        total = sum(len(its) for _t, its in groups)
+        try:
+            self.getControl(OP_HEADER).setLabel(u'[B][COLOR FFE50914]ONE PIECE[/COLOR][/B]')
+            self.getControl(OP_SUBHDR).setLabel(
+                u'La ciurma di Cappello di Paglia · %d contenuti' % total)
+        except Exception:
+            pass
+        first = None
+        for i in range(len(OP_ROW_WL)):
+            wl_id, lbl_id = OP_ROW_WL[i], OP_ROW_LBL[i]
+            if i < len(groups):
+                title, gitems = groups[i]
+                self._op_rows[wl_id] = gitems
+                try:
+                    self.getControl(lbl_id).setLabel(
+                        u'[B]%s[/B]   [COLOR FF777777]%d[/COLOR]' % (title, len(gitems)))
+                    self.getControl(lbl_id).setVisible(True)
+                    wl = self.getControl(wl_id)
+                    wl.reset()
+                    wl.addItems([self._make_op_li(it) for it in gitems])
+                    wl.setVisible(True)
+                except Exception as exc:
+                    logger.error('[OnePiece] row %d populate: %s' % (i, str(exc)))
+                if first is None and gitems:
+                    first = (wl_id, gitems)
+            else:
+                self._op_rows[wl_id] = []
+                try:
+                    self.getControl(wl_id).setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+                except Exception:
+                    pass
+        if first:
+            try:
+                self.getControl(first[0]).selectItem(0)
+                self.setFocusId(first[0])
+            except Exception:
+                pass
+            self._update_hero(first[1][0])
+
+    def _next_op_row(self, idx, step):
+        """Index of the next non-empty One Piece row from *idx* in *step* direction."""
+        i = idx + step
+        while 0 <= i < len(OP_ROW_WL):
+            if self._op_rows.get(OP_ROW_WL[i]):
+                return i
+            i += step
+        return None
+
+    def _op_hero(self, row_idx):
+        """Update the hero box from the selected card of One Piece row *row_idx*."""
+        try:
+            wl_id = OP_ROW_WL[row_idx]
+            items = self._op_rows.get(wl_id, [])
+            pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
+            if 0 <= pos < len(items):
+                self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    def _op_deferred_hero(self, wl_id):
+        """Hero update after a horizontal navigation key in a One Piece row."""
+        xbmc.sleep(80)
+        try:
+            row_idx = OP_ROW_WL.index(wl_id)
+        except ValueError:
+            return
+        self._op_hero(row_idx)
 
     # ── Search engine ───────────────────────────────────────────────────────
 
@@ -7474,6 +8158,29 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         # Non-SC items are played via the channel flow (see _launch_item), which
         # sets up inputstream.adaptive/DRM correctly — so there is no background
         # link pre-testing here anymore (it played raw URLs that wouldn't start).
+
+        # ── Step 4a-bis: special One Piece handling ──
+        # When the user searches "One Piece", replace the dozens of scattered
+        # anime/CB01 results with the unified provider items (2 main series +
+        # films + Live Action + OVA/special/spin-off), at the very top.
+        if 'one piece' in _re.sub(r'[^a-z0-9 ]', '', query_clean):
+            _op_groups = _onepiece_groups(deduped, sc_items=sc_items)
+            if _op_groups:
+                # Dedicated One Piece carousel layout (rows), no filter chips.
+                with self._lock:
+                    self._all_items = [it for _t, its in _op_groups for it in its]
+                    self._items = list(self._all_items)
+                self._show_op_rows(_op_groups)
+                try:
+                    self.getControl(SEARCH_LOADING).setVisible(False)
+                    self.getControl(SEARCH_NORESULTS).setVisible(False)
+                except Exception:
+                    pass
+                self._search_done.set()
+                return
+            # provider not ready → fall back to the normal flat grid
+            deduped = _onepiece_curate(deduped, want_extras=True,
+                                       at_front=True, force=True)
 
         # ── Step 4b: store full set, apply the active filter, re-populate ──
         with self._lock:
@@ -7875,6 +8582,7 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
         self._genre_idx = 0
         self._items    = []                 # currently displayed titles (accumulated)
         self._last_pos = 0
+        self._last_hover = None              # last grid pos hovered by mouse (throttle)
         self._alive    = True
         self._lock     = threading.Lock()
         self._cancelled = threading.Event()
@@ -7958,10 +8666,33 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
             self._cancelled.set()
             self.close()
             return
+        # Mouse hover: the grid highlight follows the cursor but no focus event
+        # fires per card — refresh the hero from the hovered card here (throttled).
+        if aid == ACTION_MOUSE_MOVE:
+            self._hover_hero()
+            return
         if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
                    ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
             if self.getFocusId() == BROWSE_GRID:
                 threading.Thread(target=self._deferred_hero_update, daemon=True).start()
+
+    def _hover_hero(self):
+        """Refresh the hero from the grid card currently under the mouse cursor.
+        Throttled: only fires when the hovered position changed."""
+        try:
+            if self.getFocusId() != BROWSE_GRID:
+                return
+            pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+            if pos == self._last_hover:
+                return
+            self._last_hover = pos
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._last_pos = pos
+                self._update_hero(items[pos])
+        except Exception:
+            pass
 
     def onClick(self, control_id):
         if control_id == BROWSE_EXIT:
@@ -8125,6 +8856,12 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
                 return
             with self._lock:
                 self._items = existing + new_unique
+                # Special One Piece handling: in the Anime/Serie grids replace the
+                # AnimeUnity/CB01 One Piece clutter with the unified provider items.
+                # Only on the first page — _populate_grid re-renders the whole list
+                # there, whereas append paths add only new_unique to the grid.
+                if macro in ('anime', 'serie') and not append:
+                    self._items = _onepiece_curate(self._items, want_extras=False)
                 loaded = len(self._items)
             if append:
                 # Keep the user where they were — addItems can reset the panel
@@ -8274,6 +9011,11 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
             for x in raw:
                 if getattr(x, 'action', '') in ('findvideos', 'episodios'):
                     x._search_channel = 'cineblog01'
+                    # newest() builds bare Items with no channel, so episodios()
+                    # routing (via _get_channel_episodes) would import 'channels.'
+                    # and fail. Stamp the owning channel so play/detail work.
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'cineblog01'
                     out.append(x)
         except Exception as exc:
             logger.error('[Browse] cb01 peliculas: %s' % str(exc)[:160])
@@ -8410,7 +9152,9 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
             pw = self._parent_window
             if result == 'play':
                 if sel_s is not None and sel_e is not None and pw is not None:
-                    if getattr(item, 'channel', '') == 'streamingcommunity':
+                    _is_sc = (getattr(item, 'channel', '') == 'streamingcommunity'
+                              or getattr(item, '_search_channel', '') == 'sc')
+                    if _is_sc:
                         threading.Thread(target=pw._play_episode_direct,
                                          args=(item, sel_s, sel_e), daemon=True).start()
                     else:

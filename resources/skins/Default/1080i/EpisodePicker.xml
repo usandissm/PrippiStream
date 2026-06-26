@@ -34,7 +34,7 @@
             <texturenofocus colordiffuse="28FFFFFF">white.png</texturenofocus>
             <label>[B]CHIUDI[/B]</label>
             <font>font10</font><textcolor>FF999999</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
-            <align>center</align><ondown>310</ondown>
+            <align>center</align><ondown>312</ondown>
             <animation effect="zoom" start="100" end="108" center="auto" time="120" tween="sine" easing="out">Focus</animation>
             <animation effect="zoom" start="108" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
         </control>
@@ -42,37 +42,22 @@
             <left>0</left><top>64</top><width>1920</width><height>3</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
-        <control type="panel" id="310">
-            <left>0</left><top>68</top><width>1920</width><height>56</height>
-            <scrolltime tween="cubic" easing="out">200</scrolltime>
-            <scrollwrap>false</scrollwrap>
+        <!-- Season dropdown trigger button "Stagione N ▾" (id=312) -->
+        <control type="button" id="312">
+            <left>40</left><top>76</top><width>360</width><height>46</height>
+            <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
+            <texturenofocus colordiffuse="22FFFFFF">white.png</texturenofocus>
+            <label>Stagione 1</label>
+            <font>font12</font><textcolor>FFEEEEEE</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+            <align>left</align><aligny>center</aligny><textoffsetx>18</textoffsetx>
             <onup>321</onup><ondown>311</ondown>
-            <itemlayout height="56" width="200">
-                <control type="image">
-                    <left>4</left><top>4</top><width>192</width><height>48</height>
-                    <texture colordiffuse="18FFFFFF">white.png</texture>
-                </control>
-                <control type="label">
-                    <left>0</left><top>0</top><width>200</width><height>56</height>
-                    <font>font12</font><textcolor>FF666666</textcolor>
-                    <label>$INFO[ListItem.Label]</label>
-                    <align>center</align><aligny>center</aligny>
-                </control>
-            </itemlayout>
-            <focusedlayout height="56" width="200">
-                <control type="image">
-                    <left>4</left><top>4</top><width>192</width><height>48</height>
-                    <texture colordiffuse="FFE50914">white.png</texture>
-                    <animation effect="fade" start="0" end="100" time="150" tween="sine">Focus</animation>
-                    <animation effect="fade" start="100" end="0" time="110" tween="sine">Unfocus</animation>
-                </control>
-                <control type="label">
-                    <left>0</left><top>0</top><width>200</width><height>56</height>
-                    <font>font12</font><textcolor>FFFFFFFF</textcolor>
-                    <label>[B]$INFO[ListItem.Label][/B]</label>
-                    <align>center</align><aligny>center</aligny>
-                </control>
-            </focusedlayout>
+        </control>
+        <!-- ▾ glyph on the right edge of the button -->
+        <control type="label">
+            <left>40</left><top>76</top><width>340</width><height>46</height>
+            <font>font12</font><textcolor>FFBBBBBB</textcolor>
+            <label>[B]▾[/B]</label>
+            <align>right</align><aligny>center</aligny>
         </control>
         <control type="image">
             <left>0</left><top>126</top><width>1920</width><height>2</height>
@@ -81,7 +66,7 @@
         <control type="list" id="311">
             <left>40</left><top>130</top><width>1840</width><height>910</height>
             <scrolltime tween="cubic" easing="out">200</scrolltime>
-            <onup>310</onup>
+            <onup>312</onup>
             <itemlayout height="110" width="1840">
                 <control type="image">
                     <left>0</left><top>4</top><width>186</width><height>102</height>
@@ -160,6 +145,52 @@
                     <texture colordiffuse="10FFFFFF">white.png</texture>
                 </control>
             </focusedlayout>
+        </control>
+
+        <!-- ════════ SEASON DROPDOWN (overlay, toggled via Window.Property(season_dd)) ════════ -->
+        <control type="group">
+            <visible>String.IsEqual(Window.Property(season_dd),1)</visible>
+            <!-- dim the rest so the dropdown stands out -->
+            <control type="image">
+                <left>0</left><top>124</top><width>1920</width><height>916</height>
+                <texture colordiffuse="CC000000">white.png</texture>
+            </control>
+            <!-- dropdown panel background -->
+            <control type="image">
+                <left>40</left><top>126</top><width>360</width><height>744</height>
+                <texture colordiffuse="FF1E1E1E">white.png</texture>
+            </control>
+            <control type="image">
+                <left>40</left><top>126</top><width>360</width><height>3</height>
+                <texture colordiffuse="FFE50914">white.png</texture>
+            </control>
+            <control type="list" id="313">
+                <left>40</left><top>134</top><width>360</width><height>730</height>
+                <scrolltime tween="cubic" easing="out">180</scrolltime>
+                <onleft>313</onleft><onright>313</onright>
+                <itemlayout height="48" width="360">
+                    <control type="label">
+                        <left>18</left><top>0</top><width>324</width><height>48</height>
+                        <font>font12</font><textcolor>FFAAAAAA</textcolor>
+                        <label>$INFO[ListItem.Label]</label>
+                        <aligny>center</aligny>
+                        <truncated>true</truncated>
+                    </control>
+                </itemlayout>
+                <focusedlayout height="48" width="360">
+                    <control type="image">
+                        <left>0</left><top>0</top><width>360</width><height>48</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="label">
+                        <left>18</left><top>0</top><width>324</width><height>48</height>
+                        <font>font12</font><textcolor>FFFFFFFF</textcolor>
+                        <label>[B]$INFO[ListItem.Label][/B]</label>
+                        <aligny>center</aligny>
+                        <truncated>true</truncated>
+                    </control>
+                </focusedlayout>
+            </control>
         </control>
     </controls>
 </window>

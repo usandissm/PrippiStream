@@ -27,6 +27,7 @@
     stype      → ANIME | FILM | SERIE  (drives the badge colour/visibility)
 -->
 <window>
+    <allowmouse>true</allowmouse>
     <defaultcontrol>160</defaultcontrol>
 
     <animation type="WindowOpen" reversible="false">
@@ -357,6 +358,187 @@
         </control>
 
         <!-- ═══════════════════════════════════════════════════════════
+             ONE PIECE carousel layout — shown ONLY when the user searches
+             One Piece (Window.Property(op_mode)=1). An opaque backdrop covers
+             the filter chips + flat grid, then a header + up to three rows
+             (Serie / Film / Speciali). Control IDs: 180 header, 181 subtitle,
+             182/184/186 row wraplists, 183/185/187 row labels.
+        ═══════════════════════════════════════════════════════════ -->
+        <control type="group">
+            <visible>String.IsEqual(Window.Property(op_mode),1)</visible>
+            <!-- opaque backdrop covering filter bar + grid area -->
+            <control type="image">
+                <left>0</left><top>89</top>
+                <width>1920</width><height>843</height>
+                <texture colordiffuse="FF0B0B0B">white.png</texture>
+            </control>
+            <!-- red top band -->
+            <control type="image">
+                <left>0</left><top>89</top>
+                <width>1920</width><height>3</height>
+                <texture colordiffuse="FFE50914">white.png</texture>
+            </control>
+            <!-- header -->
+            <control type="label" id="180">
+                <left>28</left><top>100</top>
+                <width>1600</width><height>44</height>
+                <font>font16</font>
+                <textcolor>FFFFFFFF</textcolor>
+                <shadowcolor>CC000000</shadowcolor>
+                <label>[B][COLOR FFE50914]ONE PIECE[/COLOR][/B]</label>
+                <aligny>center</aligny>
+            </control>
+            <control type="label" id="181">
+                <left>30</left><top>144</top>
+                <width>1600</width><height>22</height>
+                <font>font10</font>
+                <textcolor>FF9A9A9A</textcolor>
+                <label></label>
+            </control>
+
+            <!-- ── Row 1: SERIE ── -->
+            <control type="label" id="183">
+                <left>30</left><top>172</top>
+                <width>1700</width><height>26</height>
+                <font>font12</font>
+                <textcolor>FFE5E5E5</textcolor>
+                <label></label>
+            </control>
+            <control type="list" id="182">
+                <left>28</left><top>200</top>
+                <width>1864</width><height>214</height>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onup>182</onup><ondown>182</ondown>
+                <onleft>182</onleft><onright>182</onright>
+                <itemlayout width="156" height="214">
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>208</height>
+                        <texture colordiffuse="20000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top><width>140</width><height>204</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                </itemlayout>
+                <focusedlayout width="156" height="214">
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>212</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>208</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="104" center="auto" time="170" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="104" end="100" center="auto" time="120" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                </focusedlayout>
+            </control>
+
+            <!-- ── Row 2: FILM ── -->
+            <control type="label" id="185">
+                <left>30</left><top>432</top>
+                <width>1700</width><height>26</height>
+                <font>font12</font>
+                <textcolor>FFE5E5E5</textcolor>
+                <label></label>
+            </control>
+            <control type="list" id="184">
+                <left>28</left><top>460</top>
+                <width>1864</width><height>214</height>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onup>184</onup><ondown>184</ondown>
+                <onleft>184</onleft><onright>184</onright>
+                <itemlayout width="156" height="214">
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>208</height>
+                        <texture colordiffuse="20000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top><width>140</width><height>204</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                </itemlayout>
+                <focusedlayout width="156" height="214">
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>212</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>208</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="104" center="auto" time="170" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="104" end="100" center="auto" time="120" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                </focusedlayout>
+            </control>
+
+            <!-- ── Row 3: SPECIALI · OVA · SPIN-OFF ── -->
+            <control type="label" id="187">
+                <left>30</left><top>692</top>
+                <width>1700</width><height>26</height>
+                <font>font12</font>
+                <textcolor>FFE5E5E5</textcolor>
+                <label></label>
+            </control>
+            <control type="list" id="186">
+                <left>28</left><top>720</top>
+                <width>1864</width><height>208</height>
+                <orientation>horizontal</orientation>
+                <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onup>186</onup><ondown>186</ondown>
+                <onleft>186</onleft><onright>186</onright>
+                <itemlayout width="156" height="208">
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>202</height>
+                        <texture colordiffuse="20000000">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>8</left><top>4</top><width>140</width><height>198</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                    </control>
+                </itemlayout>
+                <focusedlayout width="156" height="208">
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>206</height>
+                        <texture colordiffuse="F2FFFFFF">white.png</texture>
+                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
+                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
+                    </control>
+                    <control type="image">
+                        <left>2</left><top>0</top><width>152</width><height>4</height>
+                        <texture colordiffuse="FFE50914">white.png</texture>
+                    </control>
+                    <control type="image">
+                        <left>6</left><top>2</top><width>144</width><height>202</height>
+                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <aspectratio>scale</aspectratio>
+                        <animation effect="zoom" start="100" end="104" center="auto" time="170" tween="sine" easing="out">Focus</animation>
+                        <animation effect="zoom" start="104" end="100" center="auto" time="120" tween="sine" easing="in">Unfocus</animation>
+                    </control>
+                </focusedlayout>
+            </control>
+        </control>
+
+        <!-- ═══════════════════════════════════════════════════════════
              HERO BOX (top=932, height=130) — focused item, contrast panel
              so it stands out from the near-black page. Red left accent +
              mini poster + title + meta + 2-line plot.
@@ -379,11 +561,14 @@
             <width>6</width><height>130</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
-        <!-- mini poster (id=131) -->
+        <!-- mini poster (id=131) — texture set at runtime via setImage(). Start with
+             an EMPTY texture (no 00-alpha colordiffuse): Kodi applies colordiffuse to
+             whatever texture is loaded, so a 00FFFFFF diffuse made the runtime poster
+             render fully transparent (invisible). -->
         <control type="image" id="131">
             <left>28</left><top>946</top>
             <width>72</width><height>102</height>
-            <texture colordiffuse="00FFFFFF">white.png</texture>
+            <texture></texture>
             <aspectratio>scale</aspectratio>
         </control>
         <!-- title (id=132) -->

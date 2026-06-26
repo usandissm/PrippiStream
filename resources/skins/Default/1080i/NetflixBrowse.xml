@@ -22,6 +22,7 @@
     macro → film|serie|kdrama|anime  (drives tab underline)
 -->
 <window>
+    <allowmouse>true</allowmouse>
     <defaultcontrol>140</defaultcontrol>
 
     <animation type="WindowOpen" reversible="false">
@@ -304,9 +305,12 @@
             <left>0</left><top>932</top><width>6</width><height>130</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
+        <!-- hero mini poster — texture set at runtime via setImage(); start EMPTY
+             (no 00-alpha colordiffuse, which Kodi would also apply to the runtime
+             image, rendering it fully transparent / invisible). -->
         <control type="image" id="150">
             <left>28</left><top>946</top><width>72</width><height>102</height>
-            <texture colordiffuse="00FFFFFF">white.png</texture>
+            <texture></texture>
             <aspectratio>scale</aspectratio>
         </control>
         <control type="label" id="151">
