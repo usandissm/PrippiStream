@@ -1,4 +1,4 @@
-## Prossima
+## 1.4.0
 - Sfoglia: scorrimento rivisto, niente più salti del focus, niente buchi tra gli anni, fluido con mouse e tastiera.
 - Canali SKY: "In onda adesso" corretto, con "A seguire" come una guida TV; Sky Uno +1 e altri canali sistemati.
 - Trailer: per gli Anime ora cerca anche le opening; ricerca migliorata per i K-Drama.

@@ -35,10 +35,11 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Selezione delle stagioni più comoda con un nuovo menu a tendina.
-- Correzioni varie (locandine e riproduzione di alcuni contenuti).
-- Bug fix in Ricerca e Sfoglia.
-- Ottimizzazione Anime.
+      <news>- Sfoglia: scorrimento rivisto, niente più salti del focus, niente buchi tra gli anni, fluido con mouse e tastiera.
+- Canali SKY: "In onda adesso" corretto, con "A seguire" come una guida TV; Sky Uno +1 e altri canali sistemati.
+- Trailer: per gli Anime ora cerca anche le opening; ricerca migliorata per i K-Drama.
+- Nuove opzioni in Impostazioni › Personalizzazione (scorrimento Home, categorie Anime 18+).
+- Impostazioni semplificate e pulizia automatica di vecchi dati inutilizzati.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
