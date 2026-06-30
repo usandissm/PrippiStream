@@ -3,7 +3,7 @@ import re, os
 for res in ['1080i', '720p']:
     path = os.path.join(
         r'C:\Users\USand\Desktop\PROGETTI\PrippiStream',
-        'resources', 'skins', 'Default', res, 'NetflixSearch.xml'
+        'resources', 'skins', 'Default', res, 'PrippiSearch.xml'
     )
     content = open(path, encoding='utf-8').read()
     # Remove old row content that was left after the new panel was inserted

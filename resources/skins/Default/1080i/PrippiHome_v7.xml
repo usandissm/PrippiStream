@@ -56,7 +56,7 @@
             <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
         </control>
 
-        <!-- Search button (id=109) — opens NetflixSearch overlay -->
+        <!-- Search button (id=109) — opens PrippiSearch overlay -->
         <control type="button" id="109">
             <left>720</left><top>18</top>
             <width>480</width><height>42</height>

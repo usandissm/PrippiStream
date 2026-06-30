@@ -17,7 +17,7 @@ def findhost(url):
     final = getattr(resp, 'url', '') or ''
     return final.rstrip('/') if final and not final.startswith('https://animeunity.to') else url.rstrip('/')
 
-host = config.get_channel_url(name='animeunity')  # explicit name avoids inspect-stack mis-detection when imported from netflixhome
+host = config.get_channel_url(name='animeunity')  # explicit name avoids inspect-stack mis-detection when imported from prippihome
 
 _UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
        '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')

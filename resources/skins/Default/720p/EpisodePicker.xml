@@ -25,11 +25,10 @@
             <texture colordiffuse="F01A1A1A">white.png</texture>
         </control>
 
-        <control type="label">
-            <left>28</left><top>12</top><width>300</width><height>24</height>
-            <font>font14</font><textcolor>FFFFFFFF</textcolor>
-            <shadowcolor>CC000000</shadowcolor>
-            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        <control type="image">
+            <left>20</left><top>4</top><width>220</width><height>36</height>
+            <aspectratio align="left">keep</aspectratio>
+            <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
         </control>
 
         <control type="label">
@@ -57,7 +56,7 @@
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
 
-        <!-- Season dropdown trigger button "Stagione N ▾" (id=312) -->
+        <!-- Season dropdown trigger button (id=312) -->
         <control type="button" id="312">
             <left>27</left><top>48</top><width>240</width><height>34</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
@@ -67,11 +66,11 @@
             <align>left</align><aligny>center</aligny><textoffsetx>12</textoffsetx>
             <onup>321</onup><ondown>311</ondown>
         </control>
-        <control type="label">
-            <left>27</left><top>48</top><width>226</width><height>34</height>
-            <font>font12</font><textcolor>FFBBBBBB</textcolor>
-            <label>[B]▾[/B]</label>
-            <align>right</align><aligny>center</aligny>
+        <!-- down-arrow icon on the right edge of the button -->
+        <control type="image">
+            <left>243</left><top>57</top><width>16</width><height>16</height>
+            <aspectratio>keep</aspectratio>
+            <texture colordiffuse="FFBBBBBB">down.png</texture>
         </control>
 
         <control type="image">

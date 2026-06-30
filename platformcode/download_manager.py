@@ -360,7 +360,7 @@ def _media_headers(server, url):
 
 def _channel_server_items(item):
     """Call the item's channel findvideos()/action → list of server items
-    (mirrors netflixhome's search prefetch _fetch_servers)."""
+    (mirrors prippihome's search prefetch _fetch_servers)."""
     ch_name = (getattr(item, 'channel', '') or '').lower()
     if not ch_name:
         return []

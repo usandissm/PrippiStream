@@ -11,13 +11,13 @@ def getmainlist(view="thumb_"):
     logger.debug()
     itemlist = list()
 
-    # Netflix-style StreamingCommunity home
+    # Prippi-style StreamingCommunity home
     itemlist.append(Item(
-        title='[B]▶ PrippiStream — Vista Netflix[/B]',
+        title='[B]PrippiStream — Home[/B]',
         channel='channelselector',
-        action='open_netflix_home',
+        action='open_prippi_home',
         thumbnail=get_thumb("streamingcommunity.png", view),
-        category='Netflix Home',
+        category='Prippi Home',
         viewmode='thumbnails',
     ))
 

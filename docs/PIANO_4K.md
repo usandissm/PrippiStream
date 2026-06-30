@@ -98,11 +98,11 @@ Per il badge nella DetailWindow.
 
 ---
 
-## Fase 2 — Integrazione in `platformcode/netflixhome.py`
+## Fase 2 — Integrazione in `platformcode/prippihome.py`
 
 ### 2a — Avvio refresh in background
 
-Nel metodo `__init__` di `NetflixHomeWindow`, aggiungere:
+Nel metodo `__init__` di `PrippiHomeWindow`, aggiungere:
 
 ```python
 # Avvia refresh indice 4K in background (non blocca l'avvio)
@@ -127,7 +127,7 @@ def _launch(self, item):
             if f4k:
                 # Riproduci direttamente in 4K
                 stream_url = f4k['stream_url']
-                logger.info('[NetflixHome] 4K HIT: %s → %s' % (item.fulltitle, stream_url[:80]))
+                logger.info('[PrippiHome] 4K HIT: %s → %s' % (item.fulltitle, stream_url[:80]))
                 _play_4k_stream(item, stream_url)
                 return
     # ... existing SC flow ...
@@ -171,7 +171,7 @@ if ct == 'movie':
 
 Oppure usare un controllo label dedicato se disponibile nell'XML.
 
-### 2e — Integrazione in `NetflixSearchWindow._launch_item`
+### 2e — Integrazione in `PrippiSearchWindow._launch_item`
 
 Stesso pattern: controllare l'indice 4K prima di chiamare `parent._launch(item)`.
 Aggiungere dopo il prefetch path:
@@ -195,12 +195,12 @@ if ct == 'movie':
 1. ✅ Completata: Analisi/Esplorazione API Mandrakodi
 2. ⏳ **Creare `platformcode/_fourk.py`** — fetch + cache + lookup
 3. ⏳ **Testare `_fourk.py` standalone** — verificare che l'indice venga popolato
-4. ⏳ **Integrare in `netflixhome.py`** — 4 modifiche:
+4. ⏳ **Integrare in `prippihome.py`** — 4 modifiche:
    - Import e init refresh
    - `_launch()` con check 4K
    - `_play_4k_stream()` helper
    - Badge in `DetailWindow.onInit()`
-5. ⏳ **Integrare in `NetflixSearchWindow._launch_item`**
+5. ⏳ **Integrare in `PrippiSearchWindow._launch_item`**
 6. ⏳ **Deploy + test su Kodi**
 7. ⏳ **Push su GitHub**
 
@@ -243,12 +243,12 @@ invece di `RunPlugin`. Il CW tracking funziona uguale perché usa
 | File | Azione |
 |---|---|
 | `platformcode/_fourk.py` | **NUOVO** — modulo fetch/cache/lookup 4K |
-| `platformcode/netflixhome.py` | **MODIFICA** — 5 punti di integrazione |
+| `platformcode/prippihome.py` | **MODIFICA** — 5 punti di integrazione |
 
-### Punti di modifica in `netflixhome.py`
+### Punti di modifica in `prippihome.py`
 
 1. **Import** (top del file): `from platformcode import _fourk`
-2. **`NetflixHomeWindow.__init__`**: `threading.Thread(target=_fourk.build_4k_index).start()`
-3. **`NetflixHomeWindow._launch()`**: check 4K prima di SC, + nuova funzione `_play_4k_stream`
+2. **`PrippiHomeWindow.__init__`**: `threading.Thread(target=_fourk.build_4k_index).start()`
+3. **`PrippiHomeWindow._launch()`**: check 4K prima di SC, + nuova funzione `_play_4k_stream`
 4. **`DetailWindow.onInit()`**: badge "4K" nella riga meta1
-5. **`NetflixSearchWindow._launch_item()`**: check 4K prima del fallback
+5. **`PrippiSearchWindow._launch_item()`**: check 4K prima del fallback

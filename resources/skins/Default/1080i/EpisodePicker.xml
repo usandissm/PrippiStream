@@ -17,10 +17,10 @@
             <left>0</left><top>0</top><width>1920</width><height>1080</height>
             <texture colordiffuse="F01A1A1A">white.png</texture>
         </control>
-        <control type="label">
-            <left>42</left><top>18</top><width>450</width><height>36</height>
-            <font>font14</font><textcolor>FFFFFFFF</textcolor>
-            <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+        <control type="image">
+            <left>30</left><top>6</top><width>320</width><height>52</height>
+            <aspectratio align="left">keep</aspectratio>
+            <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
         </control>
         <control type="label">
             <left>0</left><top>22</top><width>1920</width><height>28</height>
@@ -42,7 +42,7 @@
             <left>0</left><top>64</top><width>1920</width><height>3</height>
             <texture colordiffuse="FFE50914">white.png</texture>
         </control>
-        <!-- Season dropdown trigger button "Stagione N ▾" (id=312) -->
+        <!-- Season dropdown trigger button (id=312) -->
         <control type="button" id="312">
             <left>40</left><top>76</top><width>360</width><height>46</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
@@ -52,12 +52,11 @@
             <align>left</align><aligny>center</aligny><textoffsetx>18</textoffsetx>
             <onup>321</onup><ondown>311</ondown>
         </control>
-        <!-- ▾ glyph on the right edge of the button -->
-        <control type="label">
-            <left>40</left><top>76</top><width>340</width><height>46</height>
-            <font>font12</font><textcolor>FFBBBBBB</textcolor>
-            <label>[B]▾[/B]</label>
-            <align>right</align><aligny>center</aligny>
+        <!-- down-arrow icon on the right edge of the button -->
+        <control type="image">
+            <left>366</left><top>88</top><width>22</width><height>22</height>
+            <aspectratio>keep</aspectratio>
+            <texture colordiffuse="FFBBBBBB">down.png</texture>
         </control>
         <control type="image">
             <left>0</left><top>126</top><width>1920</width><height>2</height>

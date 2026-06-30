@@ -471,7 +471,7 @@ def get_curated_items(want_extras=True):
 def search(item, text):
     """Intentionally returns nothing for the GLOBAL search.
 
-    One Piece is handled specially by netflixhome._onepiece_curate (it injects the
+    One Piece is handled specially by prippihome._onepiece_curate (it injects the
     curated provider items in a controlled order). If this channel also fed raw
     items into the global search they would (a) pollute the result dedup — the
     [ITA]/[Sub-ITA] tags get stripped by the title-normaliser, collapsing both

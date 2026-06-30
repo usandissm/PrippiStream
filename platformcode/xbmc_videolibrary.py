@@ -262,7 +262,7 @@ def mark_auto_as_watched(item):
             platformtools.set_played_time(item.clone(played_time=actual_time))
             item.disableAutoplay=True
             # Post-play "choose another server" popup (alfa legacy): in this
-            # Netflix-only frontend it must NEVER appear after the video closes
+            # Prippi-only frontend it must NEVER appear after the video closes
             # (it surfaced e.g. with multi-server channels like CB01: mixdrop/
             # maxstream). Failure-retry is already handled in launcher.play, so
             # this popup is pure noise here. Off by default; opt back in only if

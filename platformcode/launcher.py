@@ -62,7 +62,7 @@ def run(item=None):
                 itemlist = channelselector.getchanneltypes()
             elif item.action == 'filterchannels': # Action for channel listing on channelselector
                 itemlist = channelselector.filterchannels(item.channel_type)
-            elif item.action == 'open_netflix_home': # Netflix-style StreamingCommunity home
+            elif item.action == 'open_prippi_home': # Prippi-style StreamingCommunity home
                 # The home skin is the ONLY UI — no channelselector menu behind it
                 # (settings open from the skin's gear button). We still end the
                 # plugin directory (empty) so Kodi's call completes, then open the
@@ -71,8 +71,8 @@ def run(item=None):
                 import xbmcplugin
                 xbmcplugin.endOfDirectory(int(sys.argv[1]), succeeded=True,
                                           updateListing=False, cacheToDisc=False)
-                from platformcode import netflixhome
-                netflixhome.open_netflix_home()
+                from platformcode import prippihome
+                prippihome.open_prippi_home()
                 xbmc.executebuiltin('ActivateWindow(Home)')
                 return
             platformtools.render_items(itemlist, item)
@@ -289,10 +289,10 @@ def makeItem():
                 if val.lower() == 'false': val = False
                 elif val.lower() == 'true': val = True
                 item.__setattr__(key, urllib.parse.unquote(val) if isinstance(val,str) else val)
-    # No item → always open the PrippiStream Netflix-style home (the only UI).
+    # No item → always open the PrippiStream Prippi-style home (the only UI).
     # Settings are reachable from inside the home window.
     else:
-        item = Item(channel='channelselector', action='open_netflix_home', viewmode='movie')
+        item = Item(channel='channelselector', action='open_prippi_home', viewmode='movie')
 
     return item
 

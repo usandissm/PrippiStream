@@ -1103,7 +1103,7 @@ def match_dbg(data, patron):
 
 
 def download(itemlist, item, typography='', function_level=1, function=''):
-    # Download feature removed (Netflix-only build): keep as no-op so the ~9 channels
+    # Download feature removed (Prippi-only build): keep as no-op so the ~9 channels
     # that still call support.download(...) don't break and don't emit dangling
     # 'downloads' items.
     return itemlist

@@ -49,8 +49,8 @@ def scale_xml(src, dst, factor=FACTOR):
 
 if __name__ == '__main__':
     scale_xml(
-        'resources/skins/Default/720p/NetflixHome.xml',
-        'resources/skins/Default/1080i/NetflixHome.xml',
+        'resources/skins/Default/720p/PrippiHome.xml',
+        'resources/skins/Default/1080i/PrippiHome.xml',
     )
     scale_xml(
         'resources/skins/Default/720p/DetailWindow.xml',

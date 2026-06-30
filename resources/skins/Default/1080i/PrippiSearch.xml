@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  NetflixSearch.xml — 1920×1080  (redesign 2026-06)
+  PrippiSearch.xml — 1920×1080  (redesign 2026-06)
   Grid-first unified search overlay for PrippiStream.
 
   Layout (no overlapping hero/buttons):
@@ -22,7 +22,7 @@
     160  poster grid panel
     170  loading group           171  no-results label          172  status text
 
-  Per-card ListItem properties (set in netflixhome.py _populate_grid):
+  Per-card ListItem properties (set in prippihome.py _populate_grid):
     thumbnail  → poster URL
     stype      → ANIME | FILM | SERIE  (drives the badge colour/visibility)
 -->

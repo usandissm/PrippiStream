@@ -28,7 +28,7 @@ exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.v
                  '_test_images.py', '_test_sc.py', '_test_sc2.py',
                  '_write_xml.py', '_write_xml.py.bak', '_write_xml2.py', '_write_xml2_v6.py',
                  '_patch_xml_gen.py', '_fix_wraplist_bars.py', '_patch_upnext.py',
-                 '_scale_1080i.py', 'NetflixHome_v7.xml', 'StreamingUnityHome_v7.py'}
+                 '_scale_1080i.py', 'PrippiHome_v7.xml', 'StreamingUnityHome_v7.py'}
 exclude_ext = {'.pyc', '.pyo', '.zip'}
 
 BOM = b'\xef\xbb\xbf'

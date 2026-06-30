@@ -92,6 +92,14 @@
         <setting id="home_loop_rows" type="bool" label="Home: scorrendo oltre l'ultima riga torna alla prima" default="false"/>
         <setting id="show_adult_anime" type="bool" label="Sfoglia: mostra categorie Anime 18+ (Hentai, Ecchi, Yaoi, Yuri)" default="true"/>
 
+        <!-- Live-channel rows: toggle visibility in the home. Hidden rows are still
+             loaded/probed in the background at startup, so re-enabling shows them
+             instantly (channels already cached). -->
+        <setting label="Home: righe canali live" type="lsep"/>
+        <setting id="show_sport_row" type="bool" label="Mostra riga Sport Live" default="true"/>
+        <setting id="show_sky_row" type="bool" label="Mostra riga SKY" default="true"/>
+        <setting id="show_tv_row" type="bool" label="Mostra riga TV" default="true"/>
+
         <!-- Hidden legacy customization settings (read by engine, kept with defaults) -->
         <setting id="touch_view" type="bool" default="false" visible="false"/>
         <setting id="viewchange_notify" type="bool" default="false" visible="false"/>

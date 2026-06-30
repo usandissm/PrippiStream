@@ -1,6 +1,6 @@
 ﻿# -*- coding: utf-8 -*-
 # ------------------------------------------------------------
-# Netflix-style Home Window for StreamingCommunity + multi-source
+# Prippi-style Home Window for StreamingCommunity + multi-source
 # v4 — lazy-load extra rows from other VOD channels.
 # ------------------------------------------------------------
 
@@ -99,13 +99,13 @@ def _fetch_cw_backdrops(tmdb_id, ctype):
 # Token counter used to cancel stale home-hero plot-fetch threads when focus moves fast.
 _hero_plot_token = 0
 
-# Shutdown event: set by open_netflix_home() the moment the user closes the home screen
+# Shutdown event: set by open_prippi_home() the moment the user closes the home screen
 # AND by _AppShutdownMonitor.onAbortRequested() the instant Kodi sends the global abort
 # signal to our invoker.  ALL background network threads check this flag before starting
 # a new HTTP request so they exit within the current request's socket timeout (≤3 s).
 # Using a PUSH callback (onAbortRequested) instead of relying solely on polling guarantees
 # the flag is set the moment Kodi signals our CPythonInvoker — regardless of whether
-# open_netflix_home()'s while loop has had a chance to detect it yet.
+# open_prippi_home()'s while loop has had a chance to detect it yet.
 _shutdown_event = threading.Event()
 
 
@@ -115,7 +115,7 @@ class _AppShutdownMonitor(xbmc.Monitor):
     Kodi processes invokers sequentially during shutdown: our invoker may not receive
     the signal for several seconds after "Stopping the application".  When it finally
     does, onAbortRequested() fires instantly — before the polling loop in
-    open_netflix_home() even gets a chance to check.  This eliminates the window where
+    open_prippi_home() even gets a chance to check.  This eliminates the window where
     background trailer threads run unchecked after the user has closed Kodi.
     """
 
@@ -142,6 +142,31 @@ class _AvReadyPlayer(xbmc.Player):
 
     def onAVStarted(self):
         self.av_started.set()
+
+
+class _LivePlayer(xbmc.Player):
+    """Player for live-channel playback. Distinguishes a USER stop (onPlayBackStopped
+    — viewer pressed Back/Stop) from a real stream failure (onPlayBackEnded/Error or
+    never starting).  This stops a working channel that the user simply EXITED during
+    the verify window from being mistaken for 'channel unavailable' (which used to
+    deny-list it, drop it from the row and desync the hero)."""
+    def __init__(self):
+        super(_LivePlayer, self).__init__()
+        self.reset_flags()
+
+    def reset_flags(self):
+        self.user_stopped = False
+        self.playback_ended = False
+        self.playback_error = False
+
+    def onPlayBackStopped(self):
+        self.user_stopped = True
+
+    def onPlayBackEnded(self):
+        self.playback_ended = True
+
+    def onPlayBackError(self):
+        self.playback_error = True
 
 
 def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20):
@@ -299,7 +324,8 @@ _DL_ROW_LABEL = u'I miei download'
 # Live-channel row labels (SKY, Sport Live).  These keep their title visible even
 # when empty — an empty live row means "no channel online right now", which we
 # show as a bare titled row rather than hiding it like the other empty rows.
-_LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'))
+_LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'),
+                    sportchannels.row_label('tv'))
 
 # Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
 # of the home. Sourced live from the animeunity channel (which already handles
@@ -369,7 +395,7 @@ DW_OVERLAY_GROUP = 230   # cinema-mode group (fades out when trailer plays)
 # ── EpisodePicker dialog control IDs ─────────────────────────────────────────
 EP_SEASON_LIST   = 310   # (legacy) horizontal panel of season tabs — replaced
 EP_EP_LIST       = 311   # vertical list of episode rows
-EP_SEASON_BTN    = 312   # "Stagione N ▾" dropdown trigger button
+EP_SEASON_BTN    = 312   # "Stagione N" dropdown trigger button
 EP_SEASON_DD     = 313   # drop-down list of seasons (overlay, toggled)
 EP_BTN_CANCEL    = 321   # close / cancel button
 
@@ -386,7 +412,7 @@ ACTION_MOUSE_MOVE   = 107
 ACTION_CONTEXT_MENU = 117
 
 # ── Search window control IDs ────────────────────────────────
-SEARCH_BTN_HOME     = 109   # search button in NetflixHome top bar
+SEARCH_BTN_HOME     = 109   # search button in PrippiHome top bar
 SEARCH_BTN_BACK     = 109   # (legacy) back; ESC/Back key handled in onAction
 SEARCH_CTX_POSTER   = 131   # hero box: focused item mini poster
 SEARCH_CTX_TITLE    = 132   # hero box: focused item title
@@ -447,9 +473,9 @@ def _sync_channels_json():
             with open(_local_path, 'w', encoding='utf-8') as _f:
                 _f.write(_remote)
             config.channels_data = dict()
-            logger.info('[NetflixHome] channels.json updated from GitHub')
+            logger.info('[PrippiHome] channels.json updated from GitHub')
     except Exception as _e:
-        logger.error('[NetflixHome] channels.json sync failed: %s' % str(_e))
+        logger.error('[PrippiHome] channels.json sync failed: %s' % str(_e))
 
 
 def _build_4k_row():
@@ -664,7 +690,7 @@ def _build_dl_items():
     return items
 
 
-class NetflixHomeWindow(xbmcgui.WindowXML):
+class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def __init__(self, *args, **kwargs):
         self.rows_data = []
@@ -784,11 +810,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if config.get_setting('show_downloads_row') is not False:
                 self.rows_data.append((_DL_ROW_LABEL, _build_dl_items()))
         except Exception as exc:
-            logger.error('[NetflixHome] downloads row build: %s' % str(exc))
+            logger.error('[PrippiHome] downloads row build: %s' % str(exc))
 
-        # Live-channel rows (Sport Live, then SKY) — right after CW.  Items play
+        # Live-channel rows (SKY, Sport Live, then TV) — right after CW.  Items play
         # directly on click (handled in onClick), never opening DetailWindow.
-        for _row_key in ('sky', 'sport'):
+        # Each row can be hidden via settings; hidden rows are STILL probed in the
+        # background (_refresh_live_rows runs all three), so re-enabling one shows
+        # it instantly with channels already cached.
+        _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
+        for _row_key in ('sky', 'sport', 'tv'):
+            if config.get_setting(_row_toggle[_row_key]) is False:
+                continue   # hidden by user (still loaded in background)
             try:
                 _ch_items = sportchannels.build_items(_row_key)
                 # Always add the row (even if empty) so the label stays visible.
@@ -798,7 +830,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 if _ch_items:
                     self._prefetch_live_epg(_ch_items)
             except Exception as exc:
-                logger.error('[NetflixHome] %s row build: %s' % (_row_key, str(exc)))
+                logger.error('[PrippiHome] %s row build: %s' % (_row_key, str(exc)))
+
+        # Index right after the live block (SKY, Sport, TV) — the 4K row inserts
+        # here so it never splits Sport from TV (TV must stay right after Sport).
+        _live_block_end = len(self.rows_data)
 
         self.rows_data += list(sc_rows)
 
@@ -812,13 +848,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 xbmc.sleep(200)
 
         _4k_items = _build_4k_row()
-        self.rows_data.insert(min(4, len(self.rows_data)), (u'Film in 4K', _4k_items))
+        self.rows_data.insert(min(_live_block_end, len(self.rows_data)), (u'Film in 4K', _4k_items))
         need_4k_fill = not _4k_items   # still cold after 8 s → fill live later
 
         # Sync CW progress into every non-CW row (skip the live-channel rows —
         # live channels have no watch progress).
         _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
-                        sportchannels.row_label('sky'))
+                        sportchannels.row_label('sky'), sportchannels.row_label('tv'))
         if cw_items:
             for row_label, row_items in self.rows_data:
                 if row_label in _live_labels:
@@ -835,7 +871,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         except Exception:
             pass
         self._num_rows = min(len(self.rows_data), MAX_ROWS)
-        logger.debug('[NetflixHome] rows rendered: %d (CW: %d)' % (self._num_rows, len(cw_items)))
+        logger.debug('[PrippiHome] rows rendered: %d (CW: %d)' % (self._num_rows, len(cw_items)))
         if self._num_rows > 0 and self._alive:
             xbmc.sleep(80)
             for i in range(min(6, self._num_rows)):
@@ -895,13 +931,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # the live rows, flooding the network with blocking I/O that then blocks
         # Kodi's shutdown ("script didn't stop in 5 seconds" → freeze/kill).
         if self._loaded_once:
-            logger.info('[NetflixHome] _bg_load: already built — skipping reload (return from playback)')
+            logger.info('[PrippiHome] _bg_load: already built — skipping reload (return from playback)')
             return
         # Kodi fires onInit twice when show() is called from _restore_home
         # (once from the GUI thread, once from the background caller).  Guard with
         # a non-blocking lock so the second concurrent call is silently dropped.
         if not self._bg_load_lock.acquire(blocking=False):
-            logger.info('[NetflixHome] _bg_load: already running — skipped (double onInit)')
+            logger.info('[PrippiHome] _bg_load: already running — skipped (double onInit)')
             return
         try:
             self._bg_load_inner()
@@ -933,7 +969,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # ---- FAST PATH: full cached rows (already enriched from prior run) ----
             sc_rows = _cache['data']
             _sc_rows_cache = sc_rows
-            logger.info('[NetflixHome] cache hit, %d rows' % len(sc_rows))
+            logger.info('[PrippiHome] cache hit, %d rows' % len(sc_rows))
             if not self._alive:
                 return
             self._set_loading(70)
@@ -949,7 +985,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             main_rows, host, homepage_data = _fetch_main_rows(progress_cb=self._set_loading)
         except Exception as exc:
-            logger.error('[NetflixHome] main fetch error: %s' % str(exc))
+            logger.error('[PrippiHome] main fetch error: %s' % str(exc))
             main_rows, host, homepage_data = [], '', None
 
         if not main_rows and _sc_rows_cache:
@@ -990,7 +1026,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         try:
             archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows))
         except Exception as exc:
-            logger.error('[NetflixHome] archive fetch error: %s' % str(exc))
+            logger.error('[PrippiHome] archive fetch error: %s' % str(exc))
             archive_rows = []
         if not archive_rows or not self._alive:
             # Still cache the main rows so a quick re-open is instant.
@@ -1032,7 +1068,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t = threading.Thread(target=self._bg_enrich_inplace, args=(start_idx,))
             t.daemon = True
             t.start()
-        logger.info('[NetflixHome] archive appended: %d rows (from #%d)' % (len(archive_rows), start_idx))
+        logger.info('[PrippiHome] archive appended: %d rows (from #%d)' % (len(archive_rows), start_idx))
 
         # Finally, append the ANIME row so it sits at the very bottom of the home.
         self._append_anime_row(cw_items)
@@ -1072,10 +1108,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # is instant — mirrors how archive rows are populated after append.
             if start_idx < self._num_rows:
                 self._populate_single_row(start_idx)
-            logger.info('[NetflixHome] anime row appended at #%d (%d items)'
+            logger.info('[PrippiHome] anime row appended at #%d (%d items)'
                         % (start_idx, len(items)))
         except Exception as exc:
-            logger.error('[NetflixHome] _append_anime_row: %s' % str(exc)[:160])
+            logger.error('[PrippiHome] _append_anime_row: %s' % str(exc)[:160])
 
     def _start_bg_tasks(self, need_4k_fill, enrich=True):
         """Launch the non-blocking post-render background jobs."""
@@ -1115,7 +1151,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             mgr.on_change = self._refresh_dl_row
             mgr.resume_pending()
         except Exception as exc:
-            logger.error('[NetflixHome] _resume_downloads: %s' % str(exc))
+            logger.error('[PrippiHome] _resume_downloads: %s' % str(exc))
 
     def _enrich_visible_rows_sync(self, progress_lo=60, progress_hi=98, max_rows=8):
         """Enrich the first visible SC rows SYNCHRONOUSLY (before the first paint).
@@ -1153,10 +1189,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     for it in items:
                         it.infoLabels['_enr'] = 1
                 except Exception as exc:
-                    logger.error('[NetflixHome] sync enrich row %d: %s' % (idx, str(exc)))
+                    logger.error('[PrippiHome] sync enrich row %d: %s' % (idx, str(exc)))
                 self._set_loading(progress_lo + int(span * (n + 1) / len(targets)))
         except Exception as exc:
-            logger.error('[NetflixHome] _enrich_visible_rows_sync: %s' % str(exc))
+            logger.error('[PrippiHome] _enrich_visible_rows_sync: %s' % str(exc))
 
     def _bg_enrich_inplace(self, start_idx=0):
         """Enrich row items with TMDB metadata IN PLACE, after the first paint.
@@ -1194,7 +1230,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     for it in items:
                         it.infoLabels['_enr'] = 1
                 except Exception as exc:
-                    logger.error('[NetflixHome] inplace enrich row %d: %s' % (idx, str(exc)))
+                    logger.error('[PrippiHome] inplace enrich row %d: %s' % (idx, str(exc)))
                     continue
                 # Re-render this row's cards so they pick up the official TMDB
                 # HD posters (SC/IPTV posters are lower-res / sometimes unofficial).
@@ -1202,7 +1238,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     try:
                         self._refresh_row_cards(idx)
                     except Exception as exc:
-                        logger.error('[NetflixHome] refresh cards row %d: %s' % (idx, str(exc)))
+                        logger.error('[PrippiHome] refresh cards row %d: %s' % (idx, str(exc)))
                 # Refresh the hero if the user is currently parked on this row.
                 if idx == self._last_focused_row and self._alive:
                     try:
@@ -1211,7 +1247,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         pass
                 xbmc.sleep(20)
         except Exception as exc:
-            logger.error('[NetflixHome] _bg_enrich_inplace: %s' % str(exc))
+            logger.error('[PrippiHome] _bg_enrich_inplace: %s' % str(exc))
 
     def _refresh_row_cards(self, i):
         """Re-render an already-populated row's wraplist in place, preserving the
@@ -1254,7 +1290,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 except Exception:
                     pass
         except Exception as exc:
-            logger.error('[NetflixHome] _refresh_row_cards %d: %s' % (i, str(exc)))
+            logger.error('[PrippiHome] _refresh_row_cards %d: %s' % (i, str(exc)))
 
     def _prefetch_live_epg(self, items):
         """Fire one batched Sky-guide "now on air" fetch for the ONLINE channels
@@ -1275,7 +1311,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             try:
                 skyepg.prefetch(keys)
             except Exception as exc:
-                logger.error('[NetflixHome] EPG prefetch: %s' % str(exc))
+                logger.error('[PrippiHome] EPG prefetch: %s' % str(exc))
                 return
             if not self._alive:
                 return
@@ -1306,7 +1342,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         def _refresh_one(row_key):
             last = self._last_live_probe.get(row_key, 0)
             if last and (time.time() - last) < self._LIVE_PROBE_THROTTLE:
-                logger.info('[NetflixHome] live row "%s": probe throttled (probed %.0fs ago)'
+                logger.info('[PrippiHome] live row "%s": probe throttled (probed %.0fs ago)'
                             % (sportchannels.row_label(row_key), time.time() - last))
                 return
             self._last_live_probe[row_key] = time.time()
@@ -1314,7 +1350,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 parser = sportchannels._PARSERS[row_key]
                 fresh = parser()
             except Exception as exc:
-                logger.error('[NetflixHome] live refresh %s: %s' % (row_key, exc))
+                logger.error('[PrippiHome] live refresh %s: %s' % (row_key, exc))
                 fresh = None
             if not self._alive:
                 return
@@ -1335,17 +1371,17 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             try:
                 items = sportchannels.build_items(row_key)
             except Exception as exc:
-                logger.error('[NetflixHome] build %s: %s' % (row_key, exc))
+                logger.error('[PrippiHome] build %s: %s' % (row_key, exc))
                 return
             with self._rows_lock:
                 self.rows_data[idx] = (label, items)
-            logger.info('[NetflixHome] live row "%s" (#%d) → %d online channels'
+            logger.info('[PrippiHome] live row "%s" (#%d) → %d online channels'
                         % (label, idx, len(items)))
             self._rerender_live_row(idx, items)
             self._prefetch_live_epg(items)
 
         threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
-                   for k in ('sport', 'sky')]
+                   for k in ('sport', 'sky', 'tv')]
         for t in threads:
             t.start()
         for t in threads:
@@ -1384,9 +1420,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 self.getControl(lbl_id).setLabel('[B]%s[/B]' % label.upper())
                 try:
                     self.getControl(grp_id).setVisible(True)
-                    logger.info('[NetflixHome] _rerender_live_row %d: group %d shown OK' % (i, grp_id))
+                    logger.info('[PrippiHome] _rerender_live_row %d: group %d shown OK' % (i, grp_id))
                 except Exception as exc2:
-                    logger.error('[NetflixHome] _rerender_live_row %d: group %d show FAILED: %s' % (i, grp_id, exc2))
+                    logger.error('[PrippiHome] _rerender_live_row %d: group %d show FAILED: %s' % (i, grp_id, exc2))
                 if 0 < cur_pos < len(items):
                     try:
                         wl.selectItem(cur_pos)
@@ -1395,13 +1431,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             else:
                 try:
                     self.getControl(grp_id).setVisible(False)
-                    logger.info('[NetflixHome] _rerender_live_row %d: group %d hidden OK' % (i, grp_id))
+                    logger.info('[PrippiHome] _rerender_live_row %d: group %d hidden OK' % (i, grp_id))
                 except Exception as exc2:
-                    logger.error('[NetflixHome] _rerender_live_row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                    logger.error('[PrippiHome] _rerender_live_row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
                     wl.setVisible(False)
                     self.getControl(lbl_id).setVisible(False)
         except Exception as exc:
-            logger.error('[NetflixHome] _rerender_live_row %d: %s' % (i, str(exc)))
+            logger.error('[PrippiHome] _rerender_live_row %d: %s' % (i, str(exc)))
 
     def _bg_fill_4k_row(self):
         """Wait (non-blocking) for the 4K index, then fill the reserved row live."""
@@ -1432,7 +1468,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         if already_populated:
             # Row was populated empty (hidden): reveal + append the cards live.
             self._live_append_row(idx, items)
-        logger.info('[NetflixHome] 4K row filled live: %d items (row #%d)' % (len(items), idx))
+        logger.info('[PrippiHome] 4K row filled live: %d items (row #%d)' % (len(items), idx))
 
     def _bg_enrich_rows(self):
         """
@@ -1522,7 +1558,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
 
                 xbmc.sleep(30)
                 self._live_append_row(i, new_items)
-                logger.info('[NetflixHome enrich] row "%s" (#%d) +%d items (total=%d)'
+                logger.info('[PrippiHome enrich] row "%s" (#%d) +%d items (total=%d)'
                             % (label, i, len(new_items), len(items)))
 
             # Final step: fetch trailers for first 20 visible items.
@@ -1532,7 +1568,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 _fetch_trailers_small(list(self.rows_data))
 
         except Exception as exc:
-            logger.error('[NetflixHome] _bg_enrich_rows: %s' % str(exc))
+            logger.error('[PrippiHome] _bg_enrich_rows: %s' % str(exc))
 
     def _live_append_row(self, i, new_items):
         """
@@ -1566,7 +1602,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
         except Exception as exc:
-            logger.error('[NetflixHome] _live_append_row %d: %s' % (i, str(exc)))
+            logger.error('[PrippiHome] _live_append_row %d: %s' % (i, str(exc)))
 
     def _populate_single_row(self, i):
         """Populate wraplist for row i. Safe to call multiple times (no-op if already done)."""
@@ -1581,9 +1617,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             grp_id = ROW_GROUP_BASE + i * ROW_STEP
             try:
                 self.getControl(grp_id).setVisible(False)
-                logger.info('[NetflixHome] populate row %d: group %d hidden (empty)' % (i, grp_id))
+                logger.info('[PrippiHome] populate row %d: group %d hidden (empty)' % (i, grp_id))
             except Exception as exc2:
-                logger.error('[NetflixHome] populate row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                logger.error('[PrippiHome] populate row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
                 try:
                     self.getControl(wl_id).setVisible(False)
                     self.getControl(lbl_id).setVisible(False)
@@ -1595,7 +1631,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         # see this row as already done and skip it.
         self._populated.add(i)
         try:
-            logger.info('[NetflixHome] populate row %d "%s": %d items, first=%s' % (
+            logger.info('[PrippiHome] populate row %d "%s": %d items, first=%s' % (
                 i, cat_name, len(items), (items[0].fulltitle if items else '-')))
         except Exception:
             pass
@@ -1611,13 +1647,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             # Only allow retry for transient errors, NOT for missing XML controls.
             if 'Non-Existent Control' not in str(exc):
                 self._populated.discard(i)
-            logger.error('[NetflixHome] populate row %d wraplist: %s' % (i, str(exc)))
+            logger.error('[PrippiHome] populate row %d wraplist: %s' % (i, str(exc)))
         try:
             lbl = self.getControl(lbl_id)
             lbl.setVisible(True)
             lbl.setLabel('[B]%s[/B]' % cat_name.upper())
         except Exception as exc:
-            logger.error('[NetflixHome] populate row %d label: %s' % (i, str(exc)))
+            logger.error('[PrippiHome] populate row %d label: %s' % (i, str(exc)))
 
     def _schedule_hero(self, row_idx):
         """Defer the hero refresh until Kodi has settled the wraplist selection.
@@ -1632,7 +1668,11 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         token = self._hero_nav_token
 
         def _run():
-            xbmc.sleep(30)
+            # Let Kodi fully settle the wraplist selection AND its scroll
+            # animation before reading getSelectedPosition(); reading too early
+            # could return the position the carousel is still animating toward
+            # (hero showing the next card vs the highlighted one).
+            xbmc.sleep(130)
             if token != self._hero_nav_token or not self._alive:
                 return
             try:
@@ -1705,7 +1745,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if epg:
                 when = ('%s–%s' % (epg['start'], epg['end'])) if epg.get('start') else ''
                 live_meta = '  •  '.join(
-                    p for p in [u'[COLOR FFE50914]● IN ONDA ADESSO[/COLOR]', when] if p)
+                    p for p in [u'[COLOR FFE50914]IN ONDA ADESSO[/COLOR]', when] if p)
                 # plot: show name bold, then "S2 Ep7 · episode title", the upcoming
                 # programme, the synopsis, and finally the previous programme (like a
                 # classic TV guide — prev/now/next).
@@ -1735,7 +1775,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
         except Exception as exc:
-            logger.error('[NetflixHome] hero: %s' % str(exc))
+            logger.error('[PrippiHome] hero: %s' % str(exc))
 
         # Background Italian plot fetch (only if not cached/in-progress and item has a TMDB id)
         if tmdb_id_hero and tmdb_id_hero not in _plot_it_cache and not _shutdown_event.is_set():
@@ -1889,7 +1929,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     if 0 <= pos < len(items):
                         self._show_download_menu(items[pos])
             except Exception as exc:
-                logger.error('[NetflixHome] context-menu: %s' % str(exc))
+                logger.error('[PrippiHome] context-menu: %s' % str(exc))
             return
 
         # Mouse wheel → navigate between rows
@@ -2131,16 +2171,16 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             xbmcaddon.Addon().openSettings()
             return
 
-        # ── Search button → open Netflix-style search overlay ──
+        # ── Search button → open Prippi-style search overlay ──
         if control_id == SEARCH_BTN_HOME:
-            xbmc.log('[NetflixHome] onClick SEARCH_BTN_HOME (109) triggered', xbmc.LOGINFO)
+            xbmc.log('[PrippiHome] onClick SEARCH_BTN_HOME (109) triggered', xbmc.LOGINFO)
             xbmcgui.Dialog().notification('PrippiStream', 'Aprendo ricerca...', xbmcgui.NOTIFICATION_INFO, 1500)
             _open_search(parent_window=self)
             return
 
         # ── Browse button → open category browser ──
         if control_id == BROWSE_BTN_HOME:
-            xbmc.log('[NetflixHome] onClick BROWSE_BTN_HOME (106) triggered', xbmc.LOGINFO)
+            xbmc.log('[PrippiHome] onClick BROWSE_BTN_HOME (106) triggered', xbmc.LOGINFO)
             _open_browse(parent_window=self)
             return
 
@@ -2161,7 +2201,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
-                    logger.error('[NetflixHome] overlay click row %d: %s' % (i, str(exc)))
+                    logger.error('[PrippiHome] overlay click row %d: %s' % (i, str(exc)))
                 return
 
         # ── Per-row left/right arrow buttons ──
@@ -2199,16 +2239,16 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                         else:
                             self._open_detail(_it)
                 except Exception as exc:
-                    logger.error('[NetflixHome] onClick row %d: %s' % (i, str(exc)))
+                    logger.error('[PrippiHome] onClick row %d: %s' % (i, str(exc)))
                 break
 
     def _launch(self, item, source_window=None):
         # source_window: when the play was started from the SEARCH overlay, this
-        # is that NetflixSearchWindow. After playback _wait_and_restore then
+        # is that PrippiSearchWindow. After playback _wait_and_restore then
         # restores focus to the search results (last-clicked card) instead of the
         # home rows. None = normal home flow.
         # Note: the post-playback "choose another server" popup is suppressed by
-        # default in xbmc_videolibrary.mark_auto_as_watched (Netflix-only UI), so
+        # default in xbmc_videolibrary.mark_auto_as_watched (Prippi-only UI), so
         # no per-launch flag is needed here anymore. We manage resume/next-ep ourselves.
 
         # ── 4K check (movies only) ────────────────────────────────────────
@@ -2218,7 +2258,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             if _tmdb:
                 _f4k = _fourk.lookup_4k(_tmdb)
                 if _f4k:
-                    logger.info('[NetflixHome] 4K HIT: %s → %s' % (
+                    logger.info('[PrippiHome] 4K HIT: %s → %s' % (
                         item.fulltitle, _f4k['stream_url'][:80]))
                     t = threading.Thread(target=self._play_4k_stream, args=(item, _f4k))
                     t.daemon = True
@@ -2307,7 +2347,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             wl_id = ROW_WRAPLIST_BASE + saved_row * ROW_STEP
             self._last_focused_row = saved_row
             self._last_focused_pos = saved_pos
-            # Do NOT call self.show() here — the NetflixHome window never went away
+            # Do NOT call self.show() here — the PrippiHome window never went away
             # (DetailWindow was a dialog on top). On Android TV, self.show() re-activates
             # the window and triggers the XML <defaultcontrol>2000</defaultcontrol> which
             # resets focus to row 0, overwriting everything we do afterwards.
@@ -2403,7 +2443,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 except Exception:
                     pass
         except Exception as exc:
-            logger.error('[NetflixHome] _restore_home: %s' % str(exc))
+            logger.error('[PrippiHome] _restore_home: %s' % str(exc))
 
     def _restore_search_window(self, sw):
         """After playback that was launched from the SEARCH overlay, bring the
@@ -2424,7 +2464,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
         except Exception as exc:
-            logger.error('[NetflixHome] _restore_search_window: %s' % str(exc))
+            logger.error('[PrippiHome] _restore_search_window: %s' % str(exc))
 
     def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
         """Wait for playback to start/end, track progress for CW, then restore the
@@ -2954,7 +2994,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             logger.info('[CW] _refresh_cw_row: done (rows_changed=%s)' % rows_changed)
 
         except Exception as exc:
-            logger.error('[NetflixHome] _refresh_cw_row: %s' % str(exc))
+            logger.error('[PrippiHome] _refresh_cw_row: %s' % str(exc))
 
     # ── Offline downloads: row refresh + local playback + removal ────────────
 
@@ -2990,7 +3030,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 except Exception:
                     pass
         except Exception as exc:
-            logger.error('[NetflixHome] _refresh_dl_row: %s' % str(exc))
+            logger.error('[PrippiHome] _refresh_dl_row: %s' % str(exc))
 
     def _show_download_menu(self, item):
         """Clicking a downloaded tile (left-click or context menu) opens a small
@@ -3000,13 +3040,13 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             title = (getattr(item, 'fulltitle', '') or getattr(item, 'title', '')
                      or u'Download')
             idx = xbmcgui.Dialog().select(
-                title, [u'▶  Riproduci', u'\U0001F5D1  Elimina'])
+                title, [u'Riproduci', u'Elimina'])
             if idx == 0:
                 self._play_download(item)
             elif idx == 1:
                 self._delete_download_item(item)
         except Exception as exc:
-            logger.error('[NetflixHome] _show_download_menu: %s' % str(exc))
+            logger.error('[PrippiHome] _show_download_menu: %s' % str(exc))
 
     def _play_download(self, item):
         """Play a downloaded item from disk. Movies play directly; series tiles
@@ -3035,7 +3075,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 key,
                 getattr(item, 'fulltitle', '') or getattr(item, 'title', ''))
         except Exception as exc:
-            logger.error('[NetflixHome] _play_download: %s' % str(exc))
+            logger.error('[PrippiHome] _play_download: %s' % str(exc))
 
     def _play_download_series(self, item):
         from platformcode import downloads_db
@@ -3051,10 +3091,10 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         for e in eps:
             code = u'S%02dE%02d' % (int(e.get('season', 0) or 0),
                                     int(e.get('episode', 0) or 0))
-            tag = (u'✓' if e.get('status') == 'done'
+            tag = (u'100%' if e.get('status') == 'done'
                    else u'%d%%' % int(e.get('progress', 0) or 0))
             labels.append(u'%s  %s  %s' % (code, tag, e.get('title', '')))
-        labels.append(u'\U0001F5D1  Elimina tutta la serie')
+        labels.append(u'Elimina tutta la serie')
         idx = xbmcgui.Dialog().select(getattr(item, 'dl_show_title', u'Episodi'), labels)
         if idx < 0:
             return
@@ -3109,7 +3149,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             li.setContentLookup(False)
             xbmc.Player().play(play_url, li)
         except Exception as exc:
-            logger.error('[NetflixHome] _play_local_file: %s' % str(exc))
+            logger.error('[PrippiHome] _play_local_file: %s' % str(exc))
             xbmcgui.Dialog().notification(
                 u'PrippiStream', u'Errore di riproduzione',
                 xbmcgui.NOTIFICATION_WARNING, 3000)
@@ -3134,7 +3174,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     downloads_db.remove(item.dl_db_key)
                     self._refresh_dl_row()
         except Exception as exc:
-            logger.error('[NetflixHome] _delete_download_item: %s' % str(exc))
+            logger.error('[PrippiHome] _delete_download_item: %s' % str(exc))
 
     def _cancel_download(self, key):
         """Cancel an in-progress/queued download and drop it from the library."""
@@ -3155,7 +3195,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 u'PrippiStream', u'Download annullato',
                 xbmcgui.NOTIFICATION_INFO, 2000)
         except Exception as exc:
-            logger.error('[NetflixHome] _cancel_download: %s' % str(exc))
+            logger.error('[PrippiHome] _cancel_download: %s' % str(exc))
 
     def _select_episode(self, item):
         """Episode picker for TV shows (runs in a background thread)."""
@@ -3250,7 +3290,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t2.start()
 
         except Exception as exc:
-            logger.error('[NetflixHome] _select_episode: %s' % str(exc))
+            logger.error('[PrippiHome] _select_episode: %s' % str(exc))
 
     def _play_4k_stream(self, item, f4k):
         """Play a 4K stream directly (bypasses SC entirely).  CW tracking via _wait_and_restore."""
@@ -3274,7 +3314,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t.daemon = True
             t.start()
         except Exception as exc:
-            logger.error('[NetflixHome] _play_4k_stream: %s' % str(exc))
+            logger.error('[PrippiHome] _play_4k_stream: %s' % str(exc))
             # Fallback to SC
             self._launch(item)
 
@@ -3311,7 +3351,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 with self._rows_lock:
                     if row_idx < len(self.rows_data):
                         lbl = self.rows_data[row_idx][0]
-                row_key = next((rk for rk in ('sky', 'sport')
+                row_key = next((rk for rk in ('sky', 'sport', 'tv')
                                 if lbl == sportchannels.row_label(rk)), None)
                 if not row_key:
                     return
@@ -3328,51 +3368,124 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     busy.create()
                 except Exception:
                     busy = None
-                li = sportchannels.resolve_listitem(item)
-                if busy:
-                    try:
-                        busy.close()
-                    except Exception:
-                        pass
-                    busy = None
-                # A newer click superseded us while resolving → drop silently.
-                if my_gen != self._play_gen:
-                    if not li:
-                        _remove_dead()
-                    return
-                if not li:
-                    # Resolve failed (backend down, freeshot unreachable, etc.)
-                    _remove_dead()
-                    xbmcgui.Dialog().notification(
-                        'PrippiStream', 'Canale non disponibile',
-                        xbmcgui.NOTIFICATION_WARNING, 4000)
-                    return
-                path = li.getPath()
-                player = xbmc.Player()
-                player.play(path, li)
+                par  = getattr(item, 'sport_par', None)
+                kind = getattr(item, 'sport_kind', '')
+                player = _LivePlayer()
 
-                # Wait for THIS channel's playback to start (≤14 s).  Abort if a
-                # newer click took over — otherwise we'd mistake the new channel's
-                # isPlaying() for our own (one shared xbmc.Player).
-                monitor = xbmc.Monitor()
-                started = False
-                for _ in range(28):
-                    if not self._alive or monitor.abortRequested():
-                        return
+                def _play_and_verify(_li):
+                    """Play *_li* and confirm it GENUINELY runs.  Must open
+                    (isPlaying within ≤6 s) and then prove it really plays:
+                      • ClearKey/DASH (sky@@) can open but stay FROZEN-black on a
+                        key mismatch → require decode PROGRESS (getTime advances).
+                      • plain HLS (DaddyLive/freeshot) cannot freeze-black like
+                        that; some CDNs just need a few seconds to buffer the first
+                        segment, so 'keeps playing ~3 s' is enough — don't
+                        false-fail a good-but-slow stream (which used to drop us
+                        onto the broken primary and kill the channel).
+                    If the USER stops/exits while we're still verifying, that's NOT
+                    a failure (the channel was fine, they just left) → return True
+                    so we never deny-list/remove a working channel.
+                    Returns True/False, or None if aborted/superseded."""
+                    clearkey = bool(_li.getProperty('inputstream.adaptive.drm_legacy'))
+                    player.reset_flags()
+                    player.play(_li.getPath(), _li)
+                    mon = xbmc.Monitor()
+                    opened = False
+                    for _ in range(12):                       # ≤6 s to open
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if player.isPlaying():
+                            opened = True
+                            break
+                        if player.user_stopped:
+                            return True                       # user backed out — not a failure
+                        xbmc.sleep(500)
+                    if not opened:
+                        return True if player.user_stopped else False
+                    base_t = None
+                    stable = 0
+                    for _ in range(16):                       # ≤8 s to prove playback
+                        xbmc.sleep(500)
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if not player.isPlaying():
+                            # User stop = fine (they watched/left); EOF/error = failed.
+                            return True if player.user_stopped else False
+                        stable += 1
+                        try:
+                            t = player.getTime()
+                        except Exception:
+                            t = 0
+                        if base_t is None:
+                            base_t = t
+                        elif t - base_t > 0.5:
+                            return True                       # decoding & advancing → real
+                        if not clearkey and stable >= 6:      # ~3 s uninterrupted HLS = OK
+                            return True
+                    return False                              # ClearKey never advanced (frozen)
+
+                def _close_busy():
+                    if busy is not None:
+                        try:
+                            busy.close()
+                        except Exception:
+                            pass
+
+                # Ordered candidate sources, most-likely-good first, learned per
+                # channel and persisted:
+                #   • prefer_daddy → the primary (sky@@/freeshot) chronically fails
+                #     at play (Sky Cinema ClearKey key-rotation, Zona DAZN DNS) so
+                #     DaddyLive goes first — no repeated black screen.
+                #   • prefer_ff → that DaddyLive feed needs inputstream.ffmpegdirect
+                #     (muxed-TS that ISA can't decode, e.g. Zona DAZN).
+                _prim = ('primary',  lambda: sportchannels.resolve_listitem(item))
+                _dad  = ('daddy',    lambda: sportchannels.daddy_listitem(item))
+                _dadf = ('daddy_ff', lambda: sportchannels.daddy_ff_listitem(item))
+                if kind == 'daddy':
+                    # primary already IS the DaddyLive (ISA) stream; ffmpegdirect
+                    # is just the alternate decoder for it.
+                    candidates = [_dadf, _prim] if sportchannels.is_prefer_ff(par) else [_prim, _dadf]
+                elif sportchannels.is_prefer_ff(par):
+                    candidates = [_dadf, _dad, _prim]
+                elif sportchannels.is_prefer_daddy(par):
+                    candidates = [_dad, _dadf, _prim]
+                else:
+                    candidates = [_prim, _dad, _dadf]
+
+                played = False
+                for _src, _resolve in candidates:
                     if my_gen != self._play_gen:
-                        return  # superseded — the new worker owns the player now
-                    if player.isPlaying():
-                        started = True
+                        _close_busy()
+                        return
+                    try:
+                        _li = _resolve()
+                    except Exception as exc:
+                        logger.error('[PrippiHome] resolve %s %s: %s' % (par, _src, str(exc)))
+                        _li = None
+                    if not _li:
+                        continue                              # this source unavailable → next
+                    _close_busy()                             # reveal the player
+                    logger.info('[PrippiHome] play %s via %s' % (par, _src))
+                    res = _play_and_verify(_li)
+                    if res is None:
+                        return                                # superseded/aborted
+                    if res:
+                        played = True
+                        # Learn what actually worked so next play starts there.
+                        if _src == 'daddy_ff':
+                            sportchannels.prefer_ff(par)
+                        elif _src == 'daddy':
+                            sportchannels.prefer_daddy(par)
+                            sportchannels.unprefer_ff(par)
+                        else:  # primary
+                            sportchannels.unprefer_daddy(par)
+                            sportchannels.unprefer_ff(par)
                         break
-                    xbmc.sleep(500)
+                _close_busy()
 
-                if not started:
-                    # ISA genuinely failed to open the stream (dead freeshot URL,
-                    # DRM mismatch, Piracy-Shield block…).  This is ground truth
-                    # that the channel doesn't play, so deny-list it (mark_dead)
-                    # AND remove it from the row.  Only notify if the user is still
-                    # waiting on it (not if they already clicked another).
-                    par = getattr(item, 'sport_par', None)
+                if not played:
+                    # Every source failed → deny-list + remove from the row.  Notify
+                    # only if the user is still waiting on this channel.
                     if par:
                         sportchannels.mark_dead(par)
                     _remove_dead()
@@ -3382,9 +3495,9 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                             xbmcgui.NOTIFICATION_WARNING, 4000)
                     return
 
-                # Stream opened successfully (isPlaying went True): it's a good
-                # channel.  Wait for it to end, then restore the home — never
-                # remove a channel the user actually watched.
+                # Good channel — wait for it to end, then restore the home (never
+                # remove a channel the user actually watched).
+                monitor = xbmc.Monitor()
                 while player.isPlaying():
                     if not self._alive or monitor.abortRequested():
                         return
@@ -3394,7 +3507,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                 if self._alive and my_gen == self._play_gen:
                     self._restore_home()
             except Exception as exc:
-                logger.error('[NetflixHome] _play_channel_stream: %s' % str(exc))
+                logger.error('[PrippiHome] _play_channel_stream: %s' % str(exc))
                 if busy:
                     try:
                         busy.close()
@@ -3506,7 +3619,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t2.daemon = True
             t2.start()
         except Exception as exc:
-            logger.error('[NetflixHome] _play_episode_direct: %s' % str(exc))
+            logger.error('[PrippiHome] _play_episode_direct: %s' % str(exc))
 
     def _play_episode_direct_nonsc(self, item, ep_num):
         """Play episode *ep_num* of a non-SC show directly (no separate Kodi window).
@@ -3612,7 +3725,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             t.daemon = True
             t.start()
         except Exception as exc:
-            logger.error('[NetflixHome] _play_episode_direct_nonsc: %s' % str(exc))
+            logger.error('[PrippiHome] _play_episode_direct_nonsc: %s' % str(exc))
             if busy:
                 try:
                     busy.close()
@@ -3689,7 +3802,7 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
         except Exception as exc:
-            logger.error('[NetflixHome] _start_download: %s' % str(exc))
+            logger.error('[PrippiHome] _start_download: %s' % str(exc))
 
     def _ask_quality(self, variants):
         """Show the resolution picker. Returns the chosen height (0 = auto/best)
@@ -4357,7 +4470,7 @@ def _nuke_all_vixcloud_bookmarks():
 
     We manage our own resume system (CW DB). Kodi's built-in bookmarks only
     cause stale "Resume from" dialogs when replaying or navigating episodes.
-    Called once at NetflixHome open time (fire-and-forget background thread)
+    Called once at PrippiHome open time (fire-and-forget background thread)
     to clean up any bookmarks left over from prior sessions.
     """
     try:
@@ -4614,7 +4727,7 @@ def _cf_scrape(url):
                 override_dns=config.get_setting('resolver_dns'),
                 verify_ssl=False))
         except Exception as _me:
-            logger.error('[NetflixHome] cf adapter mount: %s' % str(_me))
+            logger.error('[PrippiHome] cf adapter mount: %s' % str(_me))
         s.verify = False
         _cf_scraper = s
     r = _cf_scraper.get(url, timeout=25)
@@ -4641,45 +4754,45 @@ def _get_data(url):
         resp = httptools.downloadpage(url, ignore_response_code=True)
         raw_html = resp.data if resp else ''
         if not raw_html:
-            logger.info('[NetflixHome] empty response, trying proxytranslate CF bypass for %s' % url)
+            logger.info('[PrippiHome] empty response, trying proxytranslate CF bypass for %s' % url)
             try:
                 from lib import proxytranslate
                 proxy_result = proxytranslate.process_request_proxy(url)
                 raw_html = proxy_result.get('data', '') if proxy_result else ''
             except Exception as _pte:
-                logger.error('[NetflixHome] proxytranslate failed: %s' % str(_pte))
+                logger.error('[PrippiHome] proxytranslate failed: %s' % str(_pte))
                 raw_html = ''
         if not raw_html:
-            logger.info('[NetflixHome] proxytranslate empty, trying cloudscraper for %s' % url)
+            logger.info('[PrippiHome] proxytranslate empty, trying cloudscraper for %s' % url)
             try:
                 raw_html = _cf_scrape(url) or ''
             except Exception as _cfe:
-                logger.error('[NetflixHome] cloudscraper fallback failed: %s' % str(_cfe)[:140])
+                logger.error('[PrippiHome] cloudscraper fallback failed: %s' % str(_cfe)[:140])
                 raw_html = ''
         if not raw_html:
-            logger.error('[NetflixHome] empty response for %s' % url)
+            logger.error('[PrippiHome] empty response for %s' % url)
             return {}
 
         json_str = _extract_data_page(raw_html)
         if not json_str:
-            logger.error('[NetflixHome] no data-page in html (len=%d) for %s' % (len(raw_html), url))
+            logger.error('[PrippiHome] no data-page in html (len=%d) for %s' % (len(raw_html), url))
             return {}
 
-        logger.info('[NetflixHome] json_str len=%d for %s' % (len(json_str), url))
+        logger.info('[PrippiHome] json_str len=%d for %s' % (len(json_str), url))
         decoded   = _html.unescape(json_str)
         cleaned   = _strip_html_fields(decoded)
         try:
             result = _json.loads(cleaned)
         except Exception as e:
-            logger.error('[NetflixHome] json.loads failed for %s: %s' % (url, str(e)[:120]))
+            logger.error('[PrippiHome] json.loads failed for %s: %s' % (url, str(e)[:120]))
             return {}
 
         if isinstance(result, dict) and result:
-            logger.info('[NetflixHome] OK for %s sliders=%d' % (
+            logger.info('[PrippiHome] OK for %s sliders=%d' % (
                 url, len(result.get('props', {}).get('sliders', []))))
             return result
     except Exception as exc:
-        logger.error('[NetflixHome] exception for %s: %s' % (url, str(exc)))
+        logger.error('[PrippiHome] exception for %s: %s' % (url, str(exc)))
     return {}
 
 
@@ -4926,7 +5039,7 @@ def _onepiece_groups(items, sc_items=None):
          ('FILM',  [the 15 films in order]),
          ('SPECIALI · OVA · SPIN-OFF', [provider extras + spin-off series])]
 
-    The SC Live Action (real-actors Netflix series) is added to SERIE. Drops the
+    The SC Live Action (real-actors Prippi series) is added to SERIE. Drops the
     anime/CB01 main-series duplicates (the provider replaces them), the loose
     single-episode packagings (Mediaset "One Piece 17 - Ep. 96 …") and every
     non-One-Piece result (SC fuzzy noise like "One Day", "One Direction", …); the
@@ -4949,7 +5062,7 @@ def _onepiece_groups(items, sc_items=None):
     mains  = [c for c in curated if getattr(c, 'op_key', '') in ('ITA', 'SUB')]
     extras = [c for c in curated if getattr(c, 'op_key', '') not in ('ITA', 'SUB')]
 
-    # ── Live Action (real-actors Netflix series): sourced explicitly from SC
+    # ── Live Action (real-actors Prippi series): sourced explicitly from SC
     # (id 6654), since SC's global search does not return it for "one piece".
     live_action = _op_live_action_item()
 
@@ -5248,7 +5361,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
     if not seen:
         return
 
-    logger.info('[NetflixHome trailers] fetching %d new ids (daemon threads)' % len(seen))
+    logger.info('[PrippiHome trailers] fetching %d new ids (daemon threads)' % len(seen))
     results = {}   # tmdb_id -> url str
     lock    = threading.Lock()
 
@@ -5275,7 +5388,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
             with lock:
                 results[tid] = _make_url(vid) if vid else False
         except Exception as exc:
-            logger.error('[NetflixHome trailers] %s: %s' % (tid, str(exc)[:60]))
+            logger.error('[PrippiHome trailers] %s: %s' % (tid, str(exc)[:60]))
 
     # Use daemon threads so they don't block addon shutdown (prevents the
     # "script didn't stop in 5 seconds" kill that was crashing Kodi).
@@ -5315,7 +5428,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
         _trailer_cache[tid] = val
 
     found = sum(1 for v in results.values() if v)
-    logger.info('[NetflixHome trailers] done: %d/%d got trailer (cache size: %d)'
+    logger.info('[PrippiHome trailers] done: %d/%d got trailer (cache size: %d)'
                  % (found, len(seen), len(_trailer_cache)))
 
     for _, items in rows_snapshot:
@@ -5411,16 +5524,16 @@ def _fetch_anime_row(limit=20):
             items.append(it)
             if len(items) >= limit:
                 break
-        logger.info('[NetflixHome anime] popular: %d items' % len(items))
+        logger.info('[PrippiHome anime] popular: %d items' % len(items))
     except Exception as exc:
-        logger.error('[NetflixHome anime] fetch failed: %s' % str(exc)[:160])
+        logger.error('[PrippiHome anime] fetch failed: %s' % str(exc)[:160])
 
     # Special One Piece handling: swap the AnimeUnity One Piece entries for the
     # unified provider items (complete ITA 1–926 / SUB 1–1167).
     try:
         items = _onepiece_curate(items, want_extras=False, at_front=False)
     except Exception as exc:
-        logger.error('[NetflixHome anime] one piece curate: %s' % str(exc)[:120])
+        logger.error('[PrippiHome anime] one piece curate: %s' % str(exc)[:120])
 
     if items:
         _anime_row_cache = {'items': items, 'ts': _now()}
@@ -5473,10 +5586,10 @@ def _fetch_enrich_items(ctype):
             if valid:
                 with lock:
                     all_items.extend(valid)
-            logger.info('[NetflixHome enrich] %s/%s: %d items fetched'
+            logger.info('[PrippiHome enrich] %s/%s: %d items fetched'
                          % (channel_name, categoria, len(valid)))
         except Exception as exc:
-            logger.error('[NetflixHome enrich] %s/%s failed: %s'
+            logger.error('[PrippiHome enrich] %s/%s failed: %s'
                          % (channel_name, categoria, str(exc)[:120]))
 
     threads = []
@@ -5495,9 +5608,9 @@ def _fetch_enrich_items(ctype):
         try:
             _tmdb_enrich_validated(all_items)
         except Exception as exc:
-            logger.error('[NetflixHome enrich] tmdb: %s' % str(exc))
+            logger.error('[PrippiHome enrich] tmdb: %s' % str(exc))
     _enrich_cache[ctype] = {'items': all_items, 'ts': now}
-    logger.info('[NetflixHome enrich] %s pool ready: %d raw items' % (ctype, len(all_items)))
+    logger.info('[PrippiHome enrich] %s pool ready: %d raw items' % (ctype, len(all_items)))
     return all_items
 
 
@@ -5532,7 +5645,7 @@ def _tmdb_enrich_validated(items):
     # responses are large JSON; parsing them holds the Python GIL for long
     # stretches and starves the download's writer thread.
     if _dl_active():
-        logger.info('[NetflixHome] enrich skipped — download active')
+        logger.info('[PrippiHome] enrich skipped — download active')
         return
     from core import tmdb as _tmdb
 
@@ -5574,7 +5687,7 @@ def _tmdb_enrich_validated(items):
                 reason = 'year SC=%s TMDB=%s' % (sc_year, tmdb_year)
 
         if wrong:
-            logger.info('[NetflixHome] wrong tmdb_id for "%s" (id=%s, %s) - reverting to SC data' % (
+            logger.info('[PrippiHome] wrong tmdb_id for "%s" (id=%s, %s) - reverting to SC data' % (
                 snap['title'], tmdb_id, reason))
             it.infoLabels.pop('tmdb_id', None)
             it.infoLabels.pop('imdb_id', None)
@@ -5609,7 +5722,7 @@ def _fetch_main_rows(progress_cb=None):
     try:
         import channels.streamingcommunity as sc
         host = sc.host
-        logger.info('[NetflixHome] host=%s' % host)
+        logger.info('[PrippiHome] host=%s' % host)
 
         # Fetch ALL sliders from main pages (different suffixes avoid dedup collision).
         pages = [
@@ -5631,9 +5744,9 @@ def _fetch_main_rows(progress_cb=None):
                     with _pd_lock:
                         _page_data[u] = d
             except Exception as exc:
-                logger.error('[NetflixHome] main page fetch %s: %s' % (u, str(exc)))
+                logger.error('[PrippiHome] main page fetch %s: %s' % (u, str(exc)))
 
-        _p(15, u'Connessione a StreamingCommunity\u2026')
+        _p(15, u'Caricamento in corso\u2026')
         _pthreads = []
         for _pu, _ in pages:
             _pt = threading.Thread(target=_fetch_main_page, args=(_pu,))
@@ -5651,13 +5764,13 @@ def _fetch_main_rows(progress_cb=None):
             try:
                 data = _page_data.get(page_url)
                 if not data or not isinstance(data, dict):
-                    logger.error('[NetflixHome] _get_data empty for %s' % page_url)
+                    logger.error('[PrippiHome] _get_data empty for %s' % page_url)
                     continue
                 if not homepage_data:
                     homepage_data = data
                 props   = data.get('props', {})
                 sliders = props.get('sliders', [])
-                logger.info('[NetflixHome] %s => %d sliders' % (page_url, len(sliders)))
+                logger.info('[PrippiHome] %s => %d sliders' % (page_url, len(sliders)))
 
                 for slider in sliders:
                     if len(rows) >= SC_MAX_ROWS:
@@ -5687,19 +5800,19 @@ def _fetch_main_rows(progress_cb=None):
                             if it:
                                 items.append(it)
                         except Exception as exc:
-                            logger.error('[NetflixHome] _build_item: %s' % str(exc))
+                            logger.error('[PrippiHome] _build_item: %s' % str(exc))
                     if not items:
                         continue
 
                     rows.append((display_name, items))
-                    logger.info('[NetflixHome] row "%s": %d items' % (display_name, len(items)))
+                    logger.info('[PrippiHome] row "%s": %d items' % (display_name, len(items)))
 
             except Exception as exc:
-                logger.error('[NetflixHome] page error %s: %s' % (page_url, str(exc)))
+                logger.error('[PrippiHome] page error %s: %s' % (page_url, str(exc)))
     except Exception as exc:
-        logger.error('[NetflixHome] main rows import/init: %s' % str(exc))
+        logger.error('[PrippiHome] main rows import/init: %s' % str(exc))
 
-    logger.info('[NetflixHome] main rows: %d' % len(rows))
+    logger.info('[PrippiHome] main rows: %d' % len(rows))
     return rows, host, homepage_data
 
 
@@ -5742,7 +5855,7 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
             try:
                 adata = _get_data(url)
                 if not adata:
-                    logger.error('[NetflixHome] archive "%s": empty _get_data' % label)
+                    logger.error('[PrippiHome] archive "%s": empty _get_data' % label)
                     return
                 titles = (adata.get('props') or {}).get('titles') or {}
                 if isinstance(titles, dict):
@@ -5752,7 +5865,7 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
                 else:
                     raw_titles = []
                 if not raw_titles:
-                    logger.error('[NetflixHome] archive "%s": no titles in props' % label)
+                    logger.error('[PrippiHome] archive "%s": no titles in props' % label)
                     return
                 items = []
                 for raw in raw_titles[:20]:
@@ -5765,11 +5878,11 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
                 if items:
                     with lock:
                         result_dict[idx] = (label, items)
-                    logger.info('[NetflixHome] archive row "%s": %d items' % (label, len(items)))
+                    logger.info('[PrippiHome] archive row "%s": %d items' % (label, len(items)))
                 else:
-                    logger.error('[NetflixHome] archive "%s": 0 items after build' % label)
+                    logger.error('[PrippiHome] archive "%s": 0 items after build' % label)
             except Exception as exc:
-                logger.error('[NetflixHome] archive "%s" error: %s' % (label, str(exc)))
+                logger.error('[PrippiHome] archive "%s" error: %s' % (label, str(exc)))
 
         threads = []
         for idx, (label, url) in enumerate(entries_to_fetch):
@@ -5788,9 +5901,9 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
             if idx in results_map:
                 rows.append(results_map[idx])
     except Exception as exc:
-        logger.error('[NetflixHome] archive block: %s' % str(exc))
+        logger.error('[PrippiHome] archive block: %s' % str(exc))
 
-    logger.info('[NetflixHome] archive rows: %d' % len(rows))
+    logger.info('[PrippiHome] archive rows: %d' % len(rows))
     return rows
 
 
@@ -5799,7 +5912,7 @@ def _fetch_archive_rows(host, homepage_data, existing_count):
 
 class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
     """
-    Netflix-style overlay shown ON TOP of the fullscreen video player.
+    Prippi-style overlay shown ON TOP of the fullscreen video player.
     Non-blocking (uses show() not doModal()). The calling thread polls
     is_done() and calls update() each second.
     """
@@ -5884,7 +5997,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
     """
     Full-screen detail card for a single title.
     Shows fanart / trailer (via videowindow), scrollable plot and PLAY button.
-    Opened via doModal() from NetflixHomeWindow._open_detail (main GUI thread).
+    Opened via doModal() from PrippiHomeWindow._open_detail (main GUI thread).
     """
 
     ACTION_EXIT = 10
@@ -7095,8 +7208,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     label = u'[B]%s[/B]' % ep_code if not ep_title else u'[B]%s  –  %s[/B]' % (ep_code, ep_title)
                     sel_pos = len(items)
                 elif is_watched:
-                    label = (u'[COLOR FF22C55E]✓[/COLOR] '
-                             u'[COLOR FF888888]%s[/COLOR]' % ep_code)
+                    label = u'[COLOR FF888888]%s[/COLOR]' % ep_code
                 else:
                     label = ep_code if not ep_title else u'%s  –  %s' % (ep_code, ep_title)
                 _li = xbmcgui.ListItem(label=label, offscreen=True)
@@ -7276,19 +7388,19 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# NetflixSearchWindow — unified search overlay
+# PrippiSearchWindow — unified search overlay
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _open_search(parent_window=None):
     """Ask for query text then open the search overlay modal."""
     # ── DIAGNOSTIC ──────────────────────────────────────────────────────────
-    _ns_cls = globals().get('NetflixSearchWindow')
-    xbmc.log('[NetflixSearch] DEBUG globals NetflixSearchWindow=%r' % _ns_cls, xbmc.LOGINFO)
-    xbmc.log('[NetflixSearch] DEBUG module=%r' % globals().get('__name__'), xbmc.LOGINFO)
+    _ns_cls = globals().get('PrippiSearchWindow')
+    xbmc.log('[PrippiSearch] DEBUG globals PrippiSearchWindow=%r' % _ns_cls, xbmc.LOGINFO)
+    xbmc.log('[PrippiSearch] DEBUG module=%r' % globals().get('__name__'), xbmc.LOGINFO)
     # ────────────────────────────────────────────────────────────────────────
-    xbmc.log('[NetflixSearch] _open_search: calling dialog_input', xbmc.LOGINFO)
+    xbmc.log('[PrippiSearch] _open_search: calling dialog_input', xbmc.LOGINFO)
     query = platformtools.dialog_input('', heading='Cerca su PrippiStream...')
-    xbmc.log('[NetflixSearch] _open_search: dialog_input returned: %r' % query, xbmc.LOGINFO)
+    xbmc.log('[PrippiSearch] _open_search: dialog_input returned: %r' % query, xbmc.LOGINFO)
     if not query:
         return
     query = query.strip()
@@ -7298,19 +7410,19 @@ def _open_search(parent_window=None):
         # Pause BG UI refreshes while search window is open (parent may be None)
         if parent_window is not None:
             parent_window._bg_ui_pause.clear()
-        xbmc.log('[NetflixSearch] _open_search: creating NetflixSearchWindow', xbmc.LOGINFO)
-        win = NetflixSearchWindow(
-            'NetflixSearch.xml',
+        xbmc.log('[PrippiSearch] _open_search: creating PrippiSearchWindow', xbmc.LOGINFO)
+        win = PrippiSearchWindow(
+            'PrippiSearch.xml',
             config.get_runtime_path(),
             query=query,
             parent_window=parent_window,
         )
-        xbmc.log('[NetflixSearch] _open_search: calling doModal', xbmc.LOGINFO)
+        xbmc.log('[PrippiSearch] _open_search: calling doModal', xbmc.LOGINFO)
         win.doModal()
-        xbmc.log('[NetflixSearch] _open_search: doModal returned', xbmc.LOGINFO)
+        xbmc.log('[PrippiSearch] _open_search: doModal returned', xbmc.LOGINFO)
         del win
     except Exception as exc:
-        xbmc.log('[NetflixSearch] _open_search ERROR: %s' % str(exc), xbmc.LOGERROR)
+        xbmc.log('[PrippiSearch] _open_search ERROR: %s' % str(exc), xbmc.LOGERROR)
     finally:
         if parent_window is not None:
             parent_window._bg_ui_pause.set()
@@ -7337,6 +7449,25 @@ def _channel_is_anime(ch_name):
     _chan_is_anime_cache[ch_name] = res
     return res
 
+def _is_pagination_item(item):
+    """True if *item* is a 'next page' pagination marker rather than a real
+    result. SC's search() (via peliculas) and support.nextPage() append such an
+    item; it has no playable content, so it must never reach the search grid
+    (it rendered as a clickable tile that opened an empty trailer card)."""
+    if getattr(item, 'nextPage', False):
+        return True
+    title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                   (getattr(item, 'title', '') or '')).strip().lower()
+    if not title:
+        return False
+    try:
+        loc = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                     config.get_localized_string(30992) or '').strip().lower()
+    except Exception:
+        loc = ''
+    return title in (loc, 'next page', 'successivo', 'pagina successiva', 'avanti')
+
+
 def _classify_search_item(item):
     """Return 'anime' | 'film' | 'serie' for a search result item.
 
@@ -7357,11 +7488,11 @@ def _classify_search_item(item):
     return 'film'
 
 
-xbmc.log('[NetflixSearch] MODULE: about to define NetflixSearchWindow', xbmc.LOGINFO)
+xbmc.log('[PrippiSearch] MODULE: about to define PrippiSearchWindow', xbmc.LOGINFO)
 
 
-class NetflixSearchWindow(xbmcgui.WindowXML):
-    """Netflix-style search results overlay.
+class PrippiSearchWindow(xbmcgui.WindowXML):
+    """Prippi-style search results overlay.
 
     Three horizontal rows:
       ROW 0 (id=160) — StreamingCommunity (all types)
@@ -7378,7 +7509,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
     def __init__(self, xmlFilename, scriptPath, query='', parent_window=None, **kwargs):
         super().__init__(xmlFilename, scriptPath, **kwargs)
         self._query          = query
-        self._parent_window  = parent_window   # NetflixHomeWindow — for CW/launch delegation
+        self._parent_window  = parent_window   # PrippiHomeWindow — for CW/launch delegation
         self._items     = []             # currently displayed results (after filter)
         self._all_items = []             # full result set (all types) — filter source
         self._active_filter = 'all'      # active filter chip: all|film|serie|anime
@@ -7404,9 +7535,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             # Highlight the active filter chip (defaults to "Tutti")
             self.setProperty('filter', self._active_filter)
             # Show query text in the query button
-            self.getControl(SEARCH_QUERY_BTN).setLabel(
-                '[COLOR FF888888]' + chr(0x1F50D) + '  [/COLOR]' + self._query
-            )
+            self.getControl(SEARCH_QUERY_BTN).setLabel(self._query)
             # Re-init guard: Kodi calls onInit again when this WindowXML is re-activated
             # after a fullscreen video (e.g. a trailer played inside DetailWindow). In
             # that case the search has ALREADY run — restore the cached results instead
@@ -7423,7 +7552,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             t.daemon = True
             t.start()
         except Exception as exc:
-            logger.error('[NetflixSearch] onInit error: %s' % str(exc))
+            logger.error('[PrippiSearch] onInit error: %s' % str(exc))
 
     def _restore_after_reinit(self):
         """Re-populate the (freshly re-created) grid from cached results after the
@@ -7457,7 +7586,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             else:
                 self.getControl(SEARCH_NORESULTS).setVisible(True)
         except Exception as exc:
-            logger.error('[NetflixSearch] _restore_after_reinit: %s' % str(exc))
+            logger.error('[PrippiSearch] _restore_after_reinit: %s' % str(exc))
 
     def onAction(self, action):
         aid = action.getId()
@@ -7542,7 +7671,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     except Exception:
                         pass
             except Exception as exc:
-                logger.error('[NetflixSearch] onClick op-row: %s' % str(exc))
+                logger.error('[PrippiSearch] onClick op-row: %s' % str(exc))
             return
         if control_id == SEARCH_WL_SC:   # panel grid id=160
             try:
@@ -7551,7 +7680,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     self._last_pos = pos
                     self._open_detail(self._items[pos])
             except Exception as exc:
-                logger.error('[NetflixSearch] onClick grid: %s' % str(exc))
+                logger.error('[PrippiSearch] onClick grid: %s' % str(exc))
 
     def onFocus(self, control_id):
         if control_id in OP_ROW_WL:      # One Piece carousel card
@@ -7654,7 +7783,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 plot = plot[:237].rstrip() + '…'
             self.getControl(SEARCH_CTX_PLOT).setLabel(plot)
         except Exception as exc:
-            logger.error('[NetflixSearch] _update_hero: %s' % str(exc))
+            logger.error('[PrippiSearch] _update_hero: %s' % str(exc))
 
     # ── Filters ───────────────────────────────────────────────────────────
 
@@ -7716,7 +7845,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
     # ── Detail / play ──────────────────────────────────────────────────────
 
     def _open_detail(self, item):
-        """Open DetailWindow modal (same flow as NetflixHomeWindow)."""
+        """Open DetailWindow modal (same flow as PrippiHomeWindow)."""
         try:
             dw = DetailWindow(
                 'DetailWindow.xml',
@@ -7763,12 +7892,12 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 t_dl.daemon = True
                 t_dl.start()
         except Exception as exc:
-            logger.error('[NetflixSearch] _open_detail: %s' % str(exc))
+            logger.error('[PrippiSearch] _open_detail: %s' % str(exc))
 
     def _launch_item(self, item):
         """Play item. For non-SC items waits for pre-tested working URL and plays directly."""
         try:
-            xbmc.log('[NetflixSearch] _launch_item action=%r ch=%s' % (
+            xbmc.log('[PrippiSearch] _launch_item action=%r ch=%s' % (
                 item.action, getattr(item, '_search_channel', '?')), xbmc.LOGINFO)
 
             # ── Non-SC items: always use the channel flow ───────────────────────
@@ -7794,7 +7923,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 if _tmdb:
                     _f4k = _fourk.lookup_4k(_tmdb)
                     if _f4k:
-                        logger.info('[NetflixSearch] 4K HIT: %s' % item.fulltitle)
+                        logger.info('[PrippiSearch] 4K HIT: %s' % item.fulltitle)
                         _pw = self._parent_window
                         if _pw:
                             t = threading.Thread(target=_pw._play_4k_stream, args=(item, _f4k))
@@ -7826,7 +7955,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl()
                 )
         except Exception as exc:
-            logger.error('[NetflixSearch] _launch_item: %s' % str(exc))
+            logger.error('[PrippiSearch] _launch_item: %s' % str(exc))
 
     # ── Wraplist helpers ────────────────────────────────────────────────────
 
@@ -7846,7 +7975,7 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         try:
             self.getControl(SEARCH_WL_SC).addItems(list_items)
         except Exception as exc:
-            logger.error('[NetflixSearch] _populate_grid: %s' % str(exc))
+            logger.error('[PrippiSearch] _populate_grid: %s' % str(exc))
 
     # ── One Piece carousel rows ───────────────────────────────────────────────
     @staticmethod
@@ -7961,23 +8090,29 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
 
         # ── Step 1: StreamingCommunity (fastest, shown first) ──────────
         try:
-            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  StreamingCommunity...')
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]…')
             from channels import streamingcommunity as _sc
             from core.item import Item as _Item
             sc_seed = _Item(channel='streamingcommunity', extra='search', text_color='FFFFFFFF')
             sc_items = list(_sc.search(sc_seed, query) or [])
-            # Filter out SC results without a valid thumbnail (blank cards)
+            # Filter out SC results without a valid thumbnail (blank cards) and the
+            # trailing "next page" pagination marker (SC search doesn't pop it).
             sc_items = [it for it in sc_items if (it.thumbnail or '').strip()
-                        and (it.thumbnail or '').strip().lower() not in ('none', 'false', 'null', 'n/a')]
+                        and (it.thumbnail or '').strip().lower() not in ('none', 'false', 'null', 'n/a')
+                        and not _is_pagination_item(it)]
             for it in sc_items:
                 it._search_channel = 'sc'
                 it._search_type = _classify_search_item(it)
                 tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
                 if tmdb:
                     sc_tmdb_ids.add(str(tmdb))
-            logger.info('[NetflixSearch] SC returned %d results' % len(sc_items))
+            logger.info('[PrippiSearch] SC returned %d results' % len(sc_items))
+            logger.info('[PrippiSearch] SC items: %s' % [
+                (it.fulltitle or it.title, getattr(it, 'contentType', ''),
+                 (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb'),
+                 getattr(it, '_search_type', '')) for it in sc_items])
         except Exception as exc:
-            logger.error('[NetflixSearch] SC search error: %s' % str(exc))
+            logger.error('[PrippiSearch] SC search error: %s' % str(exc))
         if self._cancelled.is_set():
             return
 
@@ -7988,9 +8123,9 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
         self._populate_grid(sc_items)
         if sc_items:
             self._update_hero(sc_items[0])
-            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  SC: %d risultati · cercando altri canali...' % len(sc_items))
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  %d risultati · cercando altri canali…' % len(sc_items))
         else:
-            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  Nessun risultato SC · cercando altri canali...')
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  cercando altri canali…')
 
         # ── Step 2: Other channels (parallel) ──────────────────────────
         # Read channels directly from JSON flags — avoids the double check (JSON flag + Kodi
@@ -8007,10 +8142,10 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 if _cp.get('active', False) and _cp.get('include_in_global_search', False):
                     channels.append(_ch.channel)
         except Exception as exc:
-            logger.error('[NetflixSearch] channels detection error: %s' % str(exc))
+            logger.error('[PrippiSearch] channels detection error: %s' % str(exc))
             channels = []
 
-        logger.info('[NetflixSearch] global search: %d other channels' % len(channels))
+        logger.info('[PrippiSearch] global search: %d other channels' % len(channels))
         total_ch = len(channels)
         done_ch  = [0]
         all_others = []
@@ -8056,6 +8191,8 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                 results = ch_module.search(_Item(channel=ch_name), query) or []
                 filtered = []
                 for r in results:
+                    if _is_pagination_item(r):
+                        continue   # drop "next page" markers (no playable content)
                     tmdb = (r.infoLabels or {}).get('tmdb_id') or (r.infoLabels or {}).get('tmdb')
                     if tmdb and str(tmdb) in sc_tmdb_ids:
                         continue   # SC has this exact title — SC version wins
@@ -8068,16 +8205,16 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
                     _r_norm = _re.sub(r'[^a-z0-9 ]', '', _r_raw)
                     _r_norm = _re.sub(r'\s+', ' ', _r_norm).strip()
                     if _q_norm_raw and not _title_match_query(_r_norm):
-                        logger.debug('[NetflixSearch] %s: skip "%s" (no match for "%s")' % (
+                        logger.debug('[PrippiSearch] %s: skip "%s" (no match for "%s")' % (
                             ch_name, _r_norm[:40], _q_norm_raw))
                         continue
                     r._search_channel = ch_name
                     r._search_type = _classify_search_item(r)
                     filtered.append(r)
-                logger.debug('[NetflixSearch] %s: %d results' % (ch_name, len(filtered)))
+                logger.debug('[PrippiSearch] %s: %d results' % (ch_name, len(filtered)))
                 return filtered
             except Exception as exc:
-                logger.debug('[NetflixSearch] channel %s error: %s' % (ch_name, str(exc)))
+                logger.debug('[PrippiSearch] channel %s error: %s' % (ch_name, str(exc)))
                 return []
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8155,16 +8292,33 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             tkey = str(tmdb) if tmdb else None
             # Locate an already-kept duplicate (by tmdb first, then by title)
             dup_idx = None
+            matched_by_tmdb = False
             if tkey is not None and tkey in seen_tmdb:
                 dup_idx = seen_tmdb[tkey]
+                matched_by_tmdb = True
             elif nt and nt in seen_title:
-                dup_idx = seen_title[nt]
+                cand = seen_title[nt]
+                cand_tmdb = (deduped[cand].infoLabels or {}).get('tmdb_id') or (deduped[cand].infoLabels or {}).get('tmdb')
+                # Same normalized title but BOTH carry a tmdb_id and they DIFFER →
+                # two different shows that merely share a name (e.g. "Glitch" tmdb
+                # 63201 vs 136699) → NOT a duplicate, keep both.  Title dedup only
+                # applies when at least one side lacks a tmdb (the fallback case).
+                if tkey is not None and cand_tmdb and str(cand_tmdb) != tkey:
+                    dup_idx = None
+                else:
+                    dup_idx = cand
             if dup_idx is not None:
-                # Duplicate: replace the kept item only if THIS one is anime and the
-                # kept one is not (Priority Anime).
+                # Duplicate: Priority Anime — replace the kept item with an anime one
+                # ONLY when it's genuinely the same title (matched by tmdb, or neither
+                # side has a tmdb_id = pure anime-vs-anime title match).  Never let a
+                # no-tmdb anime hijack a tmdb-identified non-anime title via a title
+                # collision (e.g. an anime "Glitch" replacing the SC series "Glitch",
+                # tmdb 136699 — which made the real result vanish and fail to play).
                 prev = deduped[dup_idx]
+                prev_tmdb = (prev.infoLabels or {}).get('tmdb_id') or (prev.infoLabels or {}).get('tmdb')
                 if (getattr(it, '_search_type', '') == 'anime'
-                        and getattr(prev, '_search_type', '') != 'anime'):
+                        and getattr(prev, '_search_type', '') != 'anime'
+                        and (matched_by_tmdb or not prev_tmdb)):
                     deduped[dup_idx] = it
                 continue
             if tkey is None and not nt:
@@ -8175,6 +8329,11 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             if nt:
                 seen_title[nt] = idx
             deduped.append(it)
+
+        logger.info('[PrippiSearch] deduped %d -> %s' % (len(deduped), [
+            ((it.fulltitle or it.title), getattr(it, '_search_channel', '?'),
+             (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb'),
+             getattr(it, '_search_type', '')) for it in deduped]))
 
         # Non-SC items are played via the channel flow (see _launch_item), which
         # sets up inputstream.adaptive/DRM correctly — so there is no background
@@ -8424,11 +8583,11 @@ class NetflixSearchWindow(xbmcgui.WindowXML):
             pass
 
 
-xbmc.log('[NetflixSearch] MODULE: NetflixSearchWindow defined OK', xbmc.LOGINFO)
+xbmc.log('[PrippiSearch] MODULE: PrippiSearchWindow defined OK', xbmc.LOGINFO)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NetflixBrowseWindow — single-screen category browser (SC + CB01 + AnimeUnity)
+# PrippiBrowseWindow — single-screen category browser (SC + CB01 + AnimeUnity)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── Browse window control IDs ────────────────────────────────
@@ -8618,24 +8777,24 @@ def _br_cb01_genre_map(macro):
 
 def _open_browse(parent_window=None):
     """Open the category-browser modal."""
-    _nb_cls = globals().get('NetflixBrowseWindow')
+    _nb_cls = globals().get('PrippiBrowseWindow')
     if _nb_cls is None:
         return
     try:
         if parent_window is not None:
             parent_window._bg_ui_pause.clear()
-        win = NetflixBrowseWindow('NetflixBrowse.xml', config.get_runtime_path(),
+        win = PrippiBrowseWindow('PrippiBrowse.xml', config.get_runtime_path(),
                                   parent_window=parent_window)
         win.doModal()
         del win
     except Exception as exc:
-        xbmc.log('[NetflixBrowse] _open_browse ERROR: %s' % str(exc), xbmc.LOGERROR)
+        xbmc.log('[PrippiBrowse] _open_browse ERROR: %s' % str(exc), xbmc.LOGERROR)
     finally:
         if parent_window is not None:
             parent_window._bg_ui_pause.set()
 
 
-class NetflixBrowseWindow(xbmcgui.WindowXML):
+class PrippiBrowseWindow(xbmcgui.WindowXML):
     """Single-screen browser: macro tabs + genre sidebar + sort + poster grid."""
 
     ACTION_EXIT = 10
@@ -9543,7 +9702,7 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
             logger.error('[Browse] _open_detail: %s' % str(exc))
 
 
-xbmc.log('[NetflixBrowse] MODULE: NetflixBrowseWindow defined OK', xbmc.LOGINFO)
+xbmc.log('[PrippiBrowse] MODULE: PrippiBrowseWindow defined OK', xbmc.LOGINFO)
 
 
 def _purge_legacy_videolibrary():
@@ -9572,7 +9731,7 @@ def _purge_legacy_videolibrary():
         logger.error('[VLPurge] %s' % str(exc))
 
 
-def open_netflix_home():
+def open_prippi_home():
     """Public entry point — called from launcher.py."""
     _shutdown_event.clear()   # reset shutdown flag for this session
     _purge_legacy_videolibrary()   # one-shot legacy library cleanup (per device)
@@ -9583,7 +9742,7 @@ def open_netflix_home():
         sportchannels.reset_state()
     except Exception:
         pass
-    win = NetflixHomeWindow('NetflixHome.xml', config.get_runtime_path())
+    win = PrippiHomeWindow('PrippiHome.xml', config.get_runtime_path())
     win.show()
     monitor = xbmc.Monitor()
     while not monitor.abortRequested() and win._alive:

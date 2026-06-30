@@ -1,3 +1,12 @@
+## Prossima
+- Canali in diretta: aggiunti canali italiani con una nuova riga "TV" per i generalisti.
+- Fallback automatico su SKY/Sport: se la fonte principale non parte, ne prova un'altra in automatico, molti più canali funzionanti.
+- Vengono mostrati solo i canali davvero online in quel momento.
+- Nuovi loghi in alta qualità per i canali SKY, Sport e TV.
+- Impostazioni › Personalizzazione: ora puoi mostrare/nascondere le righe Sport, SKY e TV.
+- Ricerca: risolto un caso in cui due titoli con lo stesso nome facevano sparire il risultato giusto.
+- Grafica più pulita: rimossi alcuni simboli che su certi dispositivi apparivano come quadratini.
+
 ## 1.4.0
 - Sfoglia: scorrimento rivisto, niente più salti del focus, niente buchi tra gli anni, fluido con mouse e tastiera.
 - Canali SKY: "In onda adesso" corretto, con "A seguire" come una guida TV; Sky Uno +1 e altri canali sistemati.

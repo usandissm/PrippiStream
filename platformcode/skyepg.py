@@ -3,7 +3,7 @@
 "In onda adesso" EPG for the live SKY/Sport rows.
 
 Pulls the *currently airing* programme for the live channels shown on the
-Netflix-style home, from Sky Italia's official guide API
+Prippi-style home, from Sky Italia's official guide API
 (https://apid.sky.it/gtv/v1, env=DTH — no auth, no Cloudflare, plain GET).
 
 Design goals (mirror sportchannels.py):

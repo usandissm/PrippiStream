@@ -54,7 +54,7 @@
             <aspectratio>keep</aspectratio>
         </control>
 
-        <!-- Search button (id=109) — opens NetflixSearch overlay -->
+        <!-- Search button (id=109) — opens PrippiSearch overlay -->
         <control type="button" id="109">
             <left>480</left><top>12</top>
             <width>320</width><height>28</height>

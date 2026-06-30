@@ -348,7 +348,7 @@ def render_items(itemlist, parent_item):
         if item.category == "":
             item.category = parent_item.category
         # If there is no action or it is findvideos / play, folder = False because no listing will be returned
-        if item.action in ['play', 'findvideos', '', 'open_netflix_home']:
+        if item.action in ['play', 'findvideos', '', 'open_prippi_home']:
             item.folder = False
         if item.fanart == "":
             item.fanart = parent_item.fanart

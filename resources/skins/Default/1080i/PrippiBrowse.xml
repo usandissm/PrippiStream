@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  NetflixBrowse.xml — 1920×1080
+  PrippiBrowse.xml — 1920×1080
   Single-screen category browser for PrippiStream.
   Macro tabs (top) + genre sidebar (left) + sort/breadcrumb bar + poster grid + hero box.
 
@@ -16,7 +16,7 @@
     150  hero mini poster   151 hero title   152 hero meta   153 hero plot
     170  loading line group  171  empty/no-results label
 
-  Per-card ListItem properties (set in netflixhome.py _br_populate_grid):
+  Per-card ListItem properties (set in prippihome.py _br_populate_grid):
     thumbnail → poster URL          ylabel → year text (badge)
   Window properties:
     macro → film|serie|kdrama|anime  (drives tab underline)

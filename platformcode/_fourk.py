@@ -6,11 +6,11 @@ Data source:  marek2.myvisio.me:8000  (VOD IPTV 2 → category 150 → FILM 4K)
 Cache TTL:    6 hours
 Lookup key:   tmdb_id  (int → dict with stream_url, name, etc.)
 
-Integration points (netflixhome.py):
-  - NetflixHomeWindow.__init__:  background refresh thread
-  - NetflixHomeWindow._launch(): 4K check before SC (movies only)
+Integration points (prippihome.py):
+  - PrippiHomeWindow.__init__:  background refresh thread
+  - PrippiHomeWindow._launch(): 4K check before SC (movies only)
   - DetailWindow.onInit():       badge "4K" in meta1
-  - NetflixSearchWindow._launch_item(): same 4K check
+  - PrippiSearchWindow._launch_item(): same 4K check
 """
 
 import json
@@ -443,7 +443,7 @@ def is_4k_available(tmdb_id):
 
 # ── Eager cache load at import time ─────────────────────────────────────
 # Load the disk cache immediately (even if expired) so that _ready=True
-# before netflixhome._bg_load() calls _build_4k_row().  This eliminates
+# before prippihome._bg_load() calls _build_4k_row().  This eliminates
 # the race condition where the 4K carousel is missing on first launch
 # (especially on TVs that restart Kodi each time).
 # The background build_4k_index() thread will still run and refresh the

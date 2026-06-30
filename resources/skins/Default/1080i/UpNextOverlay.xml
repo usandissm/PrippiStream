@@ -48,7 +48,7 @@
             <font>font10</font>
             <textcolor>FF9A9A9A</textcolor>
             <shadowcolor>FF000000</shadowcolor>
-            <label>[B]&#x23ED;  PROSSIMA PUNTATA[/B]</label>
+            <label>[B]PROSSIMA PUNTATA[/B]</label>
         </control>
 
         <!-- Episode title (id=9903, set from Python) -->
@@ -87,7 +87,7 @@
             <width>282</width><height>57</height>
             <texturefocus   colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="0AFFFFFF">white.png</texturenofocus>
-            <label>[B]&#x25B6;  Guarda subito[/B]</label>
+            <label>[B]Guarda subito[/B]</label>
             <font>font10</font>
             <textcolor>FFFFFFFF</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>

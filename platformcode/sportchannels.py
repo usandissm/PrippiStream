@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Live-channel rows for the Netflix-style home.
+Live-channel rows for the Prippi-style home.
 
 Two rows, same mechanics (instant bundled list + background refresh from the
 mandrakodi public backend, bundled portrait posters, direct play with no
@@ -52,6 +52,7 @@ _CODE_SKY_RESOLVE = "A1A159"   # ?id=<channel> → encrypted manifest+keys
 _CODE_SPORT_SKY = "A1A165"     # Sport SKY list (sky@@)
 _CODE_SPORT_SKY2 = "A1A165A"   # Sport SKY 2 (freeshot/dazn)
 _CODE_LIVE_SKY = "A1A260"      # LIVE → SKY list (sky@@)
+_CODE_DADDY_IT = "A1A124"      # DaddyLive Italia list (daddyCode@@<id>) — auto-update source
 
 _IPTVORG_IT = "https://iptv-org.github.io/iptv/countries/it.m3u"
 
@@ -151,6 +152,7 @@ _TITLE_OVERRIDE = {
 _ROWS = {
     'sport': {'label': u'Sport Live', 'default': DEFAULT_SPORT},
     'sky':   {'label': u'SKY',        'default': DEFAULT_SKY},
+    'tv':    {'label': u'TV',         'default': []},
 }
 
 # Pars for which we ship a bundled poster.
@@ -160,7 +162,8 @@ _KNOWN_POSTERS = set(c["par"] for c in DEFAULT_SPORT + DEFAULT_SKY + CINEMA_CAND
 
 # ── per-row cache (memory + disk) ────────────────────────────────────────────
 _CACHE_TTL = 6 * 3600
-_mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0}}
+_mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0},
+              'tv': {"data": None, "ts": 0}}
 
 # Resolved-stream cache: par -> (manifest, kid, key, expiry_epoch).
 # Populated by the probe (_sky_channel_valid already fetches a fully valid
@@ -254,6 +257,188 @@ def _is_dead(par):
         if until:
             _dead_until.pop(par, None)  # expired → allow re-probe
     return False
+
+
+# ── adaptive resolver preference (self-healing) ──────────────────────────────
+# A par here means "this channel's primary (sky@@/freeshot) failed to PLAY but
+# its DaddyLive feed worked", so future plays go DaddyLive FIRST (no black-screen
+# wait).  Set/cleared by the play worker on real playback outcomes; persisted so
+# the learning survives restarts.  Sky Cinema (ClearKey key-rotation) and Zona
+# DAZN (DNS-blocked freeshot CDN) end up here automatically.
+_prefer_daddy = set()
+_prefer_lock = threading.Lock()
+_prefer_loaded = False
+
+# Channels whose PRIMARY is known to chronically fail at play (so go DaddyLive
+# first from the very first click — no black-screen wait): Sky Cinema (ClearKey
+# key-rotation → ISA "Missing KeyId") and Zona DAZN (freeshot CDN DNS-blocked).
+# This is only a seed; the set is self-correcting (unprefer_daddy clears a par
+# whose primary plays again, prefer_daddy adds any other that starts failing).
+_PREFER_DADDY_DEFAULT = {
+    "skycinemauno", "skycinemaaction", "skycinemacollection", "skycinemacomedy",
+    "skycinemadrama", "skycinemafamily", "skycinemaromance", "skycinemasuspense",
+    "ZonaDAZN",
+}
+
+
+def _prefer_file():
+    try:
+        return os.path.join(config.get_data_path(), "sport_prefer_daddy.json")
+    except Exception:
+        return None
+
+
+def _load_prefer():
+    global _prefer_loaded
+    if _prefer_loaded:
+        return
+    _prefer_loaded = True
+    f = _prefer_file()
+    if not f or not os.path.isfile(f):
+        # First run: seed the known chronically-broken primaries so they play
+        # via DaddyLive from the first click.
+        with _prefer_lock:
+            _prefer_daddy.update(_PREFER_DADDY_DEFAULT)
+        _save_prefer()
+        return
+    try:
+        with open(f, 'r') as fh:
+            with _prefer_lock:
+                _prefer_daddy.update(json.load(fh) or [])
+    except Exception:
+        pass
+
+
+def _save_prefer():
+    f = _prefer_file()
+    if not f:
+        return
+    try:
+        with _prefer_lock:
+            snap = sorted(_prefer_daddy)
+        with open(f, 'w') as fh:
+            json.dump(snap, fh)
+    except Exception:
+        pass
+
+
+def is_prefer_daddy(par):
+    """True if *par* should resolve via DaddyLive first (its primary failed before)."""
+    if not par:
+        return False
+    _load_prefer()
+    with _prefer_lock:
+        return par in _prefer_daddy
+
+
+def prefer_daddy(par):
+    """Remember that *par* plays via DaddyLive (its primary failed at play time)."""
+    if not par:
+        return
+    _load_prefer()
+    with _prefer_lock:
+        if par in _prefer_daddy:
+            return
+        _prefer_daddy.add(par)
+    _save_prefer()
+    logger.info('[Sport] prefer DaddyLive for %s (primary failed at play)' % par)
+
+
+def unprefer_daddy(par):
+    """Clear the DaddyLive preference for *par* (its primary plays again)."""
+    if not par:
+        return
+    _load_prefer()
+    with _prefer_lock:
+        if par not in _prefer_daddy:
+            return
+        _prefer_daddy.discard(par)
+    _save_prefer()
+    logger.info('[Sport] cleared DaddyLive preference for %s (primary works)' % par)
+
+
+# ── ffmpegdirect preference ──────────────────────────────────────────────────
+# A par here means "this channel's DaddyLive feed needs inputstream.ffmpegdirect
+# rather than inputstream.adaptive" — some muxed-TS streams (Zona DAZN) make ISA
+# fail with 'Codec id 27 require extradata' (video disabled, audio-only black),
+# while ffmpeg's full demuxer plays them.  Self-correcting like _prefer_daddy.
+_prefer_ff = set()
+_prefer_ff_lock = threading.Lock()
+_prefer_ff_loaded = False
+_PREFER_FF_DEFAULT = {"ZonaDAZN"}
+
+
+def _prefer_ff_file():
+    try:
+        return os.path.join(config.get_data_path(), "sport_prefer_ff.json")
+    except Exception:
+        return None
+
+
+def _load_prefer_ff():
+    global _prefer_ff_loaded
+    if _prefer_ff_loaded:
+        return
+    _prefer_ff_loaded = True
+    f = _prefer_ff_file()
+    if not f or not os.path.isfile(f):
+        with _prefer_ff_lock:
+            _prefer_ff.update(_PREFER_FF_DEFAULT)
+        _save_prefer_ff()
+        return
+    try:
+        with open(f, 'r') as fh:
+            with _prefer_ff_lock:
+                _prefer_ff.update(json.load(fh) or [])
+    except Exception:
+        pass
+
+
+def _save_prefer_ff():
+    f = _prefer_ff_file()
+    if not f:
+        return
+    try:
+        with _prefer_ff_lock:
+            snap = sorted(_prefer_ff)
+        with open(f, 'w') as fh:
+            json.dump(snap, fh)
+    except Exception:
+        pass
+
+
+def is_prefer_ff(par):
+    """True if *par*'s DaddyLive feed should use inputstream.ffmpegdirect first."""
+    if not par:
+        return False
+    _load_prefer_ff()
+    with _prefer_ff_lock:
+        return par in _prefer_ff
+
+
+def prefer_ff(par):
+    """Remember that *par* plays via ffmpegdirect (ISA couldn't decode it)."""
+    if not par:
+        return
+    _load_prefer_ff()
+    with _prefer_ff_lock:
+        if par in _prefer_ff:
+            return
+        _prefer_ff.add(par)
+    _save_prefer_ff()
+    logger.info('[Sport] prefer ffmpegdirect for %s' % par)
+
+
+def unprefer_ff(par):
+    """Clear the ffmpegdirect preference for *par*."""
+    if not par:
+        return
+    _load_prefer_ff()
+    with _prefer_ff_lock:
+        if par not in _prefer_ff:
+            return
+        _prefer_ff.discard(par)
+    _save_prefer_ff()
 
 
 def _cache_stream(par, manifest, kid, key):
@@ -444,6 +629,8 @@ def _parse_sport_backend():
         channels.append(dazn)
     channels.append({"title": u"FIFA+ Italia", "kind": "iptvorg",
                      "par": "FIFA+ Italy", "fs": None, "logo": _poster("FIFA+ Italy")})
+    # New DaddyLive sport channels with no sky@@ equivalent (Eurosport, Rai Sport).
+    channels.extend(_daddy_channels('sport'))
 
     # Probe all channels in parallel; keep only the online ones.  No fallback to
     # the full list: if nothing is online the row stays empty (titled but empty)
@@ -567,6 +754,10 @@ def _channel_token_valid(ch):
     if kind == 'iptvorg':
         return _iptvorg_ok(par)
 
+    # DaddyLive standalone channel: online iff it resolves to a live manifest.
+    if kind == 'daddy':
+        return _daddy_ok(par)
+
     # Sky ClearKey: full check (expiry gates the MPD fetch, so expired channels
     # cost only the resolve call — no wasted CDN round-trip).
     if kind == 'sky' and _sky_channel_valid(par):
@@ -574,8 +765,14 @@ def _channel_token_valid(ch):
 
     # Freeshot: fallback for sky channels, or the channel's own resolver.
     fs_code = fs if fs else (par if kind == 'freeshot' else None)
-    if fs_code:
-        return _freeshot_ok(fs_code)
+    if fs_code and _freeshot_ok(fs_code):
+        return True
+
+    # Last resort: the channel's DaddyLive Italian feed (fallback only, so a
+    # channel whose sky@@/freeshot are down still shows if daddy is live).
+    dcode = _DADDY_FALLBACK.get(par)
+    if dcode and _daddy_ok(dcode):
+        return True
 
     return False
 
@@ -652,20 +849,47 @@ def _parse_sky_backend():
     if not live:
         return None
 
-    # Probe ALL candidates (cinema + live) in parallel.
+    # Probe ALL candidates (cinema + live + new DaddyLive sky) in parallel.
     cinema_cands = [dict(c, logo=_logo_for(c["par"])) for c in CINEMA_CANDIDATES]
-    all_cands    = cinema_cands + live
+    daddy_sky    = _daddy_channels('sky')   # new ones only (e.g. Sky Cinema Uno +24)
+    all_cands    = cinema_cands + live + daddy_sky
     online       = _probe_parallel(all_cands)
 
     cinema_online = [c for c in online if c in cinema_cands]
     live_online   = [c for c in online if c in live]
-    logger.info('[Sport] sky online: %d cinema, %d live (of %d+%d)' % (
-        len(cinema_online), len(live_online), len(cinema_cands), len(live)))
+    daddy_online  = [c for c in online if c in daddy_sky]
+    logger.info('[Sport] sky online: %d cinema, %d live, %d daddy (of %d+%d+%d)' % (
+        len(cinema_online), len(live_online), len(daddy_online),
+        len(cinema_cands), len(live), len(daddy_sky)))
 
-    return cinema_online + live_online  # cinema first, then LIVE SKY
+    # Interleave each new DaddyLive cinema channel right after its 'after' sibling
+    # (e.g. Sky Cinema Uno +24 right after Sky Cinema Uno) instead of dumping them
+    # at the end of the row.
+    ordered_cinema = []
+    used = set()
+    for c in cinema_online:
+        ordered_cinema.append(c)
+        for d in daddy_online:
+            if id(d) not in used and _DADDY.get(d['par'], {}).get('after') == c['par']:
+                ordered_cinema.append(d)
+                used.add(id(d))
+    leftover = [d for d in daddy_online if id(d) not in used]
+    return ordered_cinema + leftover + live_online
 
 
-_PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend}
+def _parse_tv_backend():
+    """Build the TV row: free-to-air generalisti (Rai, Mediaset, La7…) from the
+    DaddyLive Italian list.  Online-only — empty row if none are live."""
+    channels = _daddy_channels('tv')
+    if not channels:
+        return None  # backend unreachable → keep previous list
+    online = _probe_parallel(channels, timeout=35)
+    logger.info('[Sport] tv online: %d/%d channels' % (len(online), len(channels)))
+    return online
+
+
+_PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend,
+            'tv': _parse_tv_backend}
 
 
 def _load_disk_cache(row):
@@ -696,7 +920,7 @@ def _save_disk_cache(row, data):
 def refresh_background():
     """Refresh rows whose cache is stale; skip rows that are still fresh."""
     now = time.time()
-    stale = [r for r in ('sport', 'sky')
+    stale = [r for r in ('sport', 'sky', 'tv')
              if (now - _mem_cache[r]['ts']) >= _CACHE_TTL]
     if not stale:
         return  # both caches fresh — nothing to do
@@ -759,12 +983,14 @@ def reset_state():
     thread never released would deadlock every resolve/probe, so NO channel would
     play.  Rebuild the locks and clear the run-once flags for a clean slate.
     Cached data (channel lists, deny-list) is left intact — it's still valid."""
-    global _stream_cache_lock, _dead_lock, _cf_lock, _keepalive_lock
-    global _keepalive_running, _cf_scraper
+    global _stream_cache_lock, _dead_lock, _cf_lock, _keepalive_lock, _prefer_lock
+    global _prefer_ff_lock, _keepalive_running, _cf_scraper
     _stream_cache_lock = threading.Lock()
     _dead_lock = threading.Lock()
     _cf_lock = threading.Lock()
     _keepalive_lock = threading.Lock()
+    _prefer_lock = threading.Lock()
+    _prefer_ff_lock = threading.Lock()
     _keepalive_running = False
     _cf_scraper = None   # a half-initialised scraper from a killed thread is unusable
     _abort_event.clear()
@@ -940,6 +1166,251 @@ def resolve_daddycode(code):
     return link, ref
 
 
+# ── DaddyLive Italia (kind='daddy') ──────────────────────────────────────────
+# A single source (backend A1A124, the same Heroku backend used for SKY/Sport)
+# covers TheGroove360 "SKY SPORT+DAZN" / "DADDYLIVE ITALIAN" and MandraKodi
+# "ITA DADDY" — they are the same DaddyLive Italian lineup.
+#
+# Resolve scheme (current, verified): stream-<id>.php → player <iframe> →
+# window.atob('<base64>') = signed HLS m3u8.  The front domain rotates, so we
+# discover it by following dlhd.pk's redirect.  System DNS resolves the CDNs on
+# this network; _doh_get is kept as a fallback for Piracy-Shield-blocked setups.
+#
+# _DADDY maps each premium id → display name, target row, and (if it duplicates
+# a channel we already serve via sky@@) the existing 'par' it acts as a FALLBACK
+# for.  alias!=None ⇒ used only as fallback (no duplicate tile).  alias==None ⇒
+# a NEW channel shown in its row (online-only).  866/876 (US/UK) are excluded.
+_DADDY = {
+    # SPORT — fallback for existing sky@@ channels (no duplicate tiles)
+    "869": {"name": u"Sky Sport 24",      "row": "sport", "alias": "skysport24"},
+    "461": {"name": u"Sky Sport Uno",     "row": "sport", "alias": "skysportuno"},
+    "870": {"name": u"Sky Sport Calcio",  "row": "sport", "alias": "skysportcalcio"},
+    "462": {"name": u"Sky Sport Arena",   "row": "sport", "alias": "skysportarena"},
+    "460": {"name": u"Sky Sport Max",     "row": "sport", "alias": "skysportmax"},
+    "576": {"name": u"Sky Sport Tennis",  "row": "sport", "alias": "skysporttennis"},
+    "577": {"name": u"Sky Sport F1",      "row": "sport", "alias": "skysportf1"},
+    "575": {"name": u"Sky Sport MotoGP",  "row": "sport", "alias": "skysportmotogp"},
+    "875": {"name": u"Sky Sport Basket",  "row": "sport", "alias": "skysportbasket"},
+    "574": {"name": u"Sky Sport Golf",    "row": "sport", "alias": "skysportgolf"},
+    "871": {"name": u"Sky Sport 251",     "row": "sport", "alias": "skysport251"},
+    "872": {"name": u"Sky Sport 252",     "row": "sport", "alias": "skysport252"},
+    "873": {"name": u"Sky Sport 253",     "row": "sport", "alias": "skysport253"},
+    "874": {"name": u"Sky Sport 254",     "row": "sport", "alias": "skysport254"},
+    "877": {"name": u"Zona DAZN",         "row": "sport", "alias": "ZonaDAZN"},
+    # SPORT — new (no existing equivalent)
+    "878": {"name": u"Eurosport 1",       "row": "sport", "alias": None},
+    "879": {"name": u"Eurosport 2",       "row": "sport", "alias": None},
+    "882": {"name": u"Rai Sport",         "row": "sport", "alias": None},
+    # SKY — fallback for existing entertainment/cinema
+    "881": {"name": u"Sky Uno",               "row": "sky", "alias": "skyuno"},
+    "880": {"name": u"Sky Serie",             "row": "sky", "alias": "skyserie"},
+    "860": {"name": u"Sky Cinema Uno",        "row": "sky", "alias": "skycinemauno"},
+    "861": {"name": u"Sky Cinema Action",     "row": "sky", "alias": "skycinemaaction"},
+    "859": {"name": u"Sky Cinema Collection", "row": "sky", "alias": "skycinemacollection"},
+    "862": {"name": u"Sky Cinema Comedy",     "row": "sky", "alias": "skycinemacomedy"},
+    "867": {"name": u"Sky Cinema Drama",      "row": "sky", "alias": "skycinemadrama"},
+    "865": {"name": u"Sky Cinema Family",     "row": "sky", "alias": "skycinemafamily"},
+    "864": {"name": u"Sky Cinema Romance",    "row": "sky", "alias": "skycinemaromance"},
+    "868": {"name": u"Sky Cinema Suspense",   "row": "sky", "alias": "skycinemasuspense"},
+    # SKY — new (placed right after its 'after' sibling in the row)
+    "863": {"name": u"Sky Cinema Uno +24",    "row": "sky", "alias": None, "after": "skycinemauno"},
+    # TV — new free-to-air generalisti.  Row order follows this insertion order:
+    # Rai channels first, then Canale 5, Italia 1, 20 Mediaset, La7.
+    "850": {"name": u"Rai 1",       "row": "tv", "alias": None},
+    "851": {"name": u"Rai 2",       "row": "tv", "alias": None},
+    "852": {"name": u"Rai 3",       "row": "tv", "alias": None},
+    "853": {"name": u"Rai 4",       "row": "tv", "alias": None},
+    "858": {"name": u"Rai Premium", "row": "tv", "alias": None},
+    # DaddyLive labels id 856 "la7d" but the stream is actually Canale 5.
+    "856": {"name": u"Canale 5",    "row": "tv", "alias": None},
+    "854": {"name": u"Italia 1",    "row": "tv", "alias": None},
+    "857": {"name": u"20 Mediaset", "row": "tv", "alias": None},
+    "855": {"name": u"La7",         "row": "tv", "alias": None},
+}
+# par → daddy id, for the fallback chain on existing channels.
+_DADDY_FALLBACK = {info["alias"]: cid for cid, info in _DADDY.items() if info["alias"]}
+
+# Standalone DaddyLive channels (alias=None) appear as their own tile and ship a
+# bundled portrait poster at resources/media/sport_posters/<id>.png — register
+# their ids so _logo_for() uses it instead of the backend's generic thumbnail.
+# (Any NEW standalone daddy channel added above must get a poster generated too.)
+_KNOWN_POSTERS |= {cid for cid, info in _DADDY.items() if not info["alias"]}
+
+# Seeds tried in order: the current live domain first, then dlhd.pk (the stable
+# entry that 301-redirects to whatever the live domain becomes after a rotation).
+_DADDY_SEEDS = ("https://dlhd.st", "https://dlhd.pk", "https://daddylive.sx")
+_DADDY_DOMAIN_TTL = 6 * 3600
+_daddy_domain_cache = {"url": None, "ts": 0}
+
+
+def _daddy_domain():
+    """Current DaddyLive base URL, discovered by following a seed's redirect
+    (handles the frequent domain rotation).  Cached for _DADDY_DOMAIN_TTL."""
+    c = _daddy_domain_cache
+    if c["url"] and (time.time() - c["ts"]) < _DADDY_DOMAIN_TTL:
+        return c["url"]
+    for seed in _DADDY_SEEDS:
+        try:
+            from lib import requests as _rq
+            r = _rq.get(seed + "/", headers={'User-Agent': _NOWTV_UA},
+                        timeout=10, verify=False, allow_redirects=True)
+            base = '%s://%s' % (urlparse(r.url).scheme, urlparse(r.url).netloc)
+            c["url"], c["ts"] = base, time.time()
+            logger.info('[Sport] daddy domain = %s' % base)
+            return base
+        except Exception as exc:
+            logger.debug('[Sport] daddy_domain %s: %s' % (seed, exc))
+    return c["url"] or "https://dlhd.st"
+
+
+def _daddy_get(url, referer=None, timeout=12):
+    """GET a DaddyLive page: plain (system DNS) first, DoH fallback if blocked."""
+    hdrs = {'User-Agent': _NOWTV_UA, 'Accept': '*/*'}
+    if referer:
+        hdrs['Referer'] = referer
+    try:
+        from lib import requests as _rq
+        r = _rq.get(url, headers=hdrs, timeout=timeout, verify=False)
+        if r.status_code == 200 and r.text:
+            return r.text
+    except Exception as exc:
+        logger.debug('[Sport] daddy_get plain %s: %s' % (url, exc))
+    return _doh_get(url, headers=hdrs, timeout=timeout)
+
+
+def resolve_daddy(code):
+    """Resolve a DaddyLive premium id to (m3u8_url, referer), or None.
+    stream-<id>.php → player iframe → window.atob('<b64>') = signed m3u8."""
+    base = _daddy_domain()
+    page = _daddy_get(base + "/stream/stream-%s.php" % code, referer=base + "/")
+    if not page:
+        return None
+    m = re.search(r'<iframe[^>]*src="([^"]+)"', page)
+    if not m:
+        logger.debug('[Sport] daddy %s: no player iframe' % code)
+        return None
+    player = m.group(1)
+    ph = '%s://%s' % (urlparse(player).scheme, urlparse(player).netloc)
+    p2 = _daddy_get(player, referer=base + "/")
+    if not p2:
+        return None
+    mb = re.search(r"atob\('([^']+)'\)", p2) or re.search(r'atob\("([^"]+)"\)', p2)
+    if not mb:
+        logger.debug('[Sport] daddy %s: no atob() in player' % code)
+        return None
+    import base64
+    try:
+        url = base64.b64decode(mb.group(1)).decode('utf-8')
+    except Exception:
+        return None
+    if 'http' not in url:
+        return None
+    return url, ph + "/"
+
+
+def _daddy_ok(code):
+    """True if a daddy channel currently resolves to a live HLS manifest.
+    (Deny-listing is handled upstream in _channel_token_valid via _is_dead.)"""
+    res = resolve_daddy(code)
+    if not res:
+        return False
+    try:
+        from lib import requests as _rq
+        r = _rq.get(res[0], headers={'User-Agent': _NOWTV_UA, 'Referer': res[1]},
+                    timeout=6, verify=False, stream=True)
+        head = next(r.iter_content(64), b'') or b''
+        r.close()
+        ok = b'#EXTM3U' in head
+        logger.debug('[Sport] daddy_ok %s: %s' % (code, 'OK' if ok else 'CDN served no manifest'))
+        return ok
+    except Exception as exc:
+        logger.debug('[Sport] daddy_ok %s: %s' % (code, exc))
+        return False
+
+
+def _daddy_live_ids():
+    """Live Italian daddy ids + backend thumbs, from A1A124 (auto-updates as the
+    backend list changes).  Falls back to the curated map keys if unreachable."""
+    raw = _backend_get(_CODE_DADDY_IT)
+    ids = {}
+    if raw:
+        try:
+            for it in json.loads(raw).get('items', []):
+                mr = it.get('myresolve', '') or ''
+                if mr.startswith('daddyCode@@'):
+                    ids[mr.split('@@', 1)[1]] = it.get('thumbnail', '') or ''
+        except Exception:
+            pass
+    if not ids:
+        ids = {cid: '' for cid in _DADDY}
+    return ids
+
+
+def _daddy_channels(row):
+    """Standalone daddy channels for *row* (alias entries are fallbacks → excluded).
+    Limited to ids present in the live backend list, so it self-updates."""
+    live = _daddy_live_ids()
+    out = []
+    for cid, info in _DADDY.items():
+        if info['alias'] or info['row'] != row or cid not in live:
+            continue
+        out.append({"title": info['name'], "kind": "daddy", "par": cid,
+                    "fs": None, "logo": _logo_for(cid, live.get(cid, ''))})
+    return out
+
+
+def _daddy_fallback_listitem(par, title, art):
+    """Resolve *par*'s DaddyLive Italian feed to a playable ListItem, or None."""
+    dcode = _DADDY_FALLBACK.get(par)
+    if not dcode:
+        return None
+    logger.info('[Sport] %s → DaddyLive fallback %s' % (par, dcode))
+    res = resolve_daddy(dcode)
+    if res:
+        return _hls_listitem(res[0], title, art, referer=res[1])
+    return None
+
+
+def daddy_listitem(item):
+    """PLAY-TIME DaddyLive fallback for a channel whose primary (sky@@/freeshot)
+    opened but failed in ISA (DRM "Missing KeyId", DNS-blocked CDN…).  Returns a
+    playable ListItem or None (no daddy mapping, or the item is already daddy)."""
+    if getattr(item, 'sport_kind', '') == 'daddy':
+        return None
+    par = getattr(item, 'sport_par', '')
+    title = item.fulltitle or item.title or par
+    art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+           'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+    return _daddy_fallback_listitem(par, title, art)
+
+
+def _resolve_daddy_url(item):
+    """Resolve the channel's DaddyLive feed to (url, referer): its own id when
+    kind='daddy', else the mapped fallback id.  None if no daddy feed."""
+    kind = getattr(item, 'sport_kind', '')
+    par = getattr(item, 'sport_par', '')
+    code = par if kind == 'daddy' else _DADDY_FALLBACK.get(par)
+    if not code:
+        return None
+    return resolve_daddy(code)
+
+
+def daddy_ff_listitem(item):
+    """DaddyLive feed via inputstream.ffmpegdirect — for muxed-TS streams that
+    inputstream.adaptive can't decode (e.g. Zona DAZN: 'Codec id 27 require
+    extradata' → video disabled).  ffmpeg's full demuxer plays them.  Works for
+    any channel with a daddy feed, including kind='daddy'."""
+    res = _resolve_daddy_url(item)
+    if not res:
+        return None
+    par = getattr(item, 'sport_par', '')
+    title = item.fulltitle or item.title or par
+    art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+           'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+    logger.info('[Sport] %s → DaddyLive via ffmpegdirect' % par)
+    return _ffmpeg_listitem(res[0], title, art, referer=res[1])
+
+
 # ── playable ListItem construction ───────────────────────────────────────────
 def _clearkey_listitem(manifest, kid, key, title, art):
     li = xbmcgui.ListItem(path=manifest, offscreen=True)
@@ -972,6 +1443,25 @@ def _hls_listitem(url, title, art, referer=None):
     return li
 
 
+def _ffmpeg_listitem(url, title, art, referer=None):
+    """Live HLS via inputstream.ffmpegdirect — ffmpeg's demuxer handles muxed-TS
+    streams whose H.264 extradata inputstream.adaptive can't recover.  Headers go
+    on the URL pipe (ffmpegdirect forwards them to ffmpeg)."""
+    hdr = 'User-Agent=%s' % _NOWTV_UA
+    if referer:
+        hdr += '&Referer=%s&Origin=%s' % (referer, referer.rstrip('/'))
+    li = xbmcgui.ListItem(path=url + '|' + hdr, offscreen=True)
+    li.setLabel(title)
+    li.setContentLookup(False)
+    li.setMimeType("application/x-mpegURL")
+    li.setProperty("inputstream", "inputstream.ffmpegdirect")
+    li.setProperty("inputstream.ffmpegdirect.is_realtime_stream", "true")
+    li.setProperty("inputstream.ffmpegdirect.manifest_type", "hls")
+    if art:
+        li.setArt(art)
+    return li
+
+
 def resolve_listitem(item):
     """Resolve a live-channel Item to a playable xbmcgui.ListItem.
 
@@ -985,6 +1475,12 @@ def resolve_listitem(item):
     art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
            'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
 
+    if kind == 'daddy':
+        res = resolve_daddy(par)
+        if res:
+            return _hls_listitem(res[0], title, art, referer=res[1])
+        return None
+
     if kind == 'sky':
         sky = resolve_sky(par)
         if sky:
@@ -995,13 +1491,13 @@ def resolve_listitem(item):
             url = resolve_freeshot(fs)
             if url:
                 return _hls_listitem(url, title, art, referer=_FREESHOT_REFERER)
-        return None
+        return None   # DaddyLive fallback is tried separately by the play worker
 
     if kind == 'freeshot':
         url = resolve_freeshot(par)
         if url:
             return _hls_listitem(url, title, art, referer=_FREESHOT_REFERER)
-        return None
+        return None   # DaddyLive fallback is tried separately by the play worker
 
     if kind == 'daddycode':
         res = resolve_daddycode(par)
