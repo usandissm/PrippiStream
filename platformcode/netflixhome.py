@@ -1261,15 +1261,19 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         in *items*, off the GUI thread.  Refreshes the hero if it is currently
         parked on one of these live channels.  Best-effort — any failure leaves
         the hero in its normal (no-EPG) state."""
-        titles = [getattr(it, 'fulltitle', '') or getattr(it, 'title', '')
-                  for it in items if getattr(it, 'is_live_channel', False)]
-        titles = [t for t in titles if t]
-        if not titles:
+        # Key by the stable 'par' (e.g. 'skycinemacomedy'), NOT the display title:
+        # the backend sometimes hands back a programme name as the title, which then
+        # fails to map to a guide channel (channels silently lost their EPG).
+        keys = [getattr(it, 'sport_par', '') or getattr(it, 'fulltitle', '')
+                or getattr(it, 'title', '')
+                for it in items if getattr(it, 'is_live_channel', False)]
+        keys = [k for k in keys if k]
+        if not keys:
             return
 
         def _worker():
             try:
-                skyepg.prefetch(titles)
+                skyepg.prefetch(keys)
             except Exception as exc:
                 logger.error('[NetflixHome] EPG prefetch: %s' % str(exc))
                 return
@@ -1694,21 +1698,30 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
         live_plot = None
         if getattr(it, 'is_live_channel', False):
             try:
-                epg = skyepg.now_on(title)
+                # Look up by the stable 'par' (must match the key prefetch used).
+                epg = skyepg.now_on(getattr(it, 'sport_par', '') or title)
             except Exception:
                 epg = None
             if epg:
                 when = ('%s–%s' % (epg['start'], epg['end'])) if epg.get('start') else ''
                 live_meta = '  •  '.join(
                     p for p in [u'[COLOR FFE50914]● IN ONDA ADESSO[/COLOR]', when] if p)
-                # plot: show name bold, then "S2 Ep7 · episode title", then synopsis
+                # plot: show name bold, then "S2 Ep7 · episode title", the upcoming
+                # programme, the synopsis, and finally the previous programme (like a
+                # classic TV guide — prev/now/next).
                 live_plot = '[B]%s[/B]' % epg['prog']
                 ep_line = '  ·  '.join(
                     p for p in [epg.get('ep_info', ''), epg.get('ep_title', '')] if p)
                 if ep_line:
                     live_plot += '\n' + ep_line
+                if epg.get('next_prog'):
+                    live_plot += u'\n[COLOR FFE50914]A seguire[/COLOR]  %s  ·  %s' % (
+                        epg.get('next_start', ''), epg['next_prog'])
                 if epg.get('synopsis'):
                     live_plot += '\n\n' + epg['synopsis']
+                if epg.get('prev_prog'):
+                    live_plot += u'\n\n[COLOR FF777777]Prima:  %s  ·  %s[/COLOR]' % (
+                        epg.get('prev_start', ''), epg['prev_prog'])
         try:
             img = fanart or thumb
             if img:
@@ -1985,7 +1998,14 @@ class NetflixHomeWindow(xbmcgui.WindowXML):
                     self._last_focused_row = new_row
                     self._schedule_hero(new_row)
                 else:
-                    # last real row → loop back to first real row via background thread bounce
+                    # last real row. By default DON'T wrap back to the top — staying put
+                    # is what most users expect (opt-in via the setting, like the grid).
+                    try:
+                        if not config.get_setting('home_loop_rows'):
+                            return
+                    except Exception:
+                        return
+                    # loop back to first real row via background thread bounce
                     cw_empty = not (self.rows_data and self.rows_data[0][1])
                     new_row = 1 if (cw_empty and self._num_rows > 1) else 0
                     for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
@@ -5061,10 +5081,13 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
 
 
 # Public Invidious instances used as YouTube search API (tried in order, first success wins)
-def _youtube_search_trailer(title, year=''):
+def _youtube_search_trailer(title, year='', kind=''):
     """
-    Search YouTube for an Italian trailer using the YouTube internal API (youtubei v1).
+    Search YouTube for a trailer using the YouTube internal API (youtubei v1).
     No API key required. Returns the YouTube video_id string or None.
+    *kind* tunes the query: 'anime' looks for the OPENING (far easier to find than an
+    Italian trailer), 'kdrama' uses plain/English trailer queries (IT trailers rarely
+    exist); anything else keeps the proven Italian-trailer queries for film/serie.
     """
     if _dl_active():
         return None
@@ -5154,27 +5177,25 @@ def _youtube_search_trailer(title, year=''):
             # Fallback: first result
             return videos[0][0] if videos else None
 
-        # Query 1: title + year + "trailer ufficiale italiano"
-        parts = [title]
-        if year:
-            parts.append(year)
-        parts.append('trailer ufficiale italiano')
-        vid = _yt_search(' '.join(parts))
-        if vid:
-            logger.info('[YTSearch] "%s" → query1 → %s' % (title, vid))
-            return vid
-
-        # Query 2: title + "trailer italiano" (drop year)
-        vid = _yt_search('%s trailer italiano' % title)
-        if vid:
-            logger.info('[YTSearch] "%s" → query2 → %s' % (title, vid))
-            return vid
-
-        # Query 3: English fallback
-        vid = _yt_search('%s%s trailer official' % (title, (' ' + year) if year else ''))
-        if vid:
-            logger.info('[YTSearch] "%s" → query3 → %s' % (title, vid))
-        return vid
+        # Build the query list by content kind.
+        if kind == 'anime':
+            queries = ['%s opening' % title, '%s sigla' % title,
+                       '%s anime opening' % title, '%s trailer' % title]
+        elif kind == 'kdrama':
+            queries = ['%s trailer' % title, '%s kdrama trailer' % title,
+                       '%s korean drama trailer' % title]
+        else:
+            queries = [
+                ' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']),
+                '%s trailer italiano' % title,
+                '%s%s trailer official' % (title, (' ' + year) if year else ''),
+            ]
+        for i, q in enumerate(queries, 1):
+            vid = _yt_search(q)
+            if vid:
+                logger.info('[YTSearch] "%s" (%s) → q%d → %s' % (title, kind or 'std', i, vid))
+                return vid
+        return None
 
     except Exception as exc:
         logger.error('[YTSearch] %s' % str(exc)[:100])
@@ -5246,8 +5267,8 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
             def _make_url(video_id):
                 return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
-            # YouTube search primary
-            vid = _youtube_search_trailer(title, year)
+            # YouTube search primary (kind tunes anime→opening / kdrama→trailer)
+            vid = _youtube_search_trailer(title, year, _trailer_kind(it_obj))
             # TMDB fallback: if YouTube finds nothing (all restricted or no results)
             if not vid and item_tmdb_id:
                 vid = _tmdb_get_trailer(item_tmdb_id, item_ctype)
@@ -6130,7 +6151,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             # Normal item: play trailer
             t2 = threading.Thread(
                 target=self._fetch_and_start_trailer,
-                args=(title, year, tmdb_id_tr, ctype_tr, trailer),
+                args=(title, year, tmdb_id_tr, ctype_tr, trailer, _trailer_kind(item)),
             )
         t2.daemon = True
         t2.start()
@@ -6171,7 +6192,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception as exc:
             logger.error('[DetailWindow] fanart slideshow: %s' % str(exc)[:80])
 
-    def _fetch_and_start_trailer(self, title, year, tmdb_id, ctype, fallback_url=''):
+    def _fetch_and_start_trailer(self, title, year, tmdb_id, ctype, fallback_url='', kind=''):
         """Trailer search: YouTube first (age-restriction filtered), then TMDB, then
         the pre-existing URL from the channel as last resort. Runs in background thread."""
         if self._close_requested:
@@ -6180,8 +6201,8 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             def _make_url(video_id):
                 return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
 
-            # 1) YouTube search (filters age-restricted results)
-            vid = _youtube_search_trailer(title, year)
+            # 1) YouTube search (filters age-restricted results; kind tunes the query)
+            vid = _youtube_search_trailer(title, year, kind)
             trailer_url = _make_url(vid) if vid else None
 
             # 2) TMDB official videos if YouTube found nothing
@@ -8427,6 +8448,7 @@ BROWSE_HERO_META   = 152
 BROWSE_HERO_PLOT   = 153
 BROWSE_LOADING     = 170
 BROWSE_EMPTY       = 171
+BROWSE_PARK        = 165   # off-screen button: focus is parked here during grid appends
 BROWSE_TAB_MAP = {BROWSE_TAB_FILM: 'film', BROWSE_TAB_SERIE: 'serie',
                   BROWSE_TAB_KDRAMA: 'kdrama', BROWSE_TAB_ANIME: 'anime'}
 
@@ -8438,6 +8460,42 @@ _br_cb01_genres   = {'film': None, 'serie': None}  # key -> {norm_name: url}
 def _br_clean(s):
     import re as _re
     return _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', s or '').strip()
+
+
+# SC "Korean drama" genre (type 'all', id 26). The dedicated K-DRAMA macro tab
+# (type=tv&country[]=118) is the canonical, more complete browse for K-dramas, so we
+# drop this genre from the Film/Serie/K-Drama sidebars to remove the duplication.
+def _is_kdrama_genre(name, gid):
+    if str(gid) == '26':
+        return True
+    n = (name or '').lower()
+    return any(k in n for k in ('korean', 'corean', 'k-drama', 'kdrama'))
+
+
+# Adult / sensitive AnimeUnity genres, hidden unless the user opts in (setting
+# 'show_adult_anime'). Substring match for the explicit ones (no false positives),
+# exact match for the 2-letter BL/GL codes.
+def _is_adult_anime_genre(name):
+    n = (name or '').strip().lower()
+    if n in ('bl', 'gl', 'boys love', 'girls love', 'shounen ai', 'shoujo ai',
+             'shounen-ai', 'shoujo-ai', 'smut'):
+        return True
+    return any(k in n for k in ('hentai', 'ecchi', 'yaoi', 'yuri'))
+
+
+def _trailer_kind(item):
+    """'anime' | 'kdrama' | '' — used to tune the YouTube trailer query (anime prefer
+    the opening; k-dramas rarely have an Italian trailer)."""
+    try:
+        ch = (getattr(item, '_search_channel', '') or getattr(item, 'channel', '') or '').lower()
+        if 'anime' in ch:
+            return 'anime'
+        info = getattr(item, 'infoLabels', None) or {}
+        if str(info.get('original_language', '') or '').lower() == 'ko':
+            return 'kdrama'
+    except Exception:
+        pass
+    return ''
 
 
 def _br_norm_title(it):
@@ -8504,6 +8562,10 @@ def _br_fetch_genres(macro):
                 name = (g.get('name') or '').strip()
                 gid  = g.get('id')
                 key  = name.lower()
+                # Drop the "Korean drama" genre: superseded by the dedicated K-DRAMA
+                # macro tab (avoids the duplicate the tester flagged).
+                if _is_kdrama_genre(name, gid):
+                    continue
                 if name and gid is not None and key not in seen:
                     seen.add(key)
                     picked.append({'name': name, 'sc_id': str(gid), 'anime_item': None})
@@ -8511,10 +8573,16 @@ def _br_fetch_genres(macro):
             genres.extend(picked)
         elif macro == 'anime':
             import channels.animeunity as _au
+            try:
+                show_adult = bool(config.get_setting('show_adult_anime'))
+            except Exception:
+                show_adult = False
             seed = _Item(channel='animeunity', url=_au.host, args={})
             for g in (_au.genres(seed) or []):
                 name = _br_clean(getattr(g, 'title', ''))
                 if name:
+                    if not show_adult and _is_adult_anime_genre(name):
+                        continue   # hide 18+/sensitive anime genres unless opted in
                     genres.append({'name': name, 'sc_id': None, 'anime_item': g})
     except Exception as exc:
         logger.error('[Browse] genres %s: %s' % (macro, str(exc)[:160]))
@@ -8583,6 +8651,8 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
         self._items    = []                 # currently displayed titles (accumulated)
         self._last_pos = 0
         self._last_hover = None              # last grid pos hovered by mouse (throttle)
+        self._restore_to = None              # one-shot: grid pos to re-assert after an append
+        self._restore_until = 0              # deadline (epoch s) for the restore window
         self._alive    = True
         self._lock     = threading.Lock()
         self._cancelled = threading.Event()
@@ -8592,6 +8662,14 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
         self._sc_total = 0                  # SC totalCount for the current filter (0=unknown)
         self._au_page  = 0                  # AnimeUnity page index
         self._has_more = False              # more pages available → infinite scroll
+        self._sc_phase = 0                  # Plan B: 0=block0, 1=year walk, 2=drain deferred
+        self._sc_year  = None               # Plan B: current year being paged
+        self._sc_grand = 0                  # Plan B: grand total for the filter
+        self._sc_retry = 0                  # Plan B: retries on ignored/throttled year
+        self._sc_deferred = []              # Plan B: years SC throttled → retried in drain phase
+        self._sc_defer_n  = {}              # Plan B: per-year defer count (caps the drain)
+        self._sc_resume   = {}              # Plan B: per-year page to resume from in the drain
+        self._sc_dyear    = None            # Plan B: deferred year being drained (phase 2)
         self._loading  = False              # a load is in flight (guards load-more)
         self._inited   = False              # guard: onInit re-fires after a fullscreen trailer/video
 
@@ -8674,6 +8752,12 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
         if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
                    ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
             if self.getFocusId() == BROWSE_GRID:
+                # ARROW keys only: re-assert the post-append position on the GUI thread,
+                # in-band with the auto-repeat flood that a bg restore loses to when DOWN
+                # is held. Mouse wheel / hover are deliberately excluded — they use only
+                # _arm_restore's bg loop, the path confirmed flicker-free.
+                if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT):
+                    self._apply_restore()
                 threading.Thread(target=self._deferred_hero_update, daemon=True).start()
 
     def _hover_hero(self):
@@ -8731,8 +8815,10 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
                 pass
 
     def _maybe_load_more(self, pos):
-        """Infinite scroll: load the next page when focus nears the grid end."""
-        if self._has_more and not self._loading and pos >= len(self._items) - 14:
+        """Infinite scroll: load the next page well BEFORE focus reaches the grid end,
+        so the next block has appeared by the time the user gets there — they should
+        rarely sit on the very last card waiting (where DOWN has nowhere to go)."""
+        if self._has_more and not self._loading and pos >= len(self._items) - 30:
             self._load_titles(append=True)
 
     def _deferred_hero_update(self):
@@ -8807,8 +8893,18 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
     def _load_titles(self, append=False):
         if not self._genres:
             return
-        if append and (self._loading or not self._has_more):
-            return
+        if append:
+            # Atomically claim the single in-flight append slot. Without the lock,
+            # keyboard auto-repeat fires many _maybe_load_more calls that all pass a
+            # plain `not self._loading` check before the bg thread sets the flag →
+            # concurrent appends double-add items and fight over the grid selection,
+            # which yanks the keyboard focus back to the top. (The mouse path
+            # self-heals because the selection follows the cursor; the keyboard
+            # path has no such correction, so the jump only shows with the arrows.)
+            with self._lock:
+                if self._loading or not self._has_more:
+                    return
+                self._loading = True
         macro = self._macro
         genre = dict(self._genres[self._genre_idx])
         sort  = self._sort
@@ -8838,6 +8934,15 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
                 self._sc_total = 0
                 self._au_page = 0
                 self._has_more = False
+                # Plan B (year-partition) pagination cursor — see _fetch_sc_pages.
+                self._sc_phase = 0       # 0 = unfiltered block 0, 1 = year walk, 2 = drain
+                self._sc_year = None     # current year being paged
+                self._sc_grand = 0       # unfiltered/filtered grand total
+                self._sc_retry = 0       # retries on an 'ignored'/throttled year
+                self._sc_deferred = []   # years SC throttled → retried in drain phase
+                self._sc_defer_n = {}    # per-year defer count (caps the drain)
+                self._sc_resume = {}     # per-year page to resume from in the drain
+                self._sc_dyear = None    # deferred year being drained (phase 2)
                 with self._lock:
                     self._items = []
             try:
@@ -8864,17 +8969,16 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
                     self._items = _onepiece_curate(self._items, want_extras=False)
                 loaded = len(self._items)
             if append:
-                # Keep the user where they were — addItems can reset the panel
-                # selection to 0, which would yank focus back to the top.
+                # Keep the user exactly where they were. addItems on the FOCUSED panel
+                # animates the selection back to the top (a ~0.5s scroll glide up and
+                # back). _append_grid mutates while focus is parked off-screen so the
+                # panel never animates; _arm_restore is a cheap no-op backup.
                 try:
                     keep = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
                 except Exception:
                     keep = self._last_pos
-                self._append_grid(new_unique)
-                try:
-                    self.getControl(BROWSE_GRID).selectItem(keep)
-                except Exception:
-                    pass
+                keep = self._append_grid(new_unique, keep)
+                self._arm_restore(keep)
             else:
                 self._populate_grid(self._items)
             try:
@@ -8924,7 +9028,7 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
                     logger.error('[Browse] CB01 fetch: %s' % str(exc)[:160])
         return sc_new, other_new
 
-    def _sc_archive_url(self, macro, genre):
+    def _sc_archive_url(self, macro, genre, year=None):
         import channels.streamingcommunity as _sc
         ctype = 'movie' if macro == 'film' else 'tv'   # serie + kdrama → tv
         url = _sc.host + '/it/archive?type=' + ctype
@@ -8932,6 +9036,11 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
             url += '&genre[]=' + genre['sc_id']
         if macro == 'kdrama':
             url += '&country[]=%d' % _sc.KOREA_COUNTRY_ID   # South Korea
+        if year:
+            # Per-year partition: SC caps the archive at page 20 (1200 titles) per
+            # filter, but the (undocumented) &year=YYYY filter is exact and each year
+            # stays well under 1200 → walking years bypasses the cap. Verified live.
+            url += '&year=%d' % year
         return url
 
     # SC caps archive pagination: page>20 returns HTTP 503 "Page limit reached (20)".
@@ -8940,52 +9049,206 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
     # 1200 (recent) / oldest-of-1200 (old) are reachable — a hard site limit.
     _MAX_SC_PAGE = 20
 
+    _MIN_SC_YEAR = 1901      # SC archive rejects year<1901 (HTTP 422)
+
+    # Drain-phase tuning (a throttled — 'ignored' — year is always transient, so it
+    # must be retried until it succeeds, never dropped): _SC_DEFER_CAP re-queues each
+    # year up to N times; _SC_DRAIN_RETRY is the in-place drain retries per pop. These
+    # values give full year coverage in simulation up to ~60% sustained throttling
+    # while staying bounded (always terminates). Real throttling is far lower.
+    _SC_DEFER_CAP   = 8
+    _SC_DRAIN_RETRY = 3
+
     def _fetch_sc_pages(self, macro, genre, n_pages):
-        """Fetch up to *n_pages* SC archive pages (60 titles each) via ?page=N,
-        clamped to SC's 20-page limit. 'recent' → pages 1,2,3… ; 'old' → from the
-        last reachable page down to 1, each page reversed (oldest first)."""
+        """Fetch up to *n_pages* SC archive pages (60/each), bypassing SC's hard
+        1200-title (page-20) cap by partitioning the catalog with the &year=YYYY
+        filter (exact, disjoint per year, each year well under 1200 — verified).
+
+        'recent': block 0 = the unfiltered newest ≤1200 (fast first paint + covers
+        no-year titles in the newest set), then a year walk descending from the
+        CURRENT year down to 1901 — every year, not from block 0's oldest year, so the
+        years only partially covered by block 0 are not skipped. 'old': years ascending
+        from 1901. Years SC throttled ('ignored' the &year filter) during the walk are
+        queued and retried in a final drain phase. Cross-segment duplicates are removed
+        by the caller's _dedup_new (by title)."""
         import channels.streamingcommunity as _sc
         from core.item import Item as _Item
-        url = self._sc_archive_url(macro, genre)
-        cap = self._MAX_SC_PAGE
-        out = []
-        for _ in range(max(1, n_pages)):
-            if self._cancelled.is_set():
-                break
-            if self._sort == 'old':
-                if not self._sc_total:
-                    self._sc_total = _sc.archive_total(url)
-                    last = max(1, (self._sc_total + 59) // 60)
-                    self._sc_page = min(cap, last)   # clamp to the page-20 limit
-                page = self._sc_page
-                if page < 1:
-                    self._has_more = False
-                    break
-            else:
-                page = self._sc_page
-                if page > cap or (self._sc_total and (page - 1) * 60 >= self._sc_total):
-                    self._has_more = False
-                    break
+        import datetime
+        cap   = self._MAX_SC_PAGE
+        maxy  = datetime.date.today().year + 1
+        out   = []
+
+        def _fetch(url, page):
             try:
-                items, total = _sc.browse(_Item(channel='streamingcommunity', url=url, page=page))
+                items, total = _sc.browse(
+                    _Item(channel='streamingcommunity', url=url, page=page))
             except Exception as exc:
-                logger.error('[Browse] SC browse p%d: %s' % (page, str(exc)[:140]))
-                items, total = [], self._sc_total
-            if total:
-                self._sc_total = total
-            if self._sort == 'old':
-                items = list(reversed(items))
-                self._sc_page = page - 1
-                self._has_more = self._sc_page >= 1
-            else:
-                self._sc_page = page + 1
-                self._has_more = (self._sc_page <= cap and bool(self._sc_total)
-                                  and (self._sc_page - 1) * 60 < self._sc_total)
+                logger.error('[Browse] SC browse y=%s p%d: %s'
+                             % (self._sc_year, page, str(exc)[:120]))
+                items, total = [], 0
             for x in items:
                 x._search_channel = 'sc'
-            out.extend(items)
-            if not items:
-                self._has_more = False
+            return items, total
+
+        def _seg_done(items, total):
+            return (not items) or (self._sc_page > cap) \
+                or (total and (self._sc_page - 1) * 60 >= total)
+
+        def _ignored(items, want):
+            """True if SC did NOT apply the &year=want filter (transient throttling →
+            it returned the catalog newest instead). Throttle-proof: judged by the
+            per-title release years, not the (falsifiable) totalCount. A real &year
+            page is (near-)monoyear; a throttled one is the catalog-newest spread of
+            years → flag when fewer than half of the known-year items match `want`.
+            (The plain 'want not in years' test missed the CURRENT year, whose titles
+            ARE the catalog newest → its deep pages got silently skipped.)"""
+            yr_items = [y for y in (_br_year(x) for x in items) if y]
+            if not yr_items:
+                return False
+            matched = sum(1 for y in yr_items if y == want)
+            return matched * 2 < len(yr_items)
+
+        def _year_fetch(direction, lo, hi):
+            """Fetch one page of the current year; advance to the next year when the
+            year is exhausted, empty, or 'ignored'. Every year in [1901, cur_year] is a
+            valid filter, so an 'ignored' response there is always transient throttling
+            (never a genuine empty) → retry briefly, then DEFER the year (retried in the
+            drain phase once load eases, resuming from the page that failed) instead of
+            skipping it for good, which is what opened the year gaps before."""
+            items, total = _fetch(self._sc_archive_url(macro, genre, self._sc_year),
+                                  self._sc_page)
+            if items and _ignored(items, self._sc_year):
+                self._sc_retry += 1
+                if self._sc_retry < 2:
+                    import time as _t
+                    _t.sleep(0.4)                # let transient throttling ease
+                    self._has_more = True        # retry same year/page next call
+                    return []
+                self._sc_retry = 0               # defer this year, step on for now
+                if self._sc_defer_n.get(self._sc_year, 0) < self._SC_DEFER_CAP:
+                    self._sc_defer_n[self._sc_year] = \
+                        self._sc_defer_n.get(self._sc_year, 0) + 1
+                    self._sc_resume[self._sc_year] = self._sc_page   # resume here later
+                    if self._sc_year not in self._sc_deferred:
+                        self._sc_deferred.append(self._sc_year)
+                self._sc_year += direction
+                self._sc_page = 1
+                self._has_more = (lo <= self._sc_year <= hi) or bool(self._sc_deferred)
+                return []
+            self._sc_retry = 0
+            self._sc_page += 1
+            if _seg_done(items, total):
+                self._sc_year += direction
+                self._sc_page = 1
+            # Keep paging alive while years remain in range OR still pending in the
+            # drain queue — without the deferred-OR the walk's last in-range year sets
+            # has_more False and the scroll loop exits BEFORE the drain phase ever runs.
+            self._has_more = (lo <= self._sc_year <= hi) or bool(self._sc_deferred)
+            return items
+
+        def _drain_fetch():
+            """Phase 2: retry the years SC throttled during the walk (load has since
+            eased). One deferred year at a time; bounded by _sc_defer_n so it always
+            terminates. Re-defers a still-throttled year up to its cap, then drops it."""
+            if self._sc_dyear is None:
+                if not self._sc_deferred:
+                    self._has_more = False
+                    return []
+                self._sc_dyear = self._sc_deferred.pop(0)
+                self._sc_page  = self._sc_resume.get(self._sc_dyear, 1)  # resume, not p1
+                self._sc_retry = 0
+            items, total = _fetch(self._sc_archive_url(macro, genre, self._sc_dyear),
+                                  self._sc_page)
+            if items and _ignored(items, self._sc_dyear):
+                self._sc_retry += 1
+                if self._sc_retry < self._SC_DRAIN_RETRY:
+                    import time as _t
+                    _t.sleep(0.5)
+                    self._has_more = True
+                    return []
+                self._sc_retry = 0
+                if self._sc_defer_n.get(self._sc_dyear, 0) < self._SC_DEFER_CAP:
+                    self._sc_defer_n[self._sc_dyear] = \
+                        self._sc_defer_n.get(self._sc_dyear, 0) + 1
+                    self._sc_resume[self._sc_dyear] = self._sc_page   # resume here later
+                    self._sc_deferred.append(self._sc_dyear)
+                self._sc_dyear = None
+                self._has_more = bool(self._sc_deferred)
+                return []
+            self._sc_retry = 0
+            self._sc_page += 1
+            if _seg_done(items, total):
+                self._sc_dyear = None             # this year done → next on next call
+            self._has_more = bool(self._sc_deferred) or self._sc_dyear is not None
+            return items
+
+        def _one():
+            """Do one archive fetch, advance the year/phase cursor, return items."""
+            cur_year = datetime.date.today().year
+            # ── phase 2: drain the years SC throttled during the walk (any sort) ──
+            if self._sc_phase == 2:
+                return _drain_fetch()
+            # ── 'old' sort → years ascending (oldest first) ──
+            if self._sort == 'old':
+                if self._sc_year is None:
+                    self._sc_year, self._sc_page = self._MIN_SC_YEAR, 1
+                if self._sc_year > maxy:
+                    self._sc_phase = 2
+                    return _drain_fetch()
+                return _year_fetch(+1, self._MIN_SC_YEAR, maxy)
+            # ── 'recent', phase 0: unfiltered newest (block 0) ──
+            if self._sc_phase == 0:
+                items, total = _fetch(self._sc_archive_url(macro, genre), self._sc_page)
+                if total:
+                    self._sc_total = self._sc_grand = total
+                self._sc_page += 1
+                if self._sc_grand and self._sc_grand > cap * 60:
+                    # Large filter: keep block 0 to ONE page only (fast first paint +
+                    # grand total + the no-year titles in the newest set), then walk
+                    # EVERY year from the current one down to 1901. A full 20-page
+                    # block 0 re-fetched the entire newest-1200 set as duplicates during
+                    # the walk → the grid stalled at ~1200 ("stuck at 1201"); a 1-page
+                    # block 0 overlaps the walk by a single page, which the new-item
+                    # counter in the gather loop skips. Walking from the current year
+                    # (not block 0's oldest year) is what closes the 2024→2017 gap.
+                    self._sc_phase = 1
+                    self._sc_year  = cur_year
+                    self._sc_page  = 1
+                    self._has_more = True
+                elif _seg_done(items, total):
+                    self._has_more = False        # small filter (≤1200) fully paged
+                else:
+                    self._has_more = True         # small filter: keep paging unfiltered
+                return items
+            # ── 'recent', phase 1: years descending through the whole range ──
+            if self._sc_year is None or self._sc_year < self._MIN_SC_YEAR:
+                self._sc_phase = 2
+                return _drain_fetch()
+            return _year_fetch(-1, self._MIN_SC_YEAR, cur_year + 1)
+
+        # Gather until we have ~target NEW (not-already-shown) titles, not just raw
+        # pages: the year walk overlaps the newest titles (block 0 + the newest slice
+        # of each recent year), so counting raw pages would let an all-duplicate batch
+        # leave the grid unchanged ("stuck at 1201"). Counting post-dedup novelty
+        # powers through those duplicate pages so every batch visibly grows the grid.
+        with self._lock:
+            seen = {_br_norm_title(it) for it in self._items}
+        seen.discard('')
+        target_new = 30 * max(1, n_pages)
+        got_new, attempts = 0, 0
+        while got_new < target_new and attempts < 40:
+            if self._cancelled.is_set():
+                break
+            items = _one()
+            attempts += 1
+            for it in items:
+                nt = _br_norm_title(it)
+                if nt and nt not in seen:
+                    seen.add(nt)
+                    got_new += 1
+            if items:
+                out.extend(items)
+            if not self._has_more:
                 break
         return out
 
@@ -9083,13 +9346,121 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[Browse] populate grid: %s' % str(exc))
 
-    def _append_grid(self, items):
+    def _append_grid(self, items, keep=0):
+        """Append new cards WITHOUT the scroll-to-top glide. addItems on a FOCUSED
+        panel animates the selection back to position 0 (a ~0.5s cubic scroll up, then
+        our restore scrolls back) — visible with both mouse and keyboard. Fix (same
+        trick the Continua-a-guardare row uses): park focus on an off-screen button so
+        the panel is UNFOCUSED while we addItems + re-select the spot; an unfocused
+        container sets its position with no animation, so refocusing lands the user
+        exactly where they were, no movement at all. The park button's self-referencing
+        navigation means a held-down arrow key does nothing during the parked instant.
+        Returns the grid position it pinned (the caller arms its restore backup on it)."""
         if self._cancelled.is_set() or not items:
-            return
+            return keep
         try:
-            self.getControl(BROWSE_GRID).addItems([self._make_li(it) for it in items])
+            grid = self.getControl(BROWSE_GRID)
+            try:
+                need_park = (self.getFocusId() == BROWSE_GRID)
+            except Exception:
+                need_park = False
+            parked = False
+            if need_park:
+                # Move focus off the grid so addItems can't animate the panel back to
+                # the top. CRUCIAL: addItems runs synchronously, but a focus change can
+                # lag behind a held-key auto-repeat flood — so addItems would hit the
+                # STILL-focused grid and reset to 0 (the occasional keyboard
+                # scroll-to-top; the mouse never floods input, so it never raced). Wait
+                # (re-asserting) until the park really took effect before mutating.
+                for _ in range(24):
+                    try:
+                        if self.getFocusId() == BROWSE_PARK:
+                            parked = True
+                            break
+                        self.setFocusId(BROWSE_PARK)
+                    except Exception:
+                        break
+                    xbmc.sleep(5)
+                if not parked:
+                    logger.error('[Browse] append: focus-park not confirmed')
+            # Position is frozen now (focus is OFF the grid), so read the REAL current
+            # spot here rather than trusting the value captured before the park wait —
+            # during that wait the held key kept moving the selection, so the old value
+            # was stale.
+            try:
+                pos = int(grid.getSelectedPosition() or 0)
+            except Exception:
+                pos = keep
+            if pos <= 0:
+                pos = keep
+            try:
+                grid.addItems([self._make_li(it) for it in items])
+                if pos > 0:
+                    grid.selectItem(pos)        # single, unfocused → no scroll animation
+            finally:
+                if parked:
+                    # SINGLE refocus. Re-asserting setFocusId(GRID) when the grid is
+                    # ALREADY focused makes Kodi reset the panel selection to 0 — that
+                    # re-assert loop was itself the "returns to the top" regression.
+                    try:
+                        self.setFocusId(BROWSE_GRID)
+                    except Exception:
+                        pass
+            return pos
         except Exception as exc:
             logger.error('[Browse] append grid: %s' % str(exc))
+            return keep
+
+    def _arm_restore(self, keep):
+        """Hold the post-append grid selection at *keep* so addItems can't drag focus
+        away. The bg re-assert loop below is the ONLY thing the mouse path uses — it is
+        the behaviour confirmed flicker-free in testing, so it must stay exactly this:
+        re-select keep a few times over a short window, stopping the instant the user
+        has scrolled past it (never fighting forward navigation). It also stamps a brief
+        window so onAction can re-assert on the GUI thread for held-down ARROW keys,
+        whose auto-repeat flood out-races a bg-only restore."""
+        if keep <= 0:
+            self._restore_to = None
+            return
+        import time as _t
+        self._restore_to = keep
+        self._restore_until = _t.time() + 0.5
+        try:
+            grid = self.getControl(BROWSE_GRID)
+        except Exception:
+            return
+        for _ in range(5):
+            try:
+                if int(grid.getSelectedPosition() or 0) >= keep:
+                    self._restore_to = None     # already at/past keep (focus-park worked)
+                    return
+                grid.selectItem(keep)           # backup: a real reset slipped through
+            except Exception:
+                return
+            xbmc.sleep(20)
+
+    def _apply_restore(self):
+        """GUI-thread re-assert, called from onAction on the ARROW keys ONLY (the mouse
+        path relies solely on _arm_restore's bg loop). Holds the selection at the armed
+        keep until the user scrolls past it or the short window lapses — beating the
+        auto-repeat input flood that a background thread loses to when DOWN is held."""
+        keep = self._restore_to
+        if keep is None:
+            return
+        import time as _t
+        if _t.time() > self._restore_until:
+            self._restore_to = None
+            return
+        try:
+            if self.getFocusId() != BROWSE_GRID:
+                return                          # not the grid now → retry later, don't disarm
+            grid = self.getControl(BROWSE_GRID)
+            if int(grid.getSelectedPosition() or 0) >= keep:
+                self._restore_to = None         # at/past keep (focus-park worked) → done
+            else:
+                grid.selectItem(keep)           # backup: a real reset slipped through
+        except Exception:
+            self._restore_to = None
 
     def _update_hero(self, item):
         if item is None:
@@ -9175,9 +9546,36 @@ class NetflixBrowseWindow(xbmcgui.WindowXML):
 xbmc.log('[NetflixBrowse] MODULE: NetflixBrowseWindow defined OK', xbmc.LOGINFO)
 
 
+def _purge_legacy_videolibrary():
+    """One-shot removal of the abandoned video-library saved content (the .strm/.nfo
+    the old Stream4me 'save to library' feature created). PrippiStream has no
+    video-library UI, so these files are orphaned. Runs ONCE per device after the
+    update that ships this code (guarded by a marker file) → propagates to every
+    install. Only the addon's OWN default library dir is touched; a user-customised
+    videolibrarypath (which could point at a real external folder) is left alone."""
+    try:
+        import os, shutil
+        data = config.get_data_path()
+        marker = os.path.join(data, '.vl_purged_v1')
+        if os.path.exists(marker):
+            return
+        vl_dir = os.path.join(data, 'videolibrary')   # addon-owned default location
+        if os.path.isdir(vl_dir):
+            shutil.rmtree(vl_dir, ignore_errors=True)
+            logger.info('[VLPurge] removed legacy videolibrary data: %s' % vl_dir)
+        try:
+            with open(marker, 'w') as fh:
+                fh.write('1')
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.error('[VLPurge] %s' % str(exc))
+
+
 def open_netflix_home():
     """Public entry point — called from launcher.py."""
     _shutdown_event.clear()   # reset shutdown flag for this session
+    _purge_legacy_videolibrary()   # one-shot legacy library cleanup (per device)
     # The previous session may have been force-killed (blocked network threads →
     # "script didn't stop in 5 seconds"), leaving module locks/flags in a broken
     # state that would deadlock playback.  Reset them for a clean slate.

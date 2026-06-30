@@ -34,6 +34,15 @@
 
     <controls>
 
+        <!-- Off-screen "focus park" button (id=165). Focus is parked here for an
+             instant while the grid is repopulated, so addItems can't animate the panel
+             back to the top (scroll-to-top glide). Self-referencing navigation means a
+             held-down arrow key does nothing while focus is parked here. -->
+        <control type="button" id="165">
+            <left>-40</left><top>-40</top><width>1</width><height>1</height>
+            <onup>165</onup><ondown>165</ondown><onleft>165</onleft><onright>165</onright>
+        </control>
+
         <!-- Base background -->
         <control type="image">
             <left>0</left><top>0</top>
@@ -204,7 +213,11 @@
             <left>320</left><top>160</top><width>1600</width><height>764</height>
             <scrolltime tween="cubic" easing="out">220</scrolltime>
             <scrollwrap>false</scrollwrap>
-            <onleft>140</onleft><onup>200</onup>
+            <!-- ondown→150 (a NON-focusable image): at the last row DOWN is blocked
+                 with no focus change, so the selection just stays. Pointing it at the
+                 grid itself (160) instead sent a SET_FOCUS that reset the cursor to 0 —
+                 the "jumps to the top when you press down while it's still loading" bug. -->
+            <onleft>140</onleft><onup>200</onup><ondown>150</ondown>
             <itemlayout height="380" width="252">
                 <control type="image">
                     <left>6</left><top>2</top><width>240</width><height>340</height>

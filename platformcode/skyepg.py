@@ -62,9 +62,12 @@ _NAME_ALIASES = {
 }
 
 # Channels whose EPG name changes dynamically (thematic branded slots).
-# Map our normalised title directly to the fixed DTH channel number.
+# Map our normalised key directly to the fixed DTH channel number.
+# NOTE: deliberately NO 'collection' → 303 entry. "Sky Collection" is a distinct
+# pop-up ENTERTAINMENT channel (airs series, e.g. "Delitti ai Tropici"), NOT
+# "Sky Cinema Collection" (303). It has no stable DTH-guide entry, so it gets no EPG
+# — correct: better no data than another channel's data.
 _NORM_TO_NUMBER = {
-    'collection':       303,   # Sky Collection      → ch 303 (Sky Cinema Collection slot)
     'cinemacollection': 303,   # Sky Cinema Collection → ch 303
 }
 
@@ -91,7 +94,7 @@ def _norm(name):
     return s
 
 
-def _http_json(url, timeout=12):
+def _http_json(url, timeout=12, quiet=False):
     try:
         resp = urlopen(Request(url, headers={'User-Agent': _UA}), timeout=timeout)
         data = resp.read()
@@ -100,7 +103,8 @@ def _http_json(url, timeout=12):
             data = data.decode('utf-8', 'replace')
         return json.loads(data)
     except Exception as exc:
-        logger.error('[SkyEPG] http_json %s: %s' % (url, str(exc)))
+        if not quiet:
+            logger.error('[SkyEPG] http_json %s: %s' % (url, str(exc)))
         return None
 
 
@@ -169,8 +173,9 @@ def channel_id_for(title):
     if cid is None and nm in _NAME_ALIASES:
         cid = _id_by_norm.get(_norm(_NAME_ALIASES[nm]))
     if cid is None:
-        # numbered event channels: "Sky Sport 251".."259" -> number 251..259
-        m = re.search(r'\b(2[0-9][0-9])\b', title or '')
+        # numbered event channels: "Sky Sport 251".."259" / par "skysport251" -> 251..259.
+        # No leading \b so it also matches the digits glued to the par ("skysport251").
+        m = re.search(r'(?<!\d)(2\d\d)(?!\d)', title or '')
         if m:
             cid = _id_by_num.get(int(m.group(1)))
     if cid is None:
@@ -180,6 +185,27 @@ def channel_id_for(title):
         if override_num is not None:
             cid = _id_by_num.get(override_num)
     return cid
+
+
+def _resolve(key):
+    """(guide_channel_id, time_offset_seconds) for a row channel *key* — its stable
+    'par' (e.g. 'skycinemacomedy') or a display title. Mapping by the par is robust
+    against the backend handing us a programme name instead of the channel name
+    (which left some channels with no EPG). A '+1' timeshift channel (par
+    'skyunoplus' / title 'Sky Uno +1') maps to its BASE channel with a -1h offset:
+    it broadcasts the base channel's schedule one hour later."""
+    if not key:
+        return None, 0
+    nk = _norm(key)
+    if nk.endswith('plus1') or nk.endswith('plus') or '+1' in key:
+        base = re.sub(r'plus1?$', '', nk)            # 'unoplus' -> 'uno'
+        if not _ensure_channels():
+            return None, -3600
+        cid = _id_by_norm.get(base)
+        if cid is None and base in _NAME_ALIASES:
+            cid = _id_by_norm.get(_norm(_NAME_ALIASES[base]))
+        return cid, -3600
+    return channel_id_for(key), 0
 
 
 # ── events / "now on air" ─────────────────────────────────────────────────────
@@ -206,85 +232,139 @@ def _fmt_local(epoch):
         return ''
 
 
-def prefetch(titles):
-    """Fetch the currently-airing programme for every mappable title in one
-    batched /events call and store it in _epg_cache.  Safe to call from a
-    background thread; returns the number of channels enriched."""
-    if not titles:
+# Series episode marker at the START of epgEventTitle: "S2 Ep7 - Show Name".
+_EP_RE = re.compile(r'^(S\d+\s*Ep\.?\s*\d+)\s*-\s*(.+)$')
+
+
+def _parse_event(ev):
+    """(show, ep_info, ep_title) from a Sky event.
+
+    epgEventTitle is "S2 Ep7 - Show Name" for series (the SxxEpyy marker is FIRST)
+    or just the title for movies.  Split on the FIRST ' - ' (after the marker) —
+    the old code split from the RIGHT, which truncated show names that themselves
+    contain ' - ' (e.g. 'S1 Ep8 - Online - Connessioni Pericolose' wrongly became
+    'Connessioni Pericolose'): that was the "in onda" showing the wrong title."""
+    epg = (ev.get('epgEventTitle') or '').strip()
+    evt = (ev.get('eventTitle') or '').strip()
+    m = _EP_RE.match(epg)
+    if m:
+        ep_info = m.group(1).strip()
+        show = m.group(2).strip()
+        ep_title = evt if (evt and evt != show) else ''
+    else:
+        show = evt or epg
+        ep_info = ''
+        ep_title = ''
+    return show, ep_info, ep_title
+
+
+def _fetch_events(ids, now):
+    """Fetch the events window, shrinking the look-back until the API accepts it.
+
+    The /events endpoint returns events whose *starttime* is in [from,to] AND it
+    rejects (HTTP 422) a 'from' earlier than the start of the current broadcast
+    window (empirically ~3h back late at night / the midnight boundary).  The old
+    fixed 6h look-back therefore returned NOTHING at those hours → the main cause of
+    a missing 'in onda'.  Try widest first (catches long live events during the day),
+    then fall back to narrower windows; +5h ahead so the 'next' programme is covered."""
+    to = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now + 5 * 3600))
+    for back_h in (6, 3, 2, 1):
+        frm = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now - back_h * 3600))
+        url = ("%s/events?from=%sZ&to=%sZ&pageSize=400&pageNum=0&env=%s&channels=%s"
+               % (_API, quote(frm), quote(to), _ENV, ids))
+        data = _http_json(url, timeout=12, quiet=(back_h != 1))
+        if data and 'events' in data:
+            return data
+    return None
+
+
+def prefetch(keys):
+    """Fetch the currently-airing programme (plus the previous and next ones) for
+    every mappable channel *key* (its stable 'par', or a title) in one batched
+    /events call and store it in _epg_cache.  Safe to call from a background thread;
+    returns the number of channels enriched."""
+    if not keys:
         return 0
-    # title -> sky id (skip unmappable channels silently)
-    id_for = {}
-    for t in titles:
-        cid = channel_id_for(t)
+    # key -> (sky id, time offset).  Skip unmappable channels silently.
+    res = {}
+    for k in keys:
+        cid, off = _resolve(k)
         if cid:
-            id_for[t] = cid
-    if not id_for:
+            res[k] = (cid, off)
+    if not res:
         return 0
-    # The API returns events whose *starttime* falls in [from,to], so a tight
-    # window misses the programme already on air (it started earlier).  Widen to
-    # 6h back (covers long live sport) → 5min ahead, then filter to "now" below.
     now = _utc_now()
-    frm = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now - 6 * 3600))
-    to = time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime(now + 300))
-    ids = ','.join(str(v) for v in sorted(set(id_for.values())))
-    url = ("%s/events?from=%sZ&to=%sZ&pageSize=400&pageNum=0&env=%s&channels=%s"
-           % (_API, quote(frm), quote(to), _ENV, ids))
-    data = _http_json(url, timeout=12)
+    ids = ','.join(str(c) for c in sorted({cid for cid, _o in res.values()}))
+    data = _fetch_events(ids, now)
     if not data or 'events' not in data:
         return 0
-    # sky id -> currently-airing event
-    cur_by_id = {}
+    # sky id -> [(start, end, event), …] sorted by start
+    by_id = {}
     for ev in data['events']:
-        ch = ev.get('channel') or {}
-        cid = ch.get('id')
+        cid = (ev.get('channel') or {}).get('id')
         st = _parse_iso_utc(ev.get('starttime') or '')
         en = _parse_iso_utc(ev.get('endtime') or '')
         if cid is None or st is None or en is None:
             continue
-        if st <= now < en:
-            cur_by_id[cid] = (ev, st, en)
+        by_id.setdefault(cid, []).append((st, en, ev))
     n = 0
     with _epg_lock:
-        for t, cid in id_for.items():
-            hit = cur_by_id.get(cid)
-            if not hit:
+        for k, (cid, off) in res.items():
+            evs = by_id.get(cid)
+            if not evs:
                 continue
-            ev, st, en = hit
-            epg_title = (ev.get('epgEventTitle') or '').strip()
-            event_title = (ev.get('eventTitle') or '').strip()
-            # epgEventTitle format: "S2 Ep7 - Show Name"  →  extract show name
-            # For movies (no episode) epgEventTitle == eventTitle, no " - "
-            if ' - ' in epg_title:
-                # Part after last " - " is the show/series name
-                show = epg_title.rsplit(' - ', 1)[-1].strip()
-                ep_info = epg_title.rsplit(' - ', 1)[0].strip()  # e.g. "S2 Ep7"
-                # ep_title is the episode name (eventTitle), shown below show name
-                ep_title = event_title if event_title and event_title != show else ''
-            else:
-                show = event_title or epg_title
-                ep_info = ''
-                ep_title = ''
+            evs.sort(key=lambda x: x[0])
+            # 'eff' = the moment we treat as "now" on this channel (shifted back 1h
+            # for a +1 timeshift). 'off' is subtracted from every displayed/expiry
+            # time so the +1 channel shows ITS own air times, not the base's.
+            eff = now + off
+            # current = the on-air event with the LATEST start (most specific when
+            # the schedule has overlapping entries)
+            cur = None
+            for st, en, ev in evs:
+                if st <= eff < en and (cur is None or st > cur[0]):
+                    cur = (st, en, ev)
+            if not cur:
+                continue
+            cs, ce, cev = cur
+            show, ep_info, ep_title = _parse_event(cev)
             if not show:
                 continue
-            _epg_cache[_norm(t)] = {
-                'prog': show,           # main show/movie title
-                'ep_info': ep_info,     # "S2 Ep7"
-                'ep_title': ep_title,   # episode name
-                'start': _fmt_local(st),
-                'end': _fmt_local(en),
-                'synopsis': (ev.get('eventSynopsis') or '').strip(),
-                'until': en,
+            entry = {
+                'prog': show, 'ep_info': ep_info, 'ep_title': ep_title,
+                'start': _fmt_local(cs - off), 'end': _fmt_local(ce - off),
+                'synopsis': (cev.get('eventSynopsis') or '').strip(),
+                'until': ce - off,
             }
+            # next = first event starting at/after the current one ends
+            nxt = next((x for x in evs if x[0] >= ce), None)
+            if nxt:
+                nshow, _ni, _nt = _parse_event(nxt[2])
+                if nshow:
+                    entry['next_prog'] = nshow
+                    entry['next_start'] = _fmt_local(nxt[0] - off)
+            # prev = last event ending at/before the current one starts
+            prv = None
+            for st, en, ev in evs:
+                if en <= cs:
+                    prv = (st, en, ev)
+            if prv:
+                pshow, _pi, _pt = _parse_event(prv[2])
+                if pshow:
+                    entry['prev_prog'] = pshow
+                    entry['prev_start'] = _fmt_local(prv[0] - off)
+            _epg_cache[_norm(k)] = entry
             n += 1
-    logger.info('[SkyEPG] prefetch: %d/%d channels now-on-air' % (n, len(id_for)))
+    logger.info('[SkyEPG] prefetch: %d/%d channels now-on-air' % (n, len(res)))
     return n
 
 
 def now_on(title):
     """Cached 'now on air' info for a channel title, or None.
 
-    Returns {'prog','start','end','synopsis'} when a fresh programme is known;
-    drops the entry once its end time has passed."""
+    Returns {'prog','ep_info','ep_title','start','end','synopsis', plus
+    'next_prog'/'next_start' and 'prev_prog'/'prev_start'} when a fresh programme is
+    known; drops the entry once its end time has passed."""
     with _epg_lock:
         e = _epg_cache.get(_norm(title))
         if not e:
@@ -294,4 +374,6 @@ def now_on(title):
             return None
         return {'prog': e['prog'], 'ep_info': e.get('ep_info', ''),
                 'ep_title': e.get('ep_title', ''), 'start': e['start'],
-                'end': e['end'], 'synopsis': e['synopsis']}
+                'end': e['end'], 'synopsis': e['synopsis'],
+                'next_prog': e.get('next_prog', ''), 'next_start': e.get('next_start', ''),
+                'prev_prog': e.get('prev_prog', ''), 'prev_start': e.get('prev_start', '')}
