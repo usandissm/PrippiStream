@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.5.0" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.5.1" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -36,13 +36,7 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Canali in diretta: aggiunti canali italiani con una nuova riga "TV" per i generalisti.
-- Fallback automatico su SKY/Sport: se la fonte principale non parte, ne prova un'altra in automatico, molti più canali funzionanti.
-- Vengono mostrati solo i canali davvero online in quel momento.
-- Nuovi loghi in alta qualità per i canali SKY, Sport e TV.
-- Impostazioni › Personalizzazione: ora puoi mostrare/nascondere le righe Sport, SKY e TV.
-- Ricerca: risolto un caso in cui due titoli con lo stesso nome facevano sparire il risultato giusto.
-- Grafica più pulita: rimossi alcuni simboli che su certi dispositivi apparivano come quadratini.
+      <news>- Bug fix e upgrade minori.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
