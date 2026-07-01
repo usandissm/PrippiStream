@@ -3372,6 +3372,21 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 kind = getattr(item, 'sport_kind', '')
                 player = _LivePlayer()
 
+                def _dismiss_error_dialog():
+                    """A failed player.play() pops Kodi's modal 'Playback failed' OK
+                    dialog.  Left up it (a) blocks the next candidate's playback
+                    ('Activate of window 13000 refused — active modal dialogs') and
+                    (b) invites a stray keypress that bumps _play_gen and silently
+                    kills this worker before the fallback runs.  Close it so the
+                    candidate chain can proceed cleanly."""
+                    try:
+                        for _w in ('okdialog', 'yesnodialog'):
+                            if xbmc.getCondVisibility('Window.IsVisible(%s)' % _w):
+                                xbmc.executebuiltin('Dialog.Close(%s, true)' % _w)
+                        xbmc.sleep(60)
+                    except Exception:
+                        pass
+
                 def _play_and_verify(_li):
                     """Play *_li* and confirm it GENUINELY runs.  Must open
                     (isPlaying within ≤6 s) and then prove it really plays:
@@ -3388,6 +3403,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     Returns True/False, or None if aborted/superseded."""
                     clearkey = bool(_li.getProperty('inputstream.adaptive.drm_legacy'))
                     player.reset_flags()
+                    _dismiss_error_dialog()                   # clear a leftover modal from a prior candidate
                     player.play(_li.getPath(), _li)
                     mon = xbmc.Monitor()
                     opened = False
@@ -3399,8 +3415,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                             break
                         if player.user_stopped:
                             return True                       # user backed out — not a failure
+                        if player.playback_error or player.playback_ended:
+                            return False                      # open failed fast → fall through to the next candidate now
                         xbmc.sleep(500)
                     if not opened:
+                        # Never opened.  A user exit during buffering isn't a failure;
+                        # give the callback a beat so the exit isn't misread as one.
+                        for _ in range(6):                    # ≤600 ms grace
+                            if player.user_stopped or player.playback_error or player.playback_ended:
+                                break
+                            xbmc.sleep(100)
                         return True if player.user_stopped else False
                     base_t = None
                     stable = 0
@@ -3409,8 +3433,22 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
                             return None
                         if not player.isPlaying():
-                            # User stop = fine (they watched/left); EOF/error = failed.
-                            return True if player.user_stopped else False
+                            # isPlaying() flips False a beat before the onPlayBack*
+                            # callback lands (they fire on another thread), so reading
+                            # user_stopped immediately races: a user who exits a WORKING
+                            # channel would look like a failure and get deny-listed
+                            # (the SkyTG24 'canale non disponibile on Back' bug).  Wait
+                            # for the callback, then only a real EOF/error counts as a
+                            # failure.
+                            for _ in range(8):                # ≤800 ms grace for the callback
+                                if player.user_stopped or player.playback_error or player.playback_ended:
+                                    break
+                                xbmc.sleep(100)
+                            if player.user_stopped:
+                                return True                   # user watched/left → keep the channel
+                            if player.playback_error or player.playback_ended:
+                                return False                  # genuine EOF/error → failed
+                            return True                       # opened & ran, no failure signal → keep
                         stable += 1
                         try:
                             t = player.getTime()
@@ -3457,6 +3495,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if my_gen != self._play_gen:
                         _close_busy()
                         return
+                    _dismiss_error_dialog()                   # kill any leftover 'playback failed' modal before the next try
                     try:
                         _li = _resolve()
                     except Exception as exc:
@@ -3472,14 +3511,19 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if res:
                         played = True
                         # Learn what actually worked so next play starts there.
-                        if _src == 'daddy_ff':
-                            sportchannels.prefer_ff(par)
-                        elif _src == 'daddy':
-                            sportchannels.prefer_daddy(par)
-                            sportchannels.unprefer_ff(par)
-                        else:  # primary
+                        # Preference learning, honouring "always prefer the classic
+                        # NowTV ClearKey (primary) whenever it's online":
+                        #  • ffmpegdirect is a last-resort DECODER for muxed-TS ISA
+                        #    can't handle (Zona DAZN — curated in _PREFER_FF_DEFAULT),
+                        #    never a learned pref (it plays almost any HLS, so it'd
+                        #    steal normal channels from ISA).
+                        #  • daddy (ISA) is NOT pinned either: the ClearKey primary
+                        #    must be re-tried FIRST on every play, so a channel that's
+                        #    back online on ClearKey is used instead of DaddyLive.
+                        # Only a primary win clears any stale daddy pin.
+                        if _src == 'primary':
                             sportchannels.unprefer_daddy(par)
-                            sportchannels.unprefer_ff(par)
+                        sportchannels.unprefer_ff(par)
                         break
                 _close_busy()
 
@@ -3489,6 +3533,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if par:
                         sportchannels.mark_dead(par)
                     _remove_dead()
+                    _dismiss_error_dialog()                   # hide Kodi's own 'playback failed' modal; we show our toast instead
                     if my_gen == self._play_gen:
                         xbmcgui.Dialog().notification(
                             'PrippiStream', 'Canale non disponibile',

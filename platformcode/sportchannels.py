@@ -269,14 +269,13 @@ _prefer_daddy = set()
 _prefer_lock = threading.Lock()
 _prefer_loaded = False
 
-# Channels whose PRIMARY is known to chronically fail at play (so go DaddyLive
-# first from the very first click — no black-screen wait): Sky Cinema (ClearKey
-# key-rotation → ISA "Missing KeyId") and Zona DAZN (freeshot CDN DNS-blocked).
-# This is only a seed; the set is self-correcting (unprefer_daddy clears a par
-# whose primary plays again, prefer_daddy adds any other that starts failing).
+# Only channels whose PRIMARY can NEVER work go DaddyLive-first: Zona DAZN's
+# freeshot CDN is DNS-blocked.  Sky Cinema is deliberately NOT seeded — its NowTV
+# ClearKey primary (2-hour sessions) must be preferred whenever it's online, so it
+# is tried first on every play and only falls back to DaddyLive when it fails
+# (the robust fast fallback makes that cheap).  unprefer_daddy still clears a stale
+# pin when a primary plays again; nothing auto-pins daddy anymore.
 _PREFER_DADDY_DEFAULT = {
-    "skycinemauno", "skycinemaaction", "skycinemacollection", "skycinemacomedy",
-    "skycinemadrama", "skycinemafamily", "skycinemaromance", "skycinemasuspense",
     "ZonaDAZN",
 }
 
@@ -1434,10 +1433,17 @@ def _hls_listitem(url, title, art, referer=None):
     li.setMimeType("application/x-mpegURL")
     li.setProperty("inputstream", "inputstream.adaptive")
     li.setProperty("inputstream.adaptive.manifest_type", "hls")
+    # verifypeer=false: the DaddyLive CDNs (e.g. *.phantemlis.top) serve invalid TLS
+    # certs ("unable to get local issuer certificate"); ISA verifies TLS by default and
+    # fails with "CCurlFile::Open Failed with code 0" before the request even goes out
+    # (channel resolves + the verify=False probe passes, but won't PLAY). The probe and
+    # _clearkey_listitem already disable verification — match that here.
+    hdr = 'User-Agent=%s' % _NOWTV_UA
     if referer:
-        hdr = 'User-Agent=%s&Referer=%s&Origin=%s' % (_NOWTV_UA, referer, referer.rstrip('/'))
-        li.setProperty("inputstream.adaptive.stream_headers", hdr)
-        li.setProperty("inputstream.adaptive.manifest_headers", hdr)
+        hdr += '&Referer=%s&Origin=%s' % (referer, referer.rstrip('/'))
+    hdr += '&verifypeer=false'
+    li.setProperty("inputstream.adaptive.stream_headers", hdr)
+    li.setProperty("inputstream.adaptive.manifest_headers", hdr)
     if art:
         li.setArt(art)
     return li
