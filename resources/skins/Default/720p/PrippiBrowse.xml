@@ -117,12 +117,27 @@
             <label>ANIME</label><font>font12</font>
             <textcolor>FFCCCCCC</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
-            <onleft>202</onleft><onright>122</onright><ondown>140</ondown>
+            <onleft>202</onleft><onright>204</onright><ondown>140</ondown>
         </control>
         <control type="image">
             <left>946</left><top>69</top><width>150</width><height>3</height>
             <texture colordiffuse="FFA78BFA">white.png</texture>
             <visible>String.IsEqual(Window.Property(macro),anime)</visible>
+        </control>
+
+        <control type="button" id="204">
+            <left>1108</left><top>23</top><width>170</width><height>44</height>
+            <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="14FFFFFF">white.png</texturenofocus>
+            <label>HENTAI</label><font>font12</font>
+            <textcolor>FFCCCCCC</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+            <align>center</align>
+            <onleft>203</onleft><onright>122</onright><ondown>140</ondown>
+        </control>
+        <control type="image">
+            <left>1108</left><top>69</top><width>170</width><height>3</height>
+            <texture colordiffuse="FFEC4899">white.png</texture>
+            <visible>String.IsEqual(Window.Property(macro),hentai)</visible>
         </control>
 
         <!-- EXIT (id=122) -->
@@ -133,7 +148,7 @@
             <label>[B]EXIT[/B]</label><font>font10</font>
             <textcolor>FFFFFFFF</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
-            <onleft>203</onleft><ondown>160</ondown>
+            <onleft>204</onleft><ondown>160</ondown>
         </control>
 
         <!-- ═══ SUB BAR: breadcrumb + count (top 96) ═══ -->

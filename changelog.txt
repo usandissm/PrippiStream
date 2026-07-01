@@ -1,3 +1,7 @@
+## Prossima
+- Bug fix.
+- Nuova categoria HENTAI 18+, disattivabile da Impostazioni › Personalizzazione.
+
 ## 1.5.1
 - Bug fix e upgrade minori.
 

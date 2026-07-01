@@ -90,7 +90,7 @@
     <!-- Personalizzazione -->
     <category label="70126">
         <setting id="home_loop_rows" type="bool" label="Home: scorrendo oltre l'ultima riga torna alla prima" default="false"/>
-        <setting id="show_adult_anime" type="bool" label="Sfoglia: mostra categorie Anime 18+ (Hentai, Ecchi, Yaoi, Yuri)" default="true"/>
+        <setting id="show_adult_anime" type="bool" label="Sfoglia: abilita la sezione HENTAI 18+" default="true"/>
 
         <!-- Live-channel rows: toggle visibility in the home. Hidden rows are still
              loaded/probed in the background at startup, so re-enabling shows them

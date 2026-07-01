@@ -129,6 +129,34 @@ _app_monitor = _AppShutdownMonitor()
 # SC rows cache: populated on first home load, reused on subsequent opens without refetch.
 _sc_rows_cache = None
 
+# Home settings we apply LIVE (no addon reload) when the user changes them.
+# ('show_adult_anime' only toggles the Browse HENTAI tab, which is read fresh on
+# every Browse open, so it needs no live re-render of the home.)
+_LIVE_SETTING_KEYS = ('show_sky_row', 'show_sport_row', 'show_tv_row',
+                      'show_downloads_row')
+
+
+class _SettingsWatchMonitor(xbmc.Monitor):
+    """Fires the home's _on_settings_changed() whenever the addon settings are
+    saved.  onSettingsChanged is the RELIABLE trigger: on Kodi 21, snapshotting
+    then re-reading the (module-cached) Addon settings after openSettings() returns
+    does NOT reflect the change, so the previous approach silently did nothing.
+    Holds the window by weakref so it never keeps a closed home alive."""
+
+    def __init__(self, win):
+        super(_SettingsWatchMonitor, self).__init__()
+        import weakref
+        self._winref = weakref.ref(win)
+
+    def onSettingsChanged(self):
+        win = self._winref()
+        if win is None:
+            return
+        try:
+            win._on_settings_changed()
+        except Exception:
+            pass
+
 
 class _AvReadyPlayer(xbmc.Player):
     """xbmc.Player subclass that signals via threading.Event when onAVStarted fires.
@@ -748,6 +776,15 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 _ad.setSetting('addon_version_display', _ver)
         except Exception:
             pass
+        # Live-apply our own settings (row toggles, 18+) without an addon reload:
+        # watch for settings changes and re-render the affected UI. Create once —
+        # onInit re-fires on every return from playback.
+        try:
+            if not getattr(self, '_settings_monitor', None):
+                self._settings_snap = self._read_live_settings()
+                self._settings_monitor = _SettingsWatchMonitor(self)
+        except Exception as exc:
+            logger.error('[PrippiHome] settings monitor init: %s' % str(exc))
         # Loading overlay starts visible in XML — just start background fetch.
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
@@ -803,11 +840,31 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         cw_items = _build_cw_items()
         self.rows_data = [(_CW_ROW_LABEL, cw_items)]
 
+        # Read the row-toggle settings FRESH (a new Addon instance + getSettingBool)
+        # so a LIVE re-render after the user flips a toggle reflects the change.
+        # The module-cached config.get_setting() is stale on Kodi 21 until an addon
+        # reload, so using it here made the home re-render with the OLD values
+        # (rows looked unchanged). Fall back to the cached read only if the fresh
+        # read is unavailable, preserving the original "shown unless explicitly
+        # disabled" semantics.
+        try:
+            _fresh_addon = xbmcaddon.Addon('plugin.video.prippistream')
+        except Exception:
+            _fresh_addon = None
+
+        def _row_hidden(key):
+            if _fresh_addon is not None:
+                try:
+                    return _fresh_addon.getSettingBool(key) is False
+                except Exception:
+                    pass
+            return config.get_setting(key) is False
+
         # Offline Downloads row — reserved right after CW so it always sits at a
         # fixed, easy-to-find position. When empty it auto-collapses (hidden);
         # _refresh_dl_row() reveals/updates it in place as downloads arrive.
         try:
-            if config.get_setting('show_downloads_row') is not False:
+            if not _row_hidden('show_downloads_row'):
                 self.rows_data.append((_DL_ROW_LABEL, _build_dl_items()))
         except Exception as exc:
             logger.error('[PrippiHome] downloads row build: %s' % str(exc))
@@ -819,7 +876,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # it instantly with channels already cached.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
         for _row_key in ('sky', 'sport', 'tv'):
-            if config.get_setting(_row_toggle[_row_key]) is False:
+            if _row_hidden(_row_toggle[_row_key]):
                 continue   # hidden by user (still loaded in background)
             try:
                 _ch_items = sportchannels.build_items(_row_key)
@@ -2160,6 +2217,78 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             pos = 0
         return items[pos]
 
+    def _read_live_settings(self):
+        """Read our live-applied settings FRESH (a new Addon instance), so the values
+        reflect the just-saved change — the module-level cached Addon can be stale."""
+        try:
+            a = xbmcaddon.Addon('plugin.video.prippistream')
+            return {k: a.getSetting(k) for k in _LIVE_SETTING_KEYS}
+        except Exception:
+            return {}
+
+    def _on_settings_changed(self):
+        """Addon settings were saved → apply any change to OUR options live."""
+        if not getattr(self, '_alive', True):
+            return
+        new = self._read_live_settings()
+        old = getattr(self, '_settings_snap', {}) or {}
+        changed = {k for k in _LIVE_SETTING_KEYS if new.get(k) != old.get(k)}
+        self._settings_snap = new
+        logger.info('[PrippiHome] onSettingsChanged — changed=%s (new=%s)' % (sorted(changed), new))
+        if changed:
+            self._apply_live_settings(changed)
+
+    def _apply_live_settings(self, changed):
+        """Apply our own settings to the RUNNING home without an addon reload.
+
+        - Row toggles (SKY/Sport/TV/Downloads) → re-assemble rows_data from the
+          cached SC rows + current toggles and re-render the grid in place (same
+          code path as first paint), so a hidden row disappears / a re-enabled one
+          reappears immediately (its channels are already background-cached).
+        - 18+ toggle → drop the Sfoglia anime genre cache so the next Browse
+          reflects it (Browse is a separate window; nothing to redraw here).
+        (home_loop_rows is read live on navigation, so it needs no action.)
+        """
+        logger.info('[PrippiHome] applying live settings: %s' % sorted(changed))
+        _row_keys = {'show_sky_row', 'show_sport_row', 'show_tv_row', 'show_downloads_row'}
+        if changed & _row_keys and _sc_rows_cache:
+            try:
+                self._assemble_initial(_sc_rows_cache)
+                self._num_rows = min(len(self.rows_data), MAX_ROWS)
+                # Clean slate: empty every row wraplist + clear the populated flags
+                # (reset() on an empty wraplist is a no-op, so this is cheap).
+                for i in range(MAX_ROWS):
+                    try:
+                        self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).reset()
+                    except Exception:
+                        pass
+                self._populated.clear()
+                xbmc.sleep(80)
+                # Show the groups that now hold a row, hide the rest (handles both a
+                # row appearing and disappearing, with the following rows shifting).
+                for i in range(MAX_ROWS):
+                    try:
+                        self.getControl(ROW_GROUP_BASE + i * ROW_STEP).setVisible(i < self._num_rows)
+                    except Exception:
+                        pass
+                # Populate the first rows now; the rest fill on scroll, as at first paint.
+                for i in range(min(6, self._num_rows)):
+                    self._populate_single_row(i)
+                has_cw = bool(self.rows_data and self.rows_data[0][1])
+                # Only grab focus if the settings dialog is already closed, so we don't
+                # steal focus from it mid-edit; otherwise Kodi restores home focus on close.
+                if not xbmc.getCondVisibility('Window.IsActive(addonsettings)'):
+                    try:
+                        self.setFocusId(ROW_WRAPLIST_BASE if has_cw else ROW_WRAPLIST_BASE + ROW_STEP)
+                        self._update_hero(0 if has_cw else 1)
+                    except Exception:
+                        pass
+                logger.info('[PrippiHome] live re-render done: %d rows' % self._num_rows)
+            except Exception as exc:
+                logger.error('[PrippiHome] apply live row toggles: %s' % str(exc))
+        elif changed & _row_keys:
+            logger.info('[PrippiHome] SC row cache not ready — skipping live row re-render')
+
     def onClick(self, control_id):
         if control_id == CLOSE_BTN:
             self._alive = False
@@ -2168,6 +2297,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         # ── Settings button → open addon settings dialog ──
         if control_id == SETTINGS_BTN:
+            # Just open the dialog; the _SettingsWatchMonitor (see onInit) applies any
+            # change to our custom options LIVE via onSettingsChanged — reliable on
+            # Kodi 21, unlike re-reading the cached Addon after openSettings() returns.
             xbmcaddon.Addon().openSettings()
             return
 
@@ -7788,6 +7920,7 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
         'anime': '[COLOR FFA78BFA]ANIME[/COLOR]',
         'film':  '[COLOR FF38BDF8]FILM[/COLOR]',
         'serie': '[COLOR FF4ADE80]SERIE[/COLOR]',
+        'hentai': '[COLOR FFEC4899]HENTAI[/COLOR]',
     }
 
     def _update_hero(self, item):
@@ -8249,7 +8382,17 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                                      (r.fulltitle or r.title or '')).strip().lower()
                     _r_norm = _re.sub(r'[^a-z0-9 ]', '', _r_raw)
                     _r_norm = _re.sub(r'\s+', ' ', _r_norm).strip()
-                    if _q_norm_raw and not _title_match_query(_r_norm):
+                    _ok = _title_match_query(_r_norm)
+                    if not _ok and _q_norm_raw and _channel_is_anime(ch_name):
+                        # Anime channels use romaji titles where the searched name is a
+                        # trailing/middle word (AnimeUnity lists Frieren as "Sousou no
+                        # Frieren"), which the strict PREFIX match drops.  For anime,
+                        # also accept the query as a whole word/phrase anywhere in it.
+                        _ok = bool(_re.search(r'(?:^|\s)' + _re.escape(_q_norm_raw) + r'(?:\s|$)', _r_norm))
+                        if _ok:
+                            logger.debug('[PrippiSearch] %s: anime word-match kept "%s" for "%s"' % (
+                                ch_name, _r_norm[:50], _q_norm_raw))
+                    if _q_norm_raw and not _ok:
                         logger.debug('[PrippiSearch] %s: skip "%s" (no match for "%s")' % (
                             ch_name, _r_norm[:40], _q_norm_raw))
                         continue
@@ -8279,6 +8422,68 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
 
         # ── Step 3: Sort by relevance + dedup by tmdb_id OR normalized title ──
         combined = list(sc_items) + all_others
+
+        # Anime enrichment + AnimeUnity preference:
+        #  1. AnimeUnity/AnimeSaturn ship a native title/plot but no tmdb_id/year/
+        #     rating. TMDB matches their (romaji) titles well — "Sousou no Frieren"
+        #     → 209867 — so enrich the anime results that still lack a tmdb_id: this
+        #     fills in year/rating/poster (also replaces AnimeUnity's occasional black
+        #     poster) AND gives them a tmdb_id to match against AnimeWorld's.
+        #  2. Prefer AnimeUnity: once matched, drop the SAME show coming from other
+        #     anime channels — keep only AnimeUnity's version (it has the episode list
+        #     and plays as a series, unlike AnimeWorld's film-like entries).
+        def _it_tmdb(it):
+            return str((it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
+                       or getattr(it, '_pref_tmdb', '') or '')
+
+        _anime_no_tmdb = [it for it in combined
+                          if getattr(it, '_search_type', '') == 'anime' and not _it_tmdb(it)]
+        if _anime_no_tmdb and not self._cancelled.is_set():
+            # Snapshot AnimeUnity's NATIVE poster/plot/title (distinct per season/
+            # spin-off) and restore them after enrichment: TMDB has a SINGLE Frieren
+            # entry, so letting it overwrite would flatten every part to the same
+            # poster + plot. We only want the ADDED metadata (tmdb_id/year/rating) —
+            # tmdb_id lets us prefer AnimeUnity over AnimeWorld; year/rating fills the
+            # missing details — while each part keeps its own image and synopsis.
+            _native = [(it, it.thumbnail, it.fanart,
+                        (it.infoLabels or {}).get('plot', ''),
+                        (it.infoLabels or {}).get('title', '')) for it in _anime_no_tmdb]
+            try:
+                _tmdb_enrich_validated(_anime_no_tmdb)
+            except Exception as _exc:
+                logger.error('[PrippiSearch] anime enrich failed: %s' % str(_exc))
+            for _it, _th, _fa, _pl, _ti in _native:
+                # Move the matched tmdb_id to a SIDE attribute: it's used ONLY to
+                # prefer AnimeUnity over other sources, NOT stored in infoLabels —
+                # where the detail view would pull TMDB's single shared info + episode
+                # list and make every part identical. Keep the ADDED year/rating and
+                # the native art/plot so each season/spin-off stays distinct.
+                _tid = str((_it.infoLabels or {}).get('tmdb_id') or (_it.infoLabels or {}).get('tmdb') or '')
+                if _tid:
+                    _it._pref_tmdb = _tid
+                    _it.infoLabels.pop('tmdb_id', None)
+                    _it.infoLabels.pop('tmdb', None)
+                    _it.infoLabels.pop('imdb_id', None)
+                if _th:
+                    _it.thumbnail = _th
+                if _fa:
+                    _it.fanart = _fa
+                if _pl:
+                    _it.infoLabels['plot'] = _pl
+                if _ti:
+                    _it.infoLabels['title'] = _ti
+
+        _au_tmdb = {_it_tmdb(it) for it in combined
+                    if getattr(it, '_search_channel', '') == 'animeunity' and _it_tmdb(it)}
+        if _au_tmdb:
+            _before = len(combined)
+            combined = [it for it in combined
+                        if getattr(it, '_search_channel', '') == 'animeunity'
+                        or getattr(it, '_search_type', '') != 'anime'
+                        or _it_tmdb(it) not in _au_tmdb]
+            if len(combined) != _before:
+                logger.info('[PrippiSearch] AnimeUnity preferred: dropped %d duplicate anime result(s)'
+                            % (_before - len(combined)))
 
         def _relevance_key(it):
             raw   = (it.fulltitle or it.title or '').lower()
@@ -8339,8 +8544,19 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             dup_idx = None
             matched_by_tmdb = False
             if tkey is not None and tkey in seen_tmdb:
-                dup_idx = seen_tmdb[tkey]
-                matched_by_tmdb = True
+                _prev = deduped[seen_tmdb[tkey]]
+                # Same TMDB id from the SAME channel but a DIFFERENT title = distinct
+                # parts of one show (e.g. AnimeWorld "Frieren … End" / "… End 2" /
+                # "… Mini Anime" all resolve to the same TMDB series once the sequel
+                # suffix is stripped for the match) → keep them ALL so every season/
+                # spin-off stays reachable. Only collapse a genuine duplicate: the
+                # same part, or the same show coming from another source.
+                if (nt and getattr(it, '_search_channel', '') == getattr(_prev, '_search_channel', '')
+                        and nt != _norm_title(_prev)):
+                    dup_idx = None
+                else:
+                    dup_idx = seen_tmdb[tkey]
+                    matched_by_tmdb = True
             elif nt and nt in seen_title:
                 cand = seen_title[nt]
                 cand_tmdb = (deduped[cand].infoLabels or {}).get('tmdb_id') or (deduped[cand].infoLabels or {}).get('tmdb')
@@ -8642,6 +8858,7 @@ BROWSE_TAB_FILM    = 200
 BROWSE_TAB_SERIE   = 201
 BROWSE_TAB_KDRAMA  = 202
 BROWSE_TAB_ANIME   = 203
+BROWSE_TAB_HENTAI  = 204   # dedicated HENTAI macro (hentaisaturn.tv), gated by 'show_adult_anime'
 BROWSE_BREADCRUMB  = 210
 BROWSE_SORT        = 211
 BROWSE_GENRES      = 140
@@ -8654,7 +8871,8 @@ BROWSE_LOADING     = 170
 BROWSE_EMPTY       = 171
 BROWSE_PARK        = 165   # off-screen button: focus is parked here during grid appends
 BROWSE_TAB_MAP = {BROWSE_TAB_FILM: 'film', BROWSE_TAB_SERIE: 'serie',
-                  BROWSE_TAB_KDRAMA: 'kdrama', BROWSE_TAB_ANIME: 'anime'}
+                  BROWSE_TAB_KDRAMA: 'kdrama', BROWSE_TAB_ANIME: 'anime',
+                  BROWSE_TAB_HENTAI: 'hentai'}
 
 # Module caches (shared across re-opens of the browse window)
 _br_genre_cache   = {}              # macro -> list[genre dict]
@@ -8777,17 +8995,56 @@ def _br_fetch_genres(macro):
             genres.extend(picked)
         elif macro == 'anime':
             import channels.animeunity as _au
-            try:
-                show_adult = bool(config.get_setting('show_adult_anime'))
-            except Exception:
-                show_adult = False
             seed = _Item(channel='animeunity', url=_au.host, args={})
             for g in (_au.genres(seed) or []):
                 name = _br_clean(getattr(g, 'title', ''))
                 if name:
-                    if not show_adult and _is_adult_anime_genre(name):
-                        continue   # hide 18+/sensitive anime genres unless opted in
+                    # 18+/sensitive anime genres now live in the dedicated HENTAI macro
+                    # (hentaisaturn.tv) — always dropped from ANIME.
+                    if _is_adult_anime_genre(name):
+                        continue
                     genres.append({'name': name, 'sc_id': None, 'anime_item': g})
+        elif macro == 'hentai':
+            # HENTAI merges TWO sources: hentaisaturn.tv (explicit, PRIMARY — wins
+            # on a duplicate title) and AnimeUnity's adult/suggestive genres (ecchi,
+            # yaoi, yuri, BL/GL…), which are dropped from the ANIME macro. "Tutti"
+            # pulls from BOTH; every site's genres are also listed individually. A
+            # genre present on both sites (e.g. Yaoi/Yuri) is merged into a single
+            # entry that fetches both (hentaisaturn still wins on a title clash).
+            import channels.hentaisaturn as _hs
+            genres[0] = {'name': 'Tutti', 'sc_id': None, 'anime_item': None,
+                         'hs': True, 'hs_item': None, 'au': True, 'au_item': None,
+                         'au_all': True}
+            by_name = {}   # lower(name) -> dict, so same-named genres merge
+            hs_seed = _Item(channel='hentaisaturn', url=_hs.host + '/genres')
+            for g in (_hs.generi(hs_seed) or []):
+                name = _br_clean(getattr(g, 'title', ''))
+                if not name:
+                    continue
+                d = {'name': name, 'sc_id': None, 'anime_item': None,
+                     'hs': True, 'hs_item': g, 'au': False, 'au_item': None,
+                     'au_all': False}
+                by_name[name.lower()] = d
+                genres.append(d)
+            try:
+                import channels.animeunity as _au
+                au_seed = _Item(channel='animeunity', url=_au.host, args={})
+                for g in (_au.genres(au_seed) or []):
+                    name = _br_clean(getattr(g, 'title', ''))
+                    if not name or not _is_adult_anime_genre(name):
+                        continue
+                    key = name.lower()
+                    if key in by_name:                 # same genre on both sites → merge
+                        by_name[key]['au'] = True
+                        by_name[key]['au_item'] = g
+                    else:
+                        d = {'name': name, 'sc_id': None, 'anime_item': None,
+                             'hs': False, 'hs_item': None, 'au': True, 'au_item': g,
+                             'au_all': False}
+                        by_name[key] = d
+                        genres.append(d)
+            except Exception as exc:
+                logger.error('[Browse] hentai AU genres: %s' % str(exc)[:160])
     except Exception as exc:
         logger.error('[Browse] genres %s: %s' % (macro, str(exc)[:160]))
     _br_genre_cache[macro] = genres
@@ -8864,7 +9121,14 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
         # Pagination state (per current macro+genre+sort)
         self._sc_page  = 1                  # next SC archive page to fetch (1-based)
         self._sc_total = 0                  # SC totalCount for the current filter (0=unknown)
-        self._au_page  = 0                  # AnimeUnity page index
+        self._hs_page  = 0                  # HENTAI: hentaisaturn /filter page
+        self._hs_done  = False              # HENTAI: hentaisaturn source exhausted
+        self._hs_au_gi = 0                  # HENTAI: index into adult-AU-genre list
+        self._hs_au_page = 0                # HENTAI: page within current adult AU genre
+        self._au_more  = False              # HENTAI: AnimeUnity adult source has more
+        self._au_year  = None               # AnimeUnity year-walk: current year
+        self._au_ypage = 0                  # AnimeUnity year-walk: page within year
+        self._au_oldest = 1966              # AnimeUnity oldest release year
         self._has_more = False              # more pages available → infinite scroll
         self._sc_phase = 0                  # Plan B: 0=block0, 1=year walk, 2=drain deferred
         self._sc_year  = None               # Plan B: current year being paged
@@ -8881,6 +9145,7 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
     def onInit(self):
         try:
             self.setProperty('macro', self._macro)
+            self._gate_hentai_tab()
             # Kodi re-creates this WindowXML (and re-fires onInit) when it returns
             # to front after a fullscreen video (trailer or playback). In that case
             # restore the cached state + last focus instead of reloading from zero.
@@ -8891,6 +9156,31 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
             self._set_macro('film', focus_genres=True)
         except Exception as exc:
             logger.error('[Browse] onInit: %s' % str(exc))
+
+    def _gate_hentai_tab(self):
+        """Show the HENTAI macro tab only when enabled (setting 'show_adult_anime').
+        When hidden, re-wire ANIME↔EXIT so the tab row stays fully traversable.
+        Read fresh on every open, so toggling the setting takes effect next time
+        Browse is opened (no addon reload needed)."""
+        try:
+            on = bool(config.get_setting('show_adult_anime'))
+        except Exception:
+            on = False
+        try:
+            self.getControl(BROWSE_TAB_HENTAI).setVisible(on)
+        except Exception:
+            pass
+        try:
+            anime = self.getControl(BROWSE_TAB_ANIME)
+            exit_b = self.getControl(BROWSE_EXIT)
+            if on:
+                anime.controlRight(self.getControl(BROWSE_TAB_HENTAI))
+                exit_b.controlLeft(self.getControl(BROWSE_TAB_HENTAI))
+            else:
+                anime.controlRight(exit_b)
+                exit_b.controlLeft(anime)
+        except Exception:
+            pass
 
     def _restore_after_reinit(self):
         """Re-populate the freshly re-created sidebar + grid from cached state and
@@ -9047,7 +9337,7 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
             pass
 
     _MACRO_LABELS = {'film': 'FILM', 'serie': 'SERIE TV',
-                     'kdrama': 'K-DRAMA', 'anime': 'ANIME'}
+                     'kdrama': 'K-DRAMA', 'anime': 'ANIME', 'hentai': 'HENTAI'}
 
     def _set_macro(self, macro, focus_genres=False):
         # All network (genre list + titles) runs off the GUI thread so switching
@@ -9136,7 +9426,14 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
             if not append:
                 self._sc_page = 1
                 self._sc_total = 0
-                self._au_page = 0
+                self._au_year = None         # AnimeUnity year-walk cursor (reset)
+                self._au_ypage = 0
+                # HENTAI macro cursors (hentaisaturn page + AnimeUnity adult walk)
+                self._hs_page = 0            # hentaisaturn /filter page
+                self._hs_done = False        # hentaisaturn source exhausted
+                self._hs_au_gi = 0           # index into the adult-AU-genre list
+                self._hs_au_page = 0         # page within the current adult AU genre
+                self._au_more = False        # AnimeUnity adult source has more
                 self._has_more = False
                 # Plan B (year-partition) pagination cursor — see _fetch_sc_pages.
                 self._sc_phase = 0       # 0 = unfiltered block 0, 1 = year walk, 2 = drain
@@ -9206,15 +9503,113 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
         finally:
             self._loading = False
 
+    def _fetch_hentai_batch(self, genre):
+        """HENTAI batch: fetch from hentaisaturn (PRIMARY, returned in the sc_new
+        slot → wins the SC-wins dedup on a title clash) and/or AnimeUnity's adult
+        genres (other_new → loses). Both sources page independently; the infinite
+        scroll continues while EITHER still has more. Returns (hs_items, au_items)."""
+        hs_items, au_items = [], []
+        if genre.get('hs', True) and not getattr(self, '_hs_done', False):
+            hs_items = self._fetch_hentai(genre, self._hs_page)
+            self._hs_page += 1
+            if len(hs_items) < 20:
+                self._hs_done = True                 # hentaisaturn exhausted
+        if genre.get('au'):
+            au_items = self._fetch_hentai_au(genre)  # sets self._au_more
+        self._has_more = (not getattr(self, '_hs_done', True)
+                          and genre.get('hs', True)) or bool(getattr(self, '_au_more', False))
+        return hs_items, au_items
+
+    def _fetch_hentai_au(self, genre):
+        """Fetch a page of AnimeUnity adult content for HENTAI. For a single adult
+        genre, page through it directly; for "Tutti" (au_all) page through the union
+        of the adult genres, exhausting each before moving to the next. Simple offset
+        pagination (HENTAI is not year-sorted). Sets self._au_more."""
+        import channels.animeunity as _au
+        out = []
+        try:
+            _au._ensure_init()
+            if genre.get('au_all'):
+                au_genres = [x['au_item'] for x in self._genres
+                             if x.get('au_item') is not None]
+            else:
+                g = genre.get('au_item')
+                au_genres = [g] if g is not None else []
+            if not au_genres:
+                self._au_more = False
+                return out
+            # Walk genres from the current cursor until we get a non-empty page or
+            # run out (skips genres that page out empty without stalling the scroll).
+            while self._hs_au_gi < len(au_genres):
+                g = au_genres[self._hs_au_gi]
+                seed = g.clone(page=self._hs_au_page,
+                               args=dict(getattr(g, 'args', {}) or {}))
+                raw = [x for x in (_au.peliculas(seed) or [])
+                       if getattr(x, 'action', '') in ('findvideos', 'episodios')]
+                for x in raw:
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'animeunity'
+                    x._search_channel = 'animeunity'
+                    try:
+                        x.infoLabels['_enr'] = 1     # keep native AnimeUnity poster
+                    except Exception:
+                        pass
+                    out.append(x)
+                if len(raw) >= 30:
+                    self._hs_au_page += 1            # more pages in this genre
+                else:
+                    self._hs_au_page = 0             # genre done → next genre
+                    self._hs_au_gi += 1
+                if out:
+                    break                            # non-empty batch → return it
+            self._au_more = self._hs_au_gi < len(au_genres)
+            return out
+        except Exception as exc:
+            logger.error('[Browse] hentai AU fetch: %s' % str(exc)[:160])
+            self._au_more = False
+            return out
+
+    def _fetch_hentai(self, genre, page):
+        """Fetch a page of HentaiSaturn series for the HENTAI macro (the /filter
+        listing, or a genre's /filter?categories=<id>). page is 0-based here."""
+        import channels.hentaisaturn as _hs
+        from core.item import Item as _Item
+        import re as _re_h
+        out = []
+        try:
+            g = genre.get('hs_item')
+            base = getattr(g, 'url', None) or (_hs.host + '/filter')
+            base = _re_h.sub(r'[?&]page=\d+', '', base)
+            sep = '&' if '?' in base else '?'
+            pno = max(1, int(page) + 1)
+            url = '%s%spage=%d' % (base, sep, pno)
+            seed = _Item(channel='hentaisaturn', url=url, page=pno)
+            for x in (_hs.peliculas(seed) or []):
+                if getattr(x, 'action', '') != 'episodios':
+                    continue                       # skip the trailing "next page" marker
+                if not getattr(x, 'channel', ''):
+                    x.channel = 'hentaisaturn'
+                x._search_channel = 'hentaisaturn'
+                try:
+                    x.infoLabels['_enr'] = 1       # keep native hentaisaturn poster (no TMDB)
+                except Exception:
+                    pass
+                out.append(x)
+        except Exception as exc:
+            logger.error('[Browse] hentaisaturn fetch: %s' % str(exc)[:160])
+        return out
+
     def _fetch_batch(self, macro, genre, append):
         """Fetch the next page → (sc_new, other_new). Updates pagination + _has_more."""
         from concurrent.futures import ThreadPoolExecutor
         sc_new, other_new = [], []
         if macro == 'anime':
-            other_new = self._fetch_anime(genre, self._au_page)
-            self._au_page += 1
-            self._has_more = len(other_new) >= 28
+            other_new = self._fetch_anime(genre)   # walks release years; sets self._has_more
             return sc_new, other_new
+        if macro == 'hentai':
+            # hentaisaturn goes in the sc_new slot so the SC-wins dedup keeps its
+            # version of a title over the AnimeUnity one (hentaisaturn precedence).
+            return self._fetch_hentai_batch(genre)
         # film / serie / kdrama → SC archive paged server-side (+ CB01 first page)
         n_pages = 1 if append else 2
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -9488,18 +9883,42 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
             logger.error('[Browse] cb01 peliculas: %s' % str(exc)[:160])
         return out
 
-    def _fetch_anime(self, genre, page):
+    def _fetch_anime(self, genre):
+        """Fetch the next AnimeUnity batch, WALKING release years so anime are
+        ordered by year like the SC macros: 'recent' = current year → 1966
+        (descending), 'old' = 1966 → current (ascending). AnimeUnity's archive
+        supports an exact &year filter (each anime's own release year, disjoint),
+        so each year is paged (30/req) before stepping to the next. Sets
+        self._has_more for the infinite scroll."""
         import channels.animeunity as _au
         from core.item import Item as _Item
+        import datetime, re as _re_yr
         out = []
         try:
+            _au._ensure_init()
+            cur = datetime.date.today().year
+            if self._au_year is None:
+                m = _re_yr.search(r'anime_oldest_date="(\d+)"', _au._archivio_data or '')
+                self._au_oldest = int(m.group(1)) if m else 1966
+                self._au_year = cur if self._sort == 'recent' else self._au_oldest
             g = genre.get('anime_item')
-            if g is not None:
-                seed = g.clone(page=page)
-            else:
-                seed = _Item(channel='animeunity', url=_au.host, args={}, page=page)
-            for x in (_au.peliculas(seed) or []):
-                if getattr(x, 'action', '') in ('findvideos', 'episodios'):
+            base = dict(getattr(g, 'args', {}) or {}) if g is not None else {}
+
+            def _in_range(y):
+                return (y >= self._au_oldest) if self._sort == 'recent' else (y <= cur)
+
+            # Walk years until this batch has items (skip empty years) or the range
+            # is exhausted, so the grid never gets an empty page mid-walk.
+            for _ in range(80):
+                if not _in_range(self._au_year):
+                    break
+                _args = dict(base)
+                _args['year'] = self._au_year
+                seed = (g.clone(page=self._au_ypage, args=_args) if g is not None
+                        else _Item(channel='animeunity', url=_au.host, args=_args, page=self._au_ypage))
+                raw = [x for x in (_au.peliculas(seed) or [])
+                       if getattr(x, 'action', '') in ('findvideos', 'episodios')]
+                for x in raw:
                     if not getattr(x, 'channel', ''):
                         x.channel = 'animeunity'
                     x._search_channel = 'animeunity'
@@ -9508,8 +9927,17 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
                     except Exception:
                         pass
                     out.append(x)
+                if len(raw) >= 30:
+                    self._au_ypage += 1                 # more pages left this year
+                else:
+                    self._au_ypage = 0                  # year done → step to the next
+                    self._au_year += (-1 if self._sort == 'recent' else 1)
+                if out:                                 # got a non-empty batch → return it
+                    break
+            self._has_more = self._au_ypage > 0 or _in_range(self._au_year)
         except Exception as exc:
-            logger.error('[Browse] animeunity peliculas: %s' % str(exc)[:160])
+            logger.error('[Browse] animeunity year-walk: %s' % str(exc)[:160])
+            self._has_more = False
         return out
 
     def _dedup_new(self, existing, sc_new, other_new):

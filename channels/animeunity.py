@@ -309,6 +309,15 @@ def peliculas(item, _retry=True):
         itm.thumbnail = it['imageurl']
         itm.plot = it['plot']
         itm.url = '{}/anime/{}-{}'.format(host, it.get('id'), it.get('slug'))
+        # AnimeUnity records carry the release year ('date') and a MAL-style score —
+        # surface them so anime sort/show by year like SC and carry a rating.
+        if it.get('date'):
+            itm.infoLabels['year'] = str(it['date'])
+        if it.get('score'):
+            try:
+                itm.infoLabels['rating'] = float(it['score'])
+            except (TypeError, ValueError):
+                pass
 
         if it['episodes_count'] == 1:
             itm.contentType = 'movie'

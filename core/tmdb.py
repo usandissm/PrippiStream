@@ -439,9 +439,23 @@ def set_infoLabels_item(item, seekTmdb=True, search_language=def_lang):
             search_type = 'tv'
 
         ret = search(otmdb_global, search_type)
-        if not ret:  # try with unified title
+        if not ret:  # nothing on the full title
             backup = [item.fulltitle, item.infoLabels['tvshowtitle'], item.infoLabels['title']]
-            if unify():
+            # Anime sequels/spin-offs ("X 2", "X 2nd Season", "X: Sub Mini Anime")
+            # rarely have their own TMDB entry: match the BASE series by stripping a
+            # trailing season/sequel/spin-off token FIRST — otherwise the
+            # subtitle-dropping title_unify() below collapses e.g. "Frieren: Beyond
+            # Journey's End 2" to "Frieren", which then matches a spurious 1978 film.
+            _cur = item.infoLabels['title'] or item.fulltitle or ''
+            _base = re.sub(
+                r'\s+(?:\d{1,2}(?:nd|rd|st|th)?\s+seasons?|seasons?\s+\d{1,2}'
+                r'|part\s+\d{1,2}|mini\s*anime|ova|oav|ona|specials?|\d{1,2})\s*$',
+                '', _cur, flags=re.IGNORECASE).strip()
+            if _base and len(_base) >= 4 and _base != _cur:
+                item.infoLabels['title'] = _base
+                item.infoLabels['tvshowtitle'] = _base
+                ret = search(otmdb_global, search_type)
+            if not ret and unify():  # last resort: normalized / subtitle-reduced title
                 ret = search(otmdb_global, search_type)
             if not ret:
                 item.fulltitle, item.infoLabels['tvshowtitle'], item.infoLabels['title'] = backup
