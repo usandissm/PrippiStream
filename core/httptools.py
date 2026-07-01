@@ -456,6 +456,13 @@ def downloadpage(url, **opt):
 
     info_dict, response = fill_fields_post(info_dict, req, response, req_headers, inicio)
 
+    try:
+        from platformcode import perf
+        if perf.ENABLED:
+            perf.note('http', '%s %s %.0f ms' % (domain, response_code, (time.time() - inicio) * 1000))
+    except Exception:
+        pass
+
     if opt.get('cookies', True):
         save_cookies(alfa_s=opt.get('alfa_s', False))
 

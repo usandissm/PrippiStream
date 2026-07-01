@@ -72,6 +72,17 @@ def clean_cache():
     db['tmdb_cache'].clear()
 
 
+_cache_stats = [0, 0]  # [hit, miss] — solo strumentazione [PERF], contatori best-effort
+
+
+def _perf_cache_count(hit):
+    _cache_stats[0 if hit else 1] += 1
+    total = _cache_stats[0] + _cache_stats[1]
+    if total % 50 == 0:
+        from platformcode import perf
+        perf.note('tmdb.cache', 'hit %d / miss %d' % (_cache_stats[0], _cache_stats[1]))
+
+
 # The function name is the name of the decorator and receives the function that decorates.
 def cache_response(fn):
     logger.debug()
@@ -139,8 +150,11 @@ def cache_response(fn):
 
                 # si no se ha obtenido información, llamamos a la funcion
                 if not result.get('results'):
+                    _perf_cache_count(False)
                     result = fn(*args)
                     db['tmdb_cache'][url] = [result, datetime.datetime.now()]
+                else:
+                    _perf_cache_count(True)
 
             # elapsed_time = time.time() - start_time
             # logger.debug("TARDADO %s" % elapsed_time)

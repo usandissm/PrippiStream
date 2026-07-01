@@ -33,6 +33,8 @@ def start():
 
 def run(item=None):
     logger.debug()
+    from platformcode import perf
+    _pt = perf.mark('launcher.run enter')
     # Extract item from sys.argv
     if not item: item = makeItem()
 
@@ -41,6 +43,7 @@ def run(item=None):
 
     # Acrions
     logger.debug(item.tostring())
+    perf.note('launcher.action', '%s/%s' % (item.channel, item.action))
 
     try:
         # Active tmdb
@@ -242,6 +245,7 @@ def run(item=None):
             if platformtools.dialog_yesno(config.get_localized_string(60038), config.get_localized_string(60015)):
                 platformtools.itemlist_update(Item(channel='setting', action='report_menu'), True)
     finally:
+        perf.mark('launcher.run done (%s/%s)' % (item.channel, item.action), _pt)
         # db need to be closed when not used, it will cause freezes
         from core import db
         db.close()

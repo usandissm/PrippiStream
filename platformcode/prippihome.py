@@ -1005,6 +1005,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
     def _bg_load_inner(self):
         global _sc_rows_cache, _cache
 
+        from platformcode import perf
+        _pt = perf.mark('home.load start')
+
         # ── Sync channels.json from GitHub in the BACKGROUND (never blocks paint) ──
         _t_chan = threading.Thread(target=_sync_channels_json)
         _t_chan.daemon = True
@@ -1031,8 +1034,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 return
             self._set_loading(70)
             cw_items, need_4k_fill = self._assemble_initial(sc_rows)
+            _pt = perf.mark('home.assemble (warm)', _pt)
             self._set_loading(100)
             self._render_now(cw_items)
+            perf.mark('home.paint (warm)', _pt)
             self._start_bg_tasks(need_4k_fill, enrich=True)
             # No archive phase on the cache-hit path → append the ANIME row here.
             self._start_anime_append(cw_items)
@@ -1044,6 +1049,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[PrippiHome] main fetch error: %s' % str(exc))
             main_rows, host, homepage_data = [], '', None
+        _pt = perf.mark('home.fetch_main (cold)', _pt)
 
         if not main_rows and _sc_rows_cache:
             # Network failed: fall back to whatever we showed last time.
@@ -1054,15 +1060,18 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         self._set_loading(60)
         cw_items, need_4k_fill = self._assemble_initial(main_rows)
+        _pt = perf.mark('home.assemble (cold)', _pt)
 
         # Enrich the first visible SC rows SYNCHRONOUSLY (before paint) so their
         # cards show the official TMDB HD posters from the very first frame.
         # Costs a couple of seconds but matches the old behaviour; the remaining
         # rows are enriched in the background after render.
         self._enrich_visible_rows_sync(progress_lo=60, progress_hi=98)
+        _pt = perf.mark('home.enrich_sync (cold)', _pt)
 
         self._set_loading(100)
         self._render_now(cw_items)
+        perf.mark('home.paint (cold)', _pt)
 
         # Enrich the rest of the rows + extra-source + 4K fill in the background.
         self._start_bg_tasks(need_4k_fill, enrich=True)
@@ -1080,11 +1089,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def _bg_load_archive(self, host, homepage_data, main_rows, cw_items):
         """Fetch archive rows after the first paint and append them live."""
+        from platformcode import perf
+        _pt = perf.mark('home.archive start')
         try:
             archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows))
         except Exception as exc:
             logger.error('[PrippiHome] archive fetch error: %s' % str(exc))
             archive_rows = []
+        perf.mark('home.archive fetch (%d rows)' % len(archive_rows), _pt)
         if not archive_rows or not self._alive:
             # Still cache the main rows so a quick re-open is instant.
             full = list(main_rows)
