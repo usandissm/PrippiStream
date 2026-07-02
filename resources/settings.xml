@@ -91,6 +91,7 @@
     <category label="70126">
         <setting id="home_loop_rows" type="bool" label="Home: scorrendo oltre l'ultima riga torna alla prima" default="false"/>
         <setting id="show_adult_anime" type="bool" label="Sfoglia: abilita la sezione HENTAI 18+" default="true"/>
+        <setting id="fourk_ask_quality" type="bool" label="Film in 4K: chiedi se riprodurre in 4K o Full HD" default="false"/>
 
         <!-- Live-channel rows: toggle visibility in the home. Hidden rows are still
              loaded/probed in the background at startup, so re-enabling shows them

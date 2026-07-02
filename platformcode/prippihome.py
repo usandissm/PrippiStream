@@ -537,6 +537,77 @@ def _build_4k_row():
     return items
 
 
+def _ask_quality_enabled():
+    """Read 'fourk_ask_quality' FRESH (new Addon instance) so an in-session
+    settings change applies LIVE: the module-cached Addon in config returns
+    stale values after the settings dialog saves (Kodi 21 — same reason
+    _read_live_settings exists). One Addon() per play click is negligible."""
+    try:
+        return xbmcaddon.Addon('plugin.video.prippistream').getSetting('fourk_ask_quality') == 'true'
+    except Exception:
+        return False
+
+
+def _ask_4k_quality(item):
+    """Ask the user whether to play a 4K-available movie in 4K or Full HD.
+    Only called when the 'fourk_ask_quality' setting is enabled.
+    Returns '4k', 'fhd', or None if the dialog was dismissed (= play nothing)."""
+    try:
+        title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                       item.fulltitle or item.title or '').strip()
+        heading = u'Qualità di riproduzione'
+        if title:
+            heading += u' — %s' % title
+        idx = xbmcgui.Dialog().select(heading,
+                                      [u'4K (Ultra HD)', u'Full HD (1080p)'])
+    except Exception as exc:
+        logger.error('[PrippiHome] _ask_4k_quality: %s' % str(exc))
+        return '4k'
+    if idx < 0:
+        return None
+    return 'fhd' if idx == 1 else '4k'
+
+
+def _resolve_sc_movie(item):
+    """Find the SC counterpart of a bare 4K-row movie item (no channel/url).
+    One SC search by title, then match by tmdb_id (SC search results are
+    TMDB-enriched before returning) with a normalized title+year fallback.
+    Returns a full SC Item (action=findvideos) or None."""
+    try:
+        from channels import streamingcommunity as _sc
+        title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                       item.fulltitle or item.title or '').strip()
+        if not title:
+            return None
+        seed = Item(channel='streamingcommunity', extra='search')
+        results = list(_sc.search(seed, title) or [])
+        want_tmdb = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
+        want_year = str((item.infoLabels or {}).get('year') or '')[:4]
+
+        def _norm(s):
+            return re.sub(r'[^a-z0-9]+', '', (s or '').lower())
+
+        movies = [it for it in results
+                  if (getattr(it, 'contentType', '') or '') == 'movie'
+                  and (getattr(it, 'url', '') or '').strip()]
+        if want_tmdb:
+            for it in movies:
+                il = it.infoLabels or {}
+                if str(il.get('tmdb_id') or il.get('tmdb') or '').strip() == want_tmdb:
+                    return it
+        nt = _norm(title)
+        for it in movies:
+            cand = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                          it.fulltitle or it.title or '').strip()
+            if _norm(cand) == nt:
+                y = str((it.infoLabels or {}).get('year') or '')[:4]
+                if not want_year or not y or y == want_year:
+                    return it
+    except Exception as exc:
+        logger.error('[PrippiHome] _resolve_sc_movie: %s' % str(exc))
+    return None
+
+
 # ── CW helpers ──────────────────────────────────────────────
 
 def _cw_key(item):
@@ -2384,18 +2455,39 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # no per-launch flag is needed here anymore. We manage resume/next-ep ourselves.
 
         # ── 4K check (movies only) ────────────────────────────────────────
+        # _no_4k: transient flag set when the user already chose the FHD (SC)
+        # version, or by the 4K-failure fallback — skips this branch entirely
+        # so the item plays through its normal channel flow (no re-ask, no loop).
         ct = getattr(item, 'contentType', '') or ''
-        if ct == 'movie':
+        if ct == 'movie' and not getattr(item, '_no_4k', 0):
             _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
             if _tmdb:
                 _f4k = _fourk.lookup_4k(_tmdb)
                 if _f4k:
-                    logger.info('[PrippiHome] 4K HIT: %s → %s' % (
-                        item.fulltitle, _f4k['stream_url'][:80]))
-                    t = threading.Thread(target=self._play_4k_stream, args=(item, _f4k))
-                    t.daemon = True
-                    t.start()
-                    return
+                    _choice = '4k'
+                    if _ask_quality_enabled():
+                        _choice = _ask_4k_quality(item)
+                    if _choice is None:
+                        return  # dialog dismissed: play nothing
+                    if _choice == '4k':
+                        logger.info('[PrippiHome] 4K HIT: %s → %s' % (
+                            item.fulltitle, _f4k['stream_url'][:80]))
+                        t = threading.Thread(target=self._play_4k_stream, args=(item, _f4k))
+                        t.daemon = True
+                        t.start()
+                        return
+                    # 'fhd': a real channel card (SC or other) simply falls
+                    # through to its normal flow below; a bare 4K-row item
+                    # (no channel/url) must first be resolved to its SC
+                    # counterpart (network → background thread).
+                    logger.info('[PrippiHome] 4K disponibile ma scelto FHD: %s' % item.fulltitle)
+                    if not (getattr(item, 'channel', '') and (getattr(item, 'url', '') or '').strip()):
+                        t = threading.Thread(target=self._play_fhd_via_sc,
+                                             args=(item, _f4k),
+                                             kwargs={'source_window': source_window})
+                        t.daemon = True
+                        t.start()
+                        return
 
         if item.action == 'findvideos':
             # SC movie or episode: direct play via RunPlugin.
@@ -3447,8 +3539,59 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             t.start()
         except Exception as exc:
             logger.error('[PrippiHome] _play_4k_stream: %s' % str(exc))
-            # Fallback to SC
-            self._launch(item)
+            # Fallback to SC. _no_4k prevents _launch from re-entering the 4K
+            # branch (previously this could loop on a persistent 4K failure);
+            # bare 4K-row items (no channel/url) are resolved to their SC
+            # counterpart first.
+            if getattr(item, 'channel', '') and (getattr(item, 'url', '') or '').strip():
+                item._no_4k = 1
+                self._launch(item)
+            else:
+                self._play_fhd_via_sc(item, None, allow_4k_fallback=False)
+
+    def _play_fhd_via_sc(self, item, f4k, source_window=None, allow_4k_fallback=True):
+        """Play the Full HD (SC) version of a bare 4K-row movie item.
+
+        Resolves the SC counterpart with one SC search (network → runs on a
+        background thread, busy spinner shown), then routes it through the
+        normal _launch flow so it behaves exactly like any other SC title
+        (CW/resume, language restore, focus restore). If SC does not have the
+        title, falls back to the 4K stream (when available) with a notification.
+        """
+        busy = None
+        try:
+            busy = xbmcgui.DialogBusy()
+            busy.create()
+        except Exception:
+            busy = None
+        sc_item = None
+        try:
+            sc_item = _resolve_sc_movie(item)
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_fhd_via_sc: %s' % str(exc))
+        try:
+            if busy:
+                busy.close()
+        except Exception:
+            pass
+        if sc_item is not None:
+            logger.info('[PrippiHome] FHD via SC: %s → %s' % (
+                item.fulltitle, (sc_item.url or '')[:80]))
+            sc_item._no_4k = 1
+            # Keep the 4K card's artwork when SC has none (player OSD).
+            if not (sc_item.thumbnail or '').strip():
+                sc_item.thumbnail = item.thumbnail
+            if not (sc_item.fanart or '').strip():
+                sc_item.fanart = item.fanart
+            self._launch(sc_item, source_window=source_window)
+            return
+        if allow_4k_fallback and f4k:
+            platformtools.dialog_notification(
+                'PrippiStream', 'Versione Full HD non trovata: avvio in 4K')
+            self._play_4k_stream(item, f4k)
+        else:
+            platformtools.dialog_notification(
+                'PrippiStream', 'Versione Full HD non trovata')
 
     def _play_channel_stream(self, item, row_idx=None, pos=None):
         """Resolve a live channel (SKY/DAZN/FIFA+/Cinema) and play it directly.
@@ -8096,34 +8239,46 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
 
             # ── 4K check (movies only, before normal path) ────────────────
             ct = getattr(item, 'contentType', '') or ''
-            if ct == 'movie':
+            if ct == 'movie' and not getattr(item, '_no_4k', 0):
                 _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
                 if _tmdb:
                     _f4k = _fourk.lookup_4k(_tmdb)
                     if _f4k:
-                        logger.info('[PrippiSearch] 4K HIT: %s' % item.fulltitle)
-                        _pw = self._parent_window
-                        if _pw:
-                            t = threading.Thread(target=_pw._play_4k_stream, args=(item, _f4k))
-                            t.daemon = True
-                            t.start()
+                        _choice = '4k'
+                        if _ask_quality_enabled():
+                            _choice = _ask_4k_quality(item)
+                        if _choice is None:
+                            return  # dialog dismissed: play nothing
+                        if _choice == 'fhd':
+                            # Search results are full channel items (SC url):
+                            # skip the 4K branch and let the normal path below
+                            # play them like any other content (CW included).
+                            logger.info('[PrippiSearch] 4K disponibile ma scelto FHD: %s' % item.fulltitle)
+                            item._no_4k = 1
                         else:
-                            # No parent window: resolve URL and play directly
-                            _pre_play_set_lang(item)
-                            _stream_url4k = _fourk.get_resolved_url(_f4k)
-                            li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url4k)
-                            li.setArt({'thumb': item.thumbnail or _f4k.get('poster', ''),
-                                        'fanart': item.fanart or ''})
-                            try:
-                                _il2 = dict(item.infoLabels or {})
-                                if _il2:
-                                    li.setInfo('video', {k: v for k, v in _il2.items()
-                                                         if v is not None and isinstance(v, (str, int, float))})
-                            except Exception:
-                                pass
-                            li.setProperty('IsPlayable', 'true')
-                            xbmc.Player().play(_stream_url4k, li)
-                        return
+                            logger.info('[PrippiSearch] 4K HIT: %s' % item.fulltitle)
+                            _pw = self._parent_window
+                            if _pw:
+                                t = threading.Thread(target=_pw._play_4k_stream, args=(item, _f4k))
+                                t.daemon = True
+                                t.start()
+                            else:
+                                # No parent window: resolve URL and play directly
+                                _pre_play_set_lang(item)
+                                _stream_url4k = _fourk.get_resolved_url(_f4k)
+                                li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url4k)
+                                li.setArt({'thumb': item.thumbnail or _f4k.get('poster', ''),
+                                            'fanart': item.fanart or ''})
+                                try:
+                                    _il2 = dict(item.infoLabels or {})
+                                    if _il2:
+                                        li.setInfo('video', {k: v for k, v in _il2.items()
+                                                             if v is not None and isinstance(v, (str, int, float))})
+                                except Exception:
+                                    pass
+                                li.setProperty('IsPlayable', 'true')
+                                xbmc.Player().play(_stream_url4k, li)
+                            return
 
             # ── Normal path (SC item or no prefetch event) ──────────────────────
             if self._parent_window is not None:
