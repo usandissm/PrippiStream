@@ -57,7 +57,7 @@ Fatti verificati da NON ri-derivare:
 ## Stato fasi
 
 - [x] **SETUP** — workspace scollegato, versione 1.9.900, questo documento
-- [ ] **FASE 0** — strumentazione `[PERF]` + baseline su device
+- [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`) — ⏳ manca la raccolta baseline su device
 - [ ] **FASE 1** — fix cache TMDB + pool enrich limitato
 - [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
 - [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
