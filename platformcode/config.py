@@ -363,7 +363,14 @@ def get_cookie_data():
 def verify_directories_created():
     from platformcode import logger
     from core import filetools
-    from platformcode import xbmc_videolibrary
+
+    # v2 FASE 8b: la parte videolibrary (feature Kodi-library, morta nella UI
+    # Netflix-only) gira solo se videolibrary_kodi e' attivo. Prima, a OGNI boot:
+    # JSON-RPC search_library_path se il path era vuoto, ri-creazione delle
+    # cartelle videolibrary/Film/Serie TV (che la migrazione v1.4.0 aveva
+    # cancellato!) e update_sources su sources.xml. I VALORI dei setting vengono
+    # comunque inizializzati (invarianti preservati per i lettori legacy gated).
+    videolibrary_on = bool(get_setting('videolibrary_kodi'))
 
     config_paths = [["videolibrarypath", "videolibrary"],
                     ["downloadpath", "downloads"],
@@ -375,7 +382,8 @@ def verify_directories_created():
 
         # video store
         if path == "videolibrarypath":
-            if not saved_path:
+            if not saved_path and videolibrary_on:
+                from platformcode import xbmc_videolibrary
                 saved_path = xbmc_videolibrary.search_library_path()
                 if saved_path:
                     set_setting(path, saved_path)
@@ -383,6 +391,9 @@ def verify_directories_created():
         if not saved_path:
             saved_path = "special://profile/addon_data/plugin.video." + PLUGIN_NAME + "/" + default
             set_setting(path, saved_path)
+
+        if path == "videolibrarypath" and not videolibrary_on:
+            continue  # niente mkdir della cartella videolibrary
 
         saved_path = xbmc.translatePath(saved_path)
         if not filetools.exists(saved_path):
@@ -399,6 +410,9 @@ def verify_directories_created():
             saved_path = default
             set_setting(path, saved_path)
 
+        if not videolibrary_on:
+            continue  # niente mkdir di Film/Serie TV sotto videolibrary
+
         content_path = filetools.join(get_videolibrary_path(), saved_path)
         if not filetools.exists(content_path):
             logger.debug("Creating %s: %s" % (path, content_path))
@@ -406,9 +420,15 @@ def verify_directories_created():
             # if the directory is created
             filetools.mkdir(content_path)
 
-    from platformcode import xbmc_videolibrary
-    xbmc_videolibrary.update_sources(get_setting("videolibrarypath"))
-    xbmc_videolibrary.update_sources(get_setting("downloadpath"))
+    # update_sources solo quando serve davvero (evita anche l'import del modulo
+    # xbmc_videolibrary, ~1.500 righe, a ogni boot sulle install di default).
+    if videolibrary_on:
+        from platformcode import xbmc_videolibrary
+        xbmc_videolibrary.update_sources(get_setting("videolibrarypath"))
+        xbmc_videolibrary.update_sources(get_setting("downloadpath"))
+    elif get_setting('downloadenabled'):
+        from platformcode import xbmc_videolibrary
+        xbmc_videolibrary.update_sources(get_setting("downloadpath"))
 
     try:
         from core import scrapertools

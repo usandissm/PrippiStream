@@ -25,8 +25,11 @@ os.environ['TMPDIR'] = config.get_temp_file('')
 
 from core import filetools, channeltools, httptools, scrapertools, db
 from lib import schedule
-from platformcode import logger, platformtools, updater, xbmc_videolibrary
-from servers import torrent
+# xbmc_videolibrary (~1.500 righe, feature Kodi-library morta nella UI
+# Netflix-only) NON viene più importato a ogni boot del service (v2 FASE 8b):
+# import lazy nei 2 soli punti che lo usano (onNotification VideoLibrary.OnUpdate
+# e la migrazione one-shot TVDB→TMDB, entrambi gated).
+from platformcode import logger, platformtools, updater
 
 # if this service need to be reloaded because an update changed it
 needsReload = False
@@ -135,9 +138,6 @@ class AddonMonitor(xbmc.Monitor):
                 schedule.clear('updater')
                 self.scheduleUpdater()
 
-            if self.settings_pre.get('elementum_on_seed') != settings_post.get('elementum_on_seed') and settings_post.get('elementum_on_seed'):
-                if not platformtools.dialog_yesno(config.get_localized_string(70805), config.get_localized_string(70806)):
-                    config.set_setting('elementum_on_seed', False)
             if self.settings_pre.get("shortcut_key", '') != settings_post.get("shortcut_key", ''):
                 xbmc.executebuiltin('Action(reloadkeymaps)')
             if self.settings_pre.get('downloadenabled') != settings_post.get('downloadenabled'):
@@ -162,6 +162,7 @@ class AddonMonitor(xbmc.Monitor):
             db['OnPlay']['addon'] = False
             db.close()
         elif method == 'VideoLibrary.OnUpdate':
+            from platformcode import xbmc_videolibrary
             xbmc_videolibrary.set_watched_on_addon(data)
             logger.debug('AGGIORNO')
 
@@ -185,8 +186,13 @@ class AddonMonitor(xbmc.Monitor):
         schedule.every(1).day.do(get_ua_list)
 
     def scheduleScreenOnJobs(self):
-        schedule.every().second.do(platformtools.viewmodeMonitor).tag('screenOn')
-        schedule.every().second.do(torrent.elementum_monitor).tag('screenOn')
+        # v2 FASE 8a: viewmodeMonitor da 1s a 3s (salva la view-mode dei listing
+        # classici, quasi mai usati nella UI Netflix-only: 3s di latenza di
+        # salvataggio sono invisibili, ma si taglia 2/3 del lavoro idle — nel
+        # caso peggiore faceva 2 Item().fromurl al secondo). Il monitor Elementum
+        # (torrent seeding, feature morta) girava anch'esso OGNI SECONDO leggendo
+        # settings+path da disco: rimosso del tutto.
+        schedule.every(3).seconds.do(platformtools.viewmodeMonitor).tag('screenOn')
 
     def onDPMSActivated(self):
         logger.debug('DPMS activated, un-scheduling screen-on jobs')
@@ -280,6 +286,7 @@ if __name__ == "__main__":
 
     # replace tvdb to tmdb for series
     if config.get_setting('videolibrary_kodi') and config.get_setting('show_once'):
+        from platformcode import xbmc_videolibrary
         nun_records, records = xbmc_videolibrary.execute_sql_kodi('select * from path where strPath like "' +
                                            filetools.join(config.get_setting('videolibrarypath'), config.get_setting('folder_tvshows')) +
                                            '%" and strScraper="metadata.tvdb.com"')

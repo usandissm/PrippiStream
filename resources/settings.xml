@@ -112,9 +112,7 @@
         <setting id="viewchange_notify" type="bool" default="false" visible="false"/>
         <setting id="skin_name" type="text" default="skin.estuary" visible="false"/>
         <setting id="quick_menu" type="bool" default="true" visible="false"/>
-        <setting id="infoplus" type="bool" default="false" visible="false"/>
         <setting id="icon_set" type="select" values="default|light|dark|mike" default="default" visible="false"/>
-        <setting id="only_channel_icons" type="bool" default="false" visible="false"/>
         <setting id="enable_custom_theme" type="bool" default="false" visible="false"/>
         <setting id="custom_theme" type="folder" default="" visible="false"/>
         <setting id="video_thumbnail_type" type="select" lvalues="70132|70133" default="1" visible="false"/>

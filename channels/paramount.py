@@ -7,7 +7,10 @@ from core import support, jsontools
 from platformcode import autorenumber, logger
 from collections import OrderedDict
 
-from specials import videolibrary
+# NOTA (v2 FASE 8a): rimosso "from specials import videolibrary" — era
+# INUTILIZZATO (la riga in peliculas usa support.videolibrary(), l'helper di
+# support, non questo modulo) e trascinava ~2.400 righe di codice videolibrary
+# nel path della ricerca globale a ogni import del canale.
 
 host = support.config.get_channel_url()
 headers = [['Referer', host]]
