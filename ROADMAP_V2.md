@@ -58,6 +58,7 @@ Fatti verificati da NON ri-derivare:
 
 - [x] **SETUP** — workspace scollegato, versione 1.9.900, questo documento
 - [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`) — ⏳ manca la raccolta baseline su device
+- [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
 - [ ] **FASE 1** — fix cache TMDB + pool enrich limitato
 - [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
 - [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
