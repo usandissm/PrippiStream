@@ -2313,6 +2313,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Addon settings were saved → apply any change to OUR options live."""
         if not getattr(self, '_alive', True):
             return
+        try:
+            from platformcode import perf
+            perf.refresh()  # il toggle [PERF] del build di test vale subito
+        except Exception:
+            pass
         new = self._read_live_settings()
         old = getattr(self, '_settings_snap', {}) or {}
         changed = {k for k in _LIVE_SETTING_KEYS if new.get(k) != old.get(k)}

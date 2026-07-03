@@ -15,6 +15,20 @@ from platformcode import config
 ENABLED = config.get_setting('perf_log', default=False)
 
 
+def refresh():
+    """Rilegge il flag con un'istanza Addon FRESCA (l'istanza cachata in config
+    e' stantia dopo un salvataggio impostazioni su Kodi 21 — vedi il pattern di
+    _read_live_settings in prippihome). Chiamata da _on_settings_changed della
+    home cosi' il toggle visibile nel build di test ha effetto immediato."""
+    global ENABLED
+    try:
+        import xbmcaddon
+        ENABLED = xbmcaddon.Addon('plugin.video.prippistream').getSetting('perf_log') == 'true'
+    except Exception:
+        pass
+    return ENABLED
+
+
 def mark(tag, t0=None):
     """Segna un punto di misura.
 

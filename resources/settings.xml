@@ -69,8 +69,6 @@
         <setting id="episode_info" type="bool" default="false" visible="false"/>
         <setting id="tmdb_cache" type="bool" default="true" visible="false"/>
         <setting id="tmdb_cache_expire" type="select" lvalues="70158|70159|70160|70161|70170" default="4" visible="false"/>
-        <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING) -->
-        <setting id="perf_log" type="bool" default="false" visible="false"/>
         <setting id="lista_activa" type="text" default="addonfavorites-default.json" visible="false"/>
     </category>
 
@@ -130,6 +128,9 @@
     <!-- Supporto -->
     <category label="Supporto">
         <setting label="Diagnostica" type="lsep"/>
+        <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING).
+             Visibile nei build di test 1.9.9xx; da nascondere per la release 2.0. -->
+        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="false"/>
         <setting id="send_log_to_dev" type="action"
                  label="Invia Log allo Sviluppatore"
                  action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiAic2VuZF9sb2dfdG9fZGV2IiwgImNoYW5uZWwiOiAic2V0dGluZyJ9)"/>
