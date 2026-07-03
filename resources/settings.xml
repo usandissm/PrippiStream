@@ -68,7 +68,9 @@
         <setting id="tmdb_plus_info" type="bool" default="false" visible="false"/>
         <setting id="episode_info" type="bool" default="false" visible="false"/>
         <setting id="tmdb_cache" type="bool" default="true" visible="false"/>
-        <setting id="tmdb_cache_expire" type="select" lvalues="70158|70159|70160|70161|70170" default="4" visible="false"/>
+        <!-- default 2 = 15 giorni: col fix della cache by-ID (v2 FASE 1) "mai
+             scadere" (4) congelerebbe rating/metadati per sempre -->
+        <setting id="tmdb_cache_expire" type="select" lvalues="70158|70159|70160|70161|70170" default="2" visible="false"/>
         <setting id="lista_activa" type="text" default="addonfavorites-default.json" visible="false"/>
     </category>
 

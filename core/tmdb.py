@@ -15,7 +15,7 @@ else:
 from future.builtins import range
 from future.builtins import object
 
-import ast, copy, re, time
+import ast, copy, os, re, time
 
 from core import filetools, httptools, jsontools, scrapertools
 from core.item import InfoLabels
@@ -143,18 +143,29 @@ def cache_response(fn):
                 url = args[0].replace('&year=-', '').replace('&primary_release_year=-', '').replace('&first_air_date_year=-', '')
                 # if PY3: url = str.encode(url)
 
+                def _cacheable(res):
+                    # Cache solo payload reali: dict non vuoto, non un envelope
+                    # d'errore TMDB, e le search solo se hanno risultati. {} (il
+                    # fallimento di get_json) e le search vuote NON vengono mai
+                    # cachati, così gli errori transitori si auto-riparano.
+                    return (bool(res) and isinstance(res, dict)
+                            and 'status_code' not in res
+                            and ('results' not in res or res.get('results')))
+
                 row = db['tmdb_cache'].get(url)
 
-                if row and check_expired(row[1]):
+                if row and check_expired(row[1]) and _cacheable(row[0]):
+                    # HIT. Le risposte by-ID (/movie/{id}, /tv/{id}, stagioni) non
+                    # hanno la chiave 'results': il vecchio check
+                    # `if not result.get('results')` le trattava SEMPRE come miss
+                    # e le rifetchava (e riscriveva su db) a ogni uso.
                     result = row[0]
-
-                # si no se ha obtenido información, llamamos a la funcion
-                if not result.get('results'):
+                    _perf_cache_count(True)
+                else:
                     _perf_cache_count(False)
                     result = fn(*args)
-                    db['tmdb_cache'][url] = [result, datetime.datetime.now()]
-                else:
-                    _perf_cache_count(True)
+                    if _cacheable(result):
+                        db['tmdb_cache'][url] = [result, datetime.datetime.now()]
 
             # elapsed_time = time.time() - start_time
             # logger.debug("TARDADO %s" % elapsed_time)
@@ -231,7 +242,10 @@ def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, 
     # from core.support import dbg;dbg()
     # for i, item in enumerate(itemlist):
     #     r_list.append(sub_thread(item, i, seekTmdb))
-    executor = futures.ThreadPoolExecutor()
+    # max_workers limitato: su CPU deboli (box ARM) il default (cpu+4, fino a 32)
+    # satura GIL e socket; 8 = valore effettivo odierno sui quad-core, quindi
+    # nessun cambio lì, solo un tetto dove il default esplodeva.
+    executor = futures.ThreadPoolExecutor(max_workers=max(2, min(8, (os.cpu_count() or 4))))
     searchList = [executor.submit(sub_thread, item, i, seekTmdb) for i, item in enumerate(itemlist)]
     try:
         for res in futures.as_completed(searchList):

@@ -59,7 +59,7 @@ Fatti verificati da NON ri-derivare:
 - [x] **SETUP** — workspace scollegato, versione 1.9.900, questo documento
 - [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`); baseline PC raccolta 2026-07-03 (vedi tabella Misure) — ⏳ baseline Fire Stick prevista settimana prossima
 - [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
-- [ ] **FASE 1** — fix cache TMDB + pool enrich limitato
+- [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire default 15gg + pool enrich max 8 worker; build test 1.9.903 — ⏳ da testare dall'utente (checklist FASE 1)
 - [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
 - [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
 - [ ] **FASE 4** — memoizzazione settings + SQLite WAL
