@@ -1479,6 +1479,12 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 # threads of the Python GIL. Pause until downloads finish.
                 while _dl_active() and self._alive and not mon.abortRequested():
                     xbmc.sleep(1500)
+                # v2 FASE 6: pausa anche mentre un play sta partendo/riproducendo
+                # o un dialog è aperto (_bg_ui_pause clearato da _launch/dialoghi,
+                # ri-settato in finally da _wait_and_restore).
+                while (not self._bg_ui_pause.is_set() and self._alive
+                       and not mon.abortRequested() and not _shutdown_event.is_set()):
+                    xbmc.sleep(500)
                 if not items:
                     continue
                 # Skip CW row only — 4K is now enriched here like SC rows.
@@ -1809,6 +1815,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # Yield to active downloads before doing GIL-heavy enrichment fetches.
             while _dl_active() and self._alive and not _monitor_bg.abortRequested():
                 xbmc.sleep(1500)
+            # v2 FASE 6: idem mentre un play sta partendo/riproducendo.
+            while (not self._bg_ui_pause.is_set() and self._alive
+                   and not _monitor_bg.abortRequested() and not _shutdown_event.is_set()):
+                xbmc.sleep(500)
 
             # Step 1: collect which content types are needed across all SC rows
             needed_types = set()
@@ -2708,6 +2718,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # picks the right track from frame 0 (restored immediately after onAVStarted).
             _pre_play_set_lang(item)
 
+            # v2 FASE 6: pausa l'enrich bg mentre l'invoker risolve e il player
+            # parte (GIL condiviso tra sub-interpreti). _wait_and_restore lo
+            # ri-setta in finally su ogni uscita.
+            self._bg_ui_pause.clear()
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
             t = threading.Thread(target=self._wait_and_restore, args=(item,),
                                  kwargs={'source_window': source_window})
@@ -2732,6 +2746,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # cineblog01, etc.): dispatch via RunPlugin → launcher.actions/findvideos
             # which handles all custom actions correctly without opening a container.
             _pre_play_set_lang(item)
+            self._bg_ui_pause.clear()  # v2 FASE 6 (vedi ramo findvideos)
             xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
             t = threading.Thread(target=self._wait_and_restore, args=(item,),
                                  kwargs={'source_window': source_window})
@@ -2893,6 +2908,15 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             logger.error('[PrippiHome] _restore_search_window: %s' % str(exc))
 
     def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+        """Wrapper: garantisce che _bg_ui_pause venga ri-settato su OGNI uscita
+        (v2 FASE 6 — _launch lo cleara prima del dispatch play così l'enrich in
+        background non compete col GIL mentre il video parte/riproduce)."""
+        try:
+            self._do_wait_and_restore(item, next_ep_ctx, source_window)
+        finally:
+            self._bg_ui_pause.set()
+
+    def _do_wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
         """Wait for playback to start/end, track progress for CW, then restore the
         home rows — or, when source_window is a search overlay, restore focus to
         the search results (last-clicked card). CW logic is identical either way."""
@@ -3735,6 +3759,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             except Exception:
                 pass
             li.setProperty('IsPlayable', 'true')
+            self._bg_ui_pause.clear()  # v2 FASE 6: _wait_and_restore lo ri-setta
             xbmc.Player().play(_stream_url, li)
             t = threading.Thread(target=self._wait_and_restore, args=(item,))
             t.daemon = True
@@ -3794,6 +3819,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         else:
             platformtools.dialog_notification(
                 'PrippiStream', 'Versione Full HD non trovata')
+            # Terminale senza play: assicura che l'enrich bg non resti in pausa
+            # se un chiamante aveva già clearato _bg_ui_pause (v2 FASE 6).
+            self._bg_ui_pause.set()
 
     def _play_channel_stream(self, item, row_idx=None, pos=None):
         """Resolve a live channel (SKY/DAZN/FIFA+/Cinema) and play it directly.

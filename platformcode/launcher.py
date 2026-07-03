@@ -39,7 +39,10 @@ def run(item=None):
     if not item: item = makeItem()
 
     # Load or Repare Settings (popup first-install disabilitato — non più necessario)
-    config.set_setting('show_once', True)
+    # v2 FASE 6: write solo se serve — prima veniva scritto a OGNI invocazione
+    # (ogni click), con broadcast onSettingsChanged verso la home aperta.
+    if not config.get_setting('show_once'):
+        config.set_setting('show_once', True)
 
     # Acrions
     logger.debug(item.tostring())
