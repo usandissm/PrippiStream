@@ -62,7 +62,7 @@ Fatti verificati da NON ri-derivare:
 - [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire 15gg + pool enrich max 8; build 1.9.903 — ✅ TESTATA 2026-07-03: miss 40%→7,8%, richieste TMDB -41%, rete -32%. Nota: `_tmdb_get_trailer` (prippihome:5489) chiama TMDB /videos direttamente via httptools senza cache — micro-win possibile in F2/F3
 - [x] **FASE 2** — riuso trasporto HTTP (adapter condiviso, gate `http_session_reuse`) + cookie-save solo su cambiamento + infobox saltato a debug off; build 1.9.904 — ✅ TESTATA 2026-07-03: nessuna regressione (play SC/AnimeUnity ok), pooling corretto (Session non chiude l'adapter). Su PC guadagno nel rumore (handshake TLS CPU-cheap su x86); payoff atteso su Fire Stick (handshake costoso su ARM) → confermare con baseline FS
 - [x] **FASE 3** — snapshot su disco (home_rows_snapshot.json, TTL 12h) → riapertura = fast path istantaneo; revalidate silenzioso; cold enrich_sync capato 8→3; gate `home_snapshot`; build 1.9.905 — ✅ TESTATA 2026-07-03: riapertura paint ~0,6-0,75s vs ~5s cold (~7×), 0 errori snapshot, play da snapshot ok
-- [ ] **FASE 4** — memoizzazione settings + SQLite WAL
+- [x] **FASE 4** — memoizzazione settings per-canale/per-server (cache mtime, fallback a lettura diretta) + mkdir server fuori dal path caldo + SQLite WAL; build 1.9.906 — ⏳ da testare dall'utente (checklist FASE 4)
 - [ ] **FASE 8a** — pulizia Stream4me: rimozioni a rischio zero
 - [ ] **FASE 8b** — pulizia Stream4me: lavoro morto all'avvio
 - [ ] **FASE 5** — skin XML: progress bar collassata + dieta asset

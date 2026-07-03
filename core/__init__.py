@@ -31,4 +31,9 @@ class nested_dict_sqlite(defaultdict):
 
 
 db_name = filetools.join(config.get_data_path(), "db.sqlite")
-db = nested_dict_sqlite(lambda table: SqliteDict(db_name, table, 'c', True))
+# journal_mode='WAL' (v2 FASE 4): con autocommit e journal DELETE ogni write
+# creava+cancellava un file journal su flash (costo dominante su eMMC lenta dei
+# box ARM). WAL scrive in append su un unico sidecar db.sqlite-wal. Sicuro qui:
+# path userdata locale, tutte le connessioni in-process. synchronous=OFF è già
+# impostato dalla lib. Rollback: togliere journal_mode (SQLite riconverte da sé).
+db = nested_dict_sqlite(lambda table: SqliteDict(db_name, table, 'c', True, journal_mode='WAL'))

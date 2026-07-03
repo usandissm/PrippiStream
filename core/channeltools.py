@@ -234,6 +234,11 @@ def get_default_settings(channel_name):
     return channel_controls
 
 
+# Cache dei settings per-canale, keyed sul channel → (mtime_file, dict_settings).
+# Vedi il commento in get_channel_setting (v2 FASE 4).
+_channel_settings_cache = {}
+
+
 def get_channel_setting(name, channel, default=None):
     from core import filetools
     """
@@ -258,16 +263,32 @@ def get_channel_setting(name, channel, default=None):
     @rtype: any
 
     """
+    import os
     file_settings = filetools.join(config.get_data_path(), "settings_channels", channel + "_data.json")
     dict_settings = {}
     dict_file = {}
 
-    if filetools.exists(file_settings):
-        # We get saved configuration from ../settings/channel_data.json
+    # Cache in memoria keyed su mtime (v2 FASE 4): evita di rileggere+parsare il
+    # JSON a OGNI chiamata (hot sul percorso play, es. black_list per server).
+    # L'mtime intercetta le modifiche esterne (UI impostazioni, service.py).
+    # Granularità mtime 2s su FAT/exFAT: una write nello stesso secondo potrebbe
+    # servire una lettura stantia, ma l'unica chiave scritta di frequente è
+    # Last_searched (letta 1 volta a dialog) → accettabile.
+    try:
+        _mtime = os.path.getmtime(file_settings)
+    except OSError:
+        _mtime = None
+    _cached = _channel_settings_cache.get(channel)
+    if _cached is not None and _mtime is not None and _cached[0] == _mtime:
+        dict_settings = _cached[1]
+    elif filetools.exists(file_settings):
+        # Cache miss (o mtime non disponibile): leggi dal file come prima.
         try:
             dict_file = jsontools.load(filetools.read(file_settings))
             if isinstance(dict_file, dict) and 'settings' in dict_file:
                 dict_settings = dict_file['settings']
+            if _mtime is not None:
+                _channel_settings_cache[channel] = (_mtime, dict_settings)
         except EnvironmentError:
             logger.error("ERROR when reading the file: %s" % file_settings)
 
@@ -344,5 +365,12 @@ def set_channel_setting(name, value, channel):
     if not filetools.write(file_settings, json_data, silent=True):
         logger.error("ERROR saving file: %s" % file_settings)
         return None
+
+    # Aggiorna la cache in memoria col nuovo contenuto + mtime (v2 FASE 4).
+    try:
+        import os
+        _channel_settings_cache[channel] = (os.path.getmtime(file_settings), dict_settings)
+    except Exception:
+        _channel_settings_cache.pop(channel, None)
 
     return value

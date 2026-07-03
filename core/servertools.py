@@ -542,6 +542,11 @@ def get_server_controls_settings(server_name):
     return list_controls, dict_settings
 
 
+# Cache dei settings per-server, keyed sul server → (mtime_file, dict_settings).
+# Vedi il commento in get_server_setting (v2 FASE 4).
+_server_settings_cache = {}
+
+
 def get_server_setting(name, server, default=None):
     """
         Returns the configuration value of the requested parameter.
@@ -565,19 +570,29 @@ def get_server_setting(name, server, default=None):
         @rtype: any
 
         """
-    # We create the folder if it does not exist
-    if not filetools.exists(filetools.join(config.get_data_path(), "settings_servers")):
-        filetools.mkdir(filetools.join(config.get_data_path(), "settings_servers"))
-
+    import os
     file_settings = filetools.join(config.get_data_path(), "settings_servers", server + "_data.json")
     dict_settings = {}
     dict_file = {}
-    if filetools.exists(file_settings):
-        # We get saved configuration from ../settings/channel_data.json
+
+    # Cache in memoria keyed su mtime (v2 FASE 4): come get_channel_setting, evita
+    # di rileggere+parsare il JSON a OGNI chiamata. Il mkdir della cartella, prima
+    # eseguito a ogni chiamata, è spostato nel solo ramo di creazione file.
+    try:
+        _mtime = os.path.getmtime(file_settings)
+    except OSError:
+        _mtime = None
+    _cached = _server_settings_cache.get(server)
+    if _cached is not None and _mtime is not None and _cached[0] == _mtime:
+        dict_settings = _cached[1]
+    elif filetools.exists(file_settings):
+        # Cache miss (o mtime non disponibile): leggi dal file come prima.
         try:
             dict_file = jsontools.load(filetools.read(file_settings))
             if isinstance(dict_file, dict) and 'settings' in dict_file:
                 dict_settings = dict_file['settings']
+            if _mtime is not None:
+                _server_settings_cache[server] = (_mtime, dict_settings)
         except EnvironmentError:
             logger.info("ERROR when reading the file: %s" % file_settings)
 
@@ -588,10 +603,13 @@ def get_server_setting(name, server, default=None):
         except:
             default_settings = {}
         if name in default_settings:  # If the parameter exists in the server.json we create the server_data.json
+            # We create the folder if it does not exist
+            if not filetools.exists(filetools.join(config.get_data_path(), "settings_servers")):
+                filetools.mkdir(filetools.join(config.get_data_path(), "settings_servers"))
             default_settings.update(dict_settings)
             dict_settings = default_settings
             dict_file['settings'] = dict_settings
-            # We create the file ../settings/channel_data.json
+            # We create the file ../settings/server_data.json
             if not filetools.write(file_settings, jsontools.dump(dict_file)):
                 logger.error("ERROR saving file: %s" % file_settings)
 
@@ -625,10 +643,17 @@ def set_server_setting(name, value, server):
 
     dict_file['settings'] = dict_settings
 
-    # We create the file ../settings/channel_data.json
+    # We create the file ../settings/server_data.json
     if not filetools.write(file_settings, jsontools.dump(dict_file)):
         logger.error("ERROR saving file: %s" % file_settings)
         return None
+
+    # Aggiorna la cache in memoria col nuovo contenuto + mtime (v2 FASE 4).
+    try:
+        import os
+        _server_settings_cache[server] = (os.path.getmtime(file_settings), dict_settings)
+    except Exception:
+        _server_settings_cache.pop(server, None)
 
     return value
 
