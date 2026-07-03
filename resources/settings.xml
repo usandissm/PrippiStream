@@ -47,9 +47,8 @@
         <setting id="folder_movies" type="text" default="Film" visible="false"/>
         <setting id="videolibrary_kodi" type="bool" default="false" visible="false"/>
         <setting id="videolibrary_max_quality" type="bool" default="false" visible="false"/>
-        <setting id="next_ep" type="select" lvalues="70832|70833|70732|70834" default="1" visible="false"/>
-        <setting id="next_ep_type" type="select" lvalues="70755|70756|70757" default="0" visible="false"/>
-        <setting id="next_ep_seconds" type="slider" option="int" range="20,10,240" default="40" visible="false"/>
+        <!-- v2 FASE 8c: rimosse next_ep/next_ep_type/next_ep_seconds (macchina
+             next-episode legacy eliminata; 0 letture rimaste nel codice) -->
         <setting id="watched_setting" type="slider" option="int" range="20,5,90" default="80" visible="false"/>
         <setting id="trakt_sync" type="bool" default="false" visible="false"/>
         <!-- Channels -->

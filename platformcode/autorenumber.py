@@ -112,9 +112,11 @@ class autorenumber():
                 return 
             elif self.item.channel in self.item.channel_prefs and RENUMBER in self.item.channel_prefs[item.channel] and self.title not in self.renumberdict:
                 from core.videolibrarytools import check_renumber_options
-                from specials.videolibrary import update_videolibrary
                 check_renumber_options(self.item)
-                update_videolibrary(self.item)
+                # v2 FASE 8c: rimossa update_videolibrary(self.item) — aggiornava
+                # la videolibrary Kodi dopo il renumber (feature morta nella UI
+                # Netflix-only; era anche l'ultimo import di specials.videolibrary
+                # su un percorso raggiungibile dai canali vivi).
             self.series = self.renumberdict.get(self.title,{})
             self.id = self.series.get(ID, 0)
             self.episodes = self.series.get(EPISODES,{})

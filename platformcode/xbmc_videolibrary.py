@@ -186,6 +186,15 @@ def _apply_media_prefs(item, original_lang_prefs=None):
 
 
 def mark_auto_as_watched(item):
+    # v2 FASE 8c — riscritta. La versione legacy Stream4me girava per TUTTA la
+    # riproduzione in un BUSY-LOOP SENZA sleep (is_playing+getTime+getTotalTime
+    # a ciclo continuo = CPU rubata al decoder, pesantissimo su ARM) e portava
+    # con sé la macchina next-episode legacy (dialog strm-only mai visibili nel
+    # frontend Prippi, ma con listdir della videolibrary a ogni play di
+    # episodio), il sync Trakt e il popup post-play (già soppresso).
+    # Restano, identici: l'applicazione prefs lingua post-onAVStarted, la soglia
+    # "visto" (watched_setting) e il salvataggio della posizione in db['viewed']
+    # (letto dal resume legacy in platformtools:1549).
     def mark_as_watched_subThread(item):
         logger.debug()
         actual_time = 0
@@ -200,94 +209,37 @@ def mark_auto_as_watched(item):
         _apply_media_prefs(item, getattr(item, '_original_lang_prefs', None))
 
         marked = False
-        sync = False
-        next_episode = None
-        mark_time = 0
+        try:
+            percentage = float(config.get_setting("watched_setting")) / 100
+        except Exception:
+            percentage = 0.9
 
-        percentage = float(config.get_setting("watched_setting")) / 100
-        time_from_end = config.get_setting('next_ep_seconds')
-
-        if item.contentType != 'movie' and 0 < config.get_setting('next_ep') < 3:
-            next_dialogs = ['NextDialog.xml', 'NextDialogExtended.xml', 'NextDialogCompact.xml']
-            next_ep_type = config.get_setting('next_ep_type')
-            ND = next_dialogs[next_ep_type]
-            try:
-                next_episode = next_ep(item)
-            except:
-                next_episode = False
-            logger.debug(next_episode)
-
-        while not xbmc.Monitor().abortRequested():
-            if not platformtools.is_playing(): break
+        monitor = xbmc.Monitor()
+        while not monitor.abortRequested() and platformtools.is_playing():
             try: actual_time = xbmc.Player().getTime()
             except: pass
             try: total_time = xbmc.Player().getTotalTime()
             except: pass
-
-            mark_time = total_time * percentage
-            difference = total_time - actual_time
-
-            # Mark as Watched
-            if mark_time and total_time > actual_time > mark_time and not marked:
+            if (not marked and total_time
+                    and total_time > actual_time > total_time * percentage):
                 logger.info("Marked as Watched")
                 item.playcount = 1
                 marked = True
-                item.played_time = 0
-                platformtools.set_played_time(item)
-                if item.options['strm'] : sync = True
-                from specials import videolibrary
-                videolibrary.mark_content_as_watched2(item)
-                if not next_episode:
-                    break
+            xbmc.sleep(500)
 
-            # check for next Episode
-            if next_episode and sync and time_from_end >= difference:
-                nextdialog = NextDialog(ND, config.get_runtime_path())
-                while platformtools.is_playing() and not nextdialog.is_exit():
-                    xbmc.sleep(100)
-                if nextdialog.continuewatching:
-                    next_episode.next_ep = True
-                    xbmc.Player().stop()
-                nextdialog.close()
-                break
-
-
-        # Silent sync with Trakt
-        if sync and config.get_setting("trakt_sync"): sync_trakt_kodi()
-
-        while platformtools.is_playing():
-            xbmc.sleep(300)
-
-        if (marked and total_time < 20) or not marked:
+        if marked and total_time >= 20:
+            # oltre soglia: azzera la posizione salvata (comportamento legacy)
+            platformtools.set_played_time(item.clone(played_time=0))
+        else:
             platformtools.set_played_time(item.clone(played_time=actual_time))
-            item.disableAutoplay=True
-            # Post-play "choose another server" popup (alfa legacy): in this
-            # Prippi-only frontend it must NEVER appear after the video closes
-            # (it surfaced e.g. with multi-server channels like CB01: mixdrop/
-            # maxstream). Failure-retry is already handled in launcher.play, so
-            # this popup is pure noise here. Off by default; opt back in only if
-            # db['player']['show_server_popup'] is explicitly True (unused).
-            _show_popup = False
-            try:
-                from core import db as _db_vl
-                _show_popup = bool(_db_vl['player'].get('show_server_popup', False))
-                _db_vl.close()
-            except Exception:
-                pass
-            if _show_popup:
-                platformtools.serverWindow(item, itemlist)
-
-        if next_episode and next_episode.next_ep and config.get_setting('next_ep') < 3:
-            from platformcode.launcher import run
-            xbmc.sleep(1000)
-            run(next_episode)
+            item.disableAutoplay = True
 
         db.close()
 
     # If it is configured to mark as seen
     from core import db
     if config.get_setting("mark_as_watched", "videolibrary"):
-        itemlist = db['player'].get('itemlist', [])
+        # svuota la lista retry-server della sessione (comportamento invariato)
         db['player']['itemlist'] = []
         db.close()
         threading.Thread(target=mark_as_watched_subThread, args=[item]).start()
@@ -1414,109 +1366,7 @@ def ask_set_content(silent=False):
         do_config(True)
 
 
-def next_ep(item):
-    from core.item import Item
-    logger.debug()
-    item.next_ep = False
-
-    # check if next file exist
-    current_filename = filetools.basename(item.strm_path).replace('.strm', '')
-    base_path = filetools.basename(filetools.dirname(item.strm_path))
-    path = filetools.join(config.get_videolibrary_path(), config.get_setting("folder_tvshows"),base_path)
-    fileList = []
-    for file in filetools.listdir(path):
-        if file.endswith('.strm'):
-            fileList.append(file.replace('.strm', ''))
-
-    fileList.sort(key=lambda ep: (int(ep.split('x')[0]), int(ep.split('x')[1])))
-
-    nextIndex = fileList.index(current_filename) + 1
-    if nextIndex == 0 or nextIndex == len(fileList): next_file = None
-    else: next_file = fileList[nextIndex] 
-    logger.debug('Next File:' + str(next_file))
-
-    # start next episode window afther x time
-    if next_file:
-        season = int(next_file.split('x')[0])
-        episode = int(next_file.split('x')[1])
-        # next_ep = '%sx%s' % (season, episode)
-        item = Item(
-            action= 'play_from_library',
-            channel= 'videolibrary',
-            contentEpisodeNumber= episode,
-            contentSeason= season,
-            contentTitle= next_file,
-            contentType= 'episode',
-            infoLabels= {'episode': episode, 'mediatype': 'episode', 'season': season, 'title': next_file},
-            strm_path= filetools.join(base_path, next_file + '.strm'),
-            play_from = item.play_from)
-
-        global INFO
-        INFO = filetools.join(path, next_file + '.nfo')
-    else:
-        item=None
-
-    return item
-
-class NextDialog(xbmcgui.WindowXMLDialog):
-    item = None
-    cancel = False
-    EXIT = False
-    continuewatching = True
-
-    def __init__(self, *args, **kwargs):
-        self.action_exitkeys_id = [xbmcgui.ACTION_STOP, xbmcgui.ACTION_BACKSPACE, xbmcgui.ACTION_PREVIOUS_MENU, xbmcgui.ACTION_NAV_BACK]
-        self.progress_control = None
-
-        # set info
-        f = filetools.file_open(INFO, 'r')
-        full_info = f.read().split('\n')
-        full_info = full_info[1:]
-        f.close()
-        full_info = "".join(full_info)
-        info = jsontools.load(full_info)
-        info = info["infoLabels"]
-        if "fanart" in info: img = info["fanart"]
-        elif "thumbnail" in info: img = info["thumbnail"]
-        else: img = filetools.join(config.get_runtime_path(), "resources", "noimage.png")
-        self.setProperty("next_img", img)
-        self.setProperty("title", info["tvshowtitle"])
-        ep_title = '{}x{:02d}'.format(info['season'], info["episode"])
-        if info.get("title",''):
-            ep_title += ' - ' + info["title"]
-        self.setProperty("ep_title", ep_title)
-        self.show()
-
-    def set_exit(self, EXIT):
-        self.EXIT = EXIT
-
-    def set_continue_watching(self, continuewatching):
-        self.continuewatching = continuewatching
-
-    def is_exit(self):
-        return self.EXIT
-
-    def onFocus(self, controlId):
-        pass
-
-    def doAction(self):
-        pass
-
-    def closeDialog(self):
-        self.close()
-
-    def onClick(self, controlId):
-        if controlId == 3012:  # Still watching
-            self.set_exit(True)
-            self.set_continue_watching(True)
-            self.close()
-        elif controlId == 3013:  # Cancel
-            self.set_exit(True)
-            self.set_continue_watching(False)
-            self.close()
-
-    def onAction(self, action):
-        if action in self.action_exitkeys_id:
-            self.set_exit(True)
-            self.set_continue_watching(False)
-            self.close()
+# v2 FASE 8c: rimosse next_ep() e la classe NextDialog (macchina next-episode
+# legacy Stream4me, solo-strm): il frontend Prippi ha il proprio overlay
+# next-episode in prippihome. L'unico chiamante (mark_auto_as_watched) non le
+# usa piu.
