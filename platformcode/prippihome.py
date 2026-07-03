@@ -24,6 +24,80 @@ PY3 = sys.version_info[0] >= 3
 _cache = {'data': None, 'ts': 0}
 _CACHE_TTL = 1800   # 30 minutes
 
+# ── Snapshot su disco delle righe home (v2 FASE 3) ───────────────────────────
+# La cache _cache vive solo in memoria: il processo Python muore alla chiusura
+# della home, quindi OGNI riapertura è un cold load (~5 s, di cui ~3,3 s di
+# enrich TMDB sincrono pre-paint). Persistendo le righe già enrichite su disco,
+# una riapertura entro _SNAPSHOT_MAX_AGE ridipinge all'istante (fast path,
+# salta l'enrich perché gli item portano il flag _enr). Solo le righe SC
+# (main+archive) vanno nello snapshot: CW/download/live/4K/anime sono ricostruite
+# fresche a ogni apertura da _assemble_initial, quindi nessun rischio staleness.
+_SNAPSHOT_MAX_AGE = 12 * 3600   # oltre: cold load normale
+_SNAPSHOT_LOCK = threading.Lock()
+
+
+def _snapshot_path():
+    return os.path.join(config.get_data_path(), 'home_rows_snapshot.json')
+
+
+def _snapshot_write(rows, host):
+    """Serializza le righe SC (già enrichite) su disco, in modo atomico, in un
+    thread di background. Non solleva mai verso il chiamante."""
+    def _worker():
+        try:
+            import json as _json
+            payload = {
+                'version': 1,
+                'ts': __import__('time').time(),
+                'host': host or '',
+                'rows': [[lbl, [it.tojson() for it in items]] for lbl, items in rows],
+            }
+            blob = _json.dumps(payload)
+            path = _snapshot_path()
+            tmp = path + '.tmp'
+            with _SNAPSHOT_LOCK:
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    f.write(blob)
+                os.replace(tmp, path)
+        except Exception as exc:
+            logger.error('[PrippiHome] snapshot write: %s' % str(exc))
+    t = threading.Thread(target=_worker)
+    t.daemon = True
+    t.start()
+
+
+def _snapshot_read():
+    """Ritorna (rows, ts, host) dallo snapshot, o (None, 0, '') se assente/illeggibile/
+    scaduto oltre _SNAPSHOT_MAX_AGE. Ricostruisce gli Item con fromjson."""
+    try:
+        import json as _json
+        path = _snapshot_path()
+        if not os.path.isfile(path):
+            return None, 0, ''
+        with _SNAPSHOT_LOCK:
+            with open(path, 'r', encoding='utf-8') as f:
+                payload = _json.loads(f.read())
+        if not isinstance(payload, dict) or payload.get('version') != 1:
+            return None, 0, ''
+        ts = float(payload.get('ts') or 0)
+        if (__import__('time').time() - ts) > _SNAPSHOT_MAX_AGE:
+            return None, 0, ''
+        rows = []
+        for lbl, jitems in payload.get('rows', []):
+            items = []
+            for j in jitems:
+                try:
+                    items.append(Item().fromjson(j))
+                except Exception:
+                    pass
+            rows.append((lbl, items))
+        if not rows:
+            return None, 0, ''
+        return rows, ts, payload.get('host', '')
+    except Exception as exc:
+        logger.error('[PrippiHome] snapshot read: %s' % str(exc))
+        return None, 0, ''
+
 # Timeout (seconds) per each external channel fetch
 _EXTRA_TIMEOUT = 18
 
@@ -1094,7 +1168,39 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self._set_loading(8)
 
         from time import time as _now
-        cache_fresh = (_cache['data'] is not None and (_now() - _cache['ts']) < _CACHE_TTL)
+
+        # ---- Snapshot su disco: se la cache in-memory è vuota (nuovo processo),
+        # prova a ripartire dallo snapshot dell'ultima sessione. ----
+        _snap_age = None
+        if _cache['data'] is None and config.get_setting('home_snapshot', default=True):
+            try:
+                _snap_rows, _snap_ts, _snap_host = _snapshot_read()
+            except Exception:
+                _snap_rows, _snap_ts, _snap_host = None, 0, ''
+            if _snap_rows:
+                # Se il dominio SC è cambiato dall'ultima sessione, gli URL nello
+                # snapshot sono vecchi: scartalo (il click si auto-riparerebbe
+                # comunque, ma un cold load qui è più pulito).
+                _cur_host = ''
+                try:
+                    from channels import streamingcommunity as _sc
+                    _cur_host = (getattr(_sc, 'host', '') or '').rstrip('/')
+                except Exception:
+                    pass
+                if _snap_host and _cur_host and _snap_host.rstrip('/') != _cur_host:
+                    logger.info('[PrippiHome] snapshot host mismatch → cold load')
+                else:
+                    _cache['data'] = _snap_rows
+                    _cache['ts'] = _snap_ts
+                    _snap_age = _now() - _snap_ts
+                    logger.info('[PrippiHome] snapshot loaded: %d rows, age %.0f min'
+                                % (len(_snap_rows), _snap_age / 60.0))
+
+        # Fast path se la cache è fresca (<30 min) OPPURE se abbiamo uno snapshot
+        # entro _SNAPSHOT_MAX_AGE (12 h): in entrambi i casi le righe sono già
+        # enrichite, quindi si dipinge subito saltando l'enrich sincrono.
+        cache_fresh = (_cache['data'] is not None
+                       and ((_now() - _cache['ts']) < _CACHE_TTL or _snap_age is not None))
 
         if cache_fresh:
             # ---- FAST PATH: full cached rows (already enriched from prior run) ----
@@ -1112,6 +1218,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self._start_bg_tasks(need_4k_fill, enrich=True)
             # No archive phase on the cache-hit path → append the ANIME row here.
             self._start_anime_append(cw_items)
+            # Se il paint è venuto da uno snapshot più vecchio della TTL della
+            # cache, rinfresca in BACKGROUND per la PROSSIMA apertura: aggiorna
+            # solo snapshot + _cache (dati), senza toccare la UI corrente → nessun
+            # flicker né spostamento di focus.
+            if _snap_age is not None and _snap_age > _CACHE_TTL:
+                t = threading.Thread(target=self._revalidate_snapshot_silent)
+                t.daemon = True
+                t.start()
             return
 
         # ---- PROGRESSIVE PATH ----
@@ -1135,9 +1249,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         # Enrich the first visible SC rows SYNCHRONOUSLY (before paint) so their
         # cards show the official TMDB HD posters from the very first frame.
-        # Costs a couple of seconds but matches the old behaviour; the remaining
-        # rows are enriched in the background after render.
-        self._enrich_visible_rows_sync(progress_lo=60, progress_hi=98)
+        # Solo le prime 3 righe (≈2 visibili al primo frame): il resto lo copre
+        # _bg_enrich_inplace subito dopo, prima che l'utente ci scrolli sopra, e
+        # _refresh_row_cards mantiene la posizione se lo fa. Con la cache TMDB
+        # su disco (FASE 1) queste 3 righe sono per lo più letture, non rete.
+        self._enrich_visible_rows_sync(progress_lo=60, progress_hi=98, max_rows=3)
         _pt = perf.mark('home.enrich_sync (cold)', _pt)
 
         self._set_loading(100)
@@ -1174,6 +1290,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             if full:
                 _cache['data'] = full
                 _cache['ts'] = __import__('time').time()
+                self._write_home_snapshot(host)
             # The ANIME row goes last — append it even when there are no archive rows.
             self._append_anime_row(cw_items)
             return
@@ -1202,6 +1319,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         _sc_rows_cache = full
         _cache['data'] = full
         _cache['ts'] = __import__('time').time()
+
+        # Persisti subito lo snapshot su disco (righe complete; le archive non sono
+        # ancora enrichite ma il fast path le enrichirà in bg alla riapertura, e
+        # comunque _bg_enrich_inplace qui sotto lo riscrive enrichito a fine passata).
+        self._write_home_snapshot(host)
 
         # Enrich the freshly-added archive rows in the background.
         if self._alive:
@@ -1386,8 +1508,71 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     except Exception:
                         pass
                 xbmc.sleep(20)
+            # Passata completa senza interruzioni: riscrivi lo snapshot ora che
+            # anche le righe archive sono enrichite (_enr), così la prossima
+            # apertura dipinge subito con i poster TMDB HD corretti.
+            if self._alive and not _shutdown_event.is_set():
+                self._write_home_snapshot()
         except Exception as exc:
             logger.error('[PrippiHome] _bg_enrich_inplace: %s' % str(exc))
+
+    def _write_home_snapshot(self, host=None):
+        """Persiste le righe SC correnti (_cache['data']) su disco per la prossima
+        apertura. host opzionale: se assente lo legge dal canale SC."""
+        try:
+            if not config.get_setting('home_snapshot', default=True):
+                return
+            rows = _cache.get('data')
+            if not rows:
+                return
+            if host is None:
+                try:
+                    from channels import streamingcommunity as _sc
+                    host = getattr(_sc, 'host', '') or ''
+                except Exception:
+                    host = ''
+            _snapshot_write(rows, host)
+        except Exception as exc:
+            logger.error('[PrippiHome] _write_home_snapshot: %s' % str(exc))
+
+    def _revalidate_snapshot_silent(self):
+        """Rinfresca lo snapshot per la PROSSIMA apertura senza toccare la UI
+        corrente. Rifà il fetch SC (main+archive) e, se riesce, aggiorna
+        _cache + snapshot su disco; NON ridisegna le righe già a schermo (nessun
+        flicker né spostamento di focus). Le righe fresche compaiono alla
+        prossima apertura della home."""
+        global _sc_rows_cache
+        try:
+            if not self._alive or _shutdown_event.is_set():
+                return
+            main_rows, host, homepage_data = _fetch_main_rows()
+            if not main_rows or not self._alive:
+                return
+            try:
+                archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows)) or []
+            except Exception:
+                archive_rows = []
+            full = list(main_rows) + list(archive_rows)
+            if not full:
+                return
+            # Enrich in blocco (cache TMDB su disco → per lo più letture) così lo
+            # snapshot salvato è già completo per la prossima apertura.
+            for _lbl, _items in full:
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                try:
+                    _tmdb_enrich_validated(_items)
+                    for _it in _items:
+                        _it.infoLabels['_enr'] = 1
+                except Exception:
+                    pass
+            _sc_rows_cache = full
+            _cache['data'] = full
+            _cache['ts'] = __import__('time').time()
+            self._write_home_snapshot(host)
+            logger.info('[PrippiHome] snapshot rivalidato in background: %d righe' % len(full))
+        except Exception as exc:
+            logger.error('[PrippiHome] _revalidate_snapshot_silent: %s' % str(exc))
 
     def _refresh_row_cards(self, i):
         """Re-render an already-populated row's wraplist in place, preserving the

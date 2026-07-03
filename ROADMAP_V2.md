@@ -60,8 +60,8 @@ Fatti verificati da NON ri-derivare:
 - [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`); baseline PC raccolta 2026-07-03 (vedi tabella Misure) — ⏳ baseline Fire Stick prevista settimana prossima
 - [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
 - [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire 15gg + pool enrich max 8; build 1.9.903 — ✅ TESTATA 2026-07-03: miss 40%→7,8%, richieste TMDB -41%, rete -32%. Nota: `_tmdb_get_trailer` (prippihome:5489) chiama TMDB /videos direttamente via httptools senza cache — micro-win possibile in F2/F3
-- [x] **FASE 2** — riuso trasporto HTTP (adapter condiviso, gate `http_session_reuse`) + cookie-save solo su cambiamento + infobox saltato a debug off; build 1.9.904 — ⏳ da testare dall'utente (checklist FASE 2)
-- [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
+- [x] **FASE 2** — riuso trasporto HTTP (adapter condiviso, gate `http_session_reuse`) + cookie-save solo su cambiamento + infobox saltato a debug off; build 1.9.904 — ✅ TESTATA 2026-07-03: nessuna regressione (play SC/AnimeUnity ok), pooling corretto (Session non chiude l'adapter). Su PC guadagno nel rumore (handshake TLS CPU-cheap su x86); payoff atteso su Fire Stick (handshake costoso su ARM) → confermare con baseline FS
+- [x] **FASE 3** — snapshot su disco (home_rows_snapshot.json, TTL 12h) → riapertura = fast path istantaneo; revalidate silenzioso per la prossima apertura; cold enrich_sync capato 8→3 righe; gate `home_snapshot`; build 1.9.905 — ⏳ da testare dall'utente (checklist FASE 3)
 - [ ] **FASE 4** — memoizzazione settings + SQLite WAL
 - [ ] **FASE 8a** — pulizia Stream4me: rimozioni a rischio zero
 - [ ] **FASE 8b** — pulizia Stream4me: lavoro morto all'avvio
@@ -80,8 +80,8 @@ Fatti verificati da NON ri-derivare:
 | Home cold: click→paint (PC) | **~4,9 s** (fetch_main 1,0-1,1s + assemble 0,04-0,08s + enrich_sync 3,5s + paint 0,2-0,3s) | ~5,1-5,3 s (invariato: enrich_sync ora CPU/SqliteDict-bound, non rete — atteso; si abbatte con F3) | | | | | |
 | Home warm/snapshot: click→paint | **N/A — ogni riapertura è cold** (processo muore, cache in-memory persa: confermato, 2° open = cold identico) | idem (atteso, fix in F3) | | | | | |
 | Archive fetch 21 righe (bg) | 3,7-4,1 s | 3,2-4,3 s (14-15 righe) | | | | | |
-| TMDB hit-rate cache | **599 hit / 401 miss (40% miss)**; 1.291 richieste HTTP, 247 s rete cumulativi, avg 192 ms | **1.843 hit / 157 miss (7,8% miss)**; 758 req HTTP (-41%), 168 s rete (-32%), con giro più ricco (play cineblog01+trailer) | | | | | |
-| Click card→video (1° play, PC) | 1,7 s (launcher findvideos SC) | 6,8 s ma canale cineblog01 (catena uprot/maxstream) — non confrontabile con SC | | | | | |
+| TMDB hit-rate cache | **599 hit / 401 miss (40% miss)**; 1.291 richieste HTTP, 247 s rete cumulativi, avg 192 ms | **1.843 hit / 157 miss (7,8% miss)**; 758 req HTTP (-41%), 168 s rete (-32%), con giro più ricco (play cineblog01+trailer) | 2.089 hit / 161 miss (7,2%); 483 req TMDB, 92,7 s; latenza TMDB avg 192/mediana 149 ms (≈baseline su PC) | | | | |
+| Click card→video (1° play, PC) | 1,7 s (launcher findvideos SC) | 6,8 s ma canale cineblog01 (catena uprot/maxstream) — non confrontabile con SC | SC 1,4-1,7 s · AnimeUnity 1,6 s · nessuna regressione | | | | |
 | Click card→video (play successivi) | (non misurato, 1 solo play nel giro) | | | | | | |
 | Fluidità scroll (soggettiva 1-5) | PC: fluido (non indicativo — misurare su FS) | | | | | | |
 

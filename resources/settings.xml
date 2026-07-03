@@ -19,6 +19,8 @@
         <setting id="resolver_dns" type="bool" label="707408" default="true" enable="true" visible="true"/>
         <!-- v2 FASE 2: riuso connessioni HTTP (adapter condiviso). false = percorso legacy -->
         <setting id="http_session_reuse" type="bool" default="true" visible="false"/>
+        <!-- v2 FASE 3: snapshot su disco delle righe home (paint istantaneo alla riapertura). false = sempre cold -->
+        <setting id="home_snapshot" type="bool" default="true" visible="false"/>
         <setting id="resolver_dns_provider" type="select" label="707409" default="Google" values="Cloudflare|Google" visible="eq(-1,true)"/>
         <setting label="70788" type="lsep"/>
         <setting id="debug" type="bool" label="30003" default="false"/>
