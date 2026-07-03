@@ -57,7 +57,7 @@ Fatti verificati da NON ri-derivare:
 ## Stato fasi
 
 - [x] **SETUP** — workspace scollegato, versione 1.9.900, questo documento
-- [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`) — ⏳ manca la raccolta baseline su device
+- [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`); baseline PC raccolta 2026-07-03 (vedi tabella Misure) — ⏳ baseline Fire Stick prevista settimana prossima
 - [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
 - [ ] **FASE 1** — fix cache TMDB + pool enrich limitato
 - [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
@@ -73,14 +73,19 @@ Fatti verificati da NON ri-derivare:
 
 ## Misure `[PERF]` (compilare)
 
+**PC** = Windows dev (baseline 2026-07-03, build 1.9.902). **FS** = Fire Stick (baseline prevista settimana prossima).
+
 | Metrica | Baseline (F0) | Post F1 | Post F2 | Post F3 | Post F4+8ab | Post F5 | Post F6 |
 |---|---|---|---|---|---|---|---|
-| Home cold: click→paint (device) | | | | | | | |
-| Home warm/snapshot: click→paint | | | | | | | |
-| TMDB hit-rate cache | | | | | | | |
-| Click card→video (1° play) | | | | | | | |
-| Click card→video (play successivi) | | | | | | | |
-| Fluidità scroll (soggettiva 1-5) | | | | | | | |
+| Home cold: click→paint (PC) | **~4,9 s** (fetch_main 1,0-1,1s + assemble 0,04-0,08s + enrich_sync 3,5s + paint 0,2-0,3s) | | | | | | |
+| Home warm/snapshot: click→paint | **N/A — ogni riapertura è cold** (processo muore, cache in-memory persa: confermato, 2° open = cold identico) | | | | | | |
+| Archive fetch 21 righe (bg) | 3,7-4,1 s | | | | | | |
+| TMDB hit-rate cache | **599 hit / 401 miss (40% miss)**; 1.291 richieste HTTP, 247 s rete cumulativi, avg 192 ms | | | | | | |
+| Click card→video (1° play, PC) | 1,7 s (launcher findvideos) | | | | | | |
+| Click card→video (play successivi) | (non misurato, 1 solo play nel giro) | | | | | | |
+| Fluidità scroll (soggettiva 1-5) | PC: fluido (non indicativo — misurare su FS) | | | | | | |
+
+Note baseline PC: workers.dev (proxy CF live) 2,7-2,8 s/richiesta; youtube (trailer) 21 req/21,6 s; SC 31 req avg 560 ms.
 
 ---
 
