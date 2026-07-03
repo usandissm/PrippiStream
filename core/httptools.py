@@ -62,6 +62,39 @@ if HTTPTOOLS_DEFAULT_DOWNLOAD_TIMEOUT == 0: HTTPTOOLS_DEFAULT_DOWNLOAD_TIMEOUT =
 # Random use of User-Agents, if nad is not specified
 HTTPTOOLS_DEFAULT_RANDOM_HEADERS = False
 
+# Letto una volta a import (stesso pattern di logger.DEBUG_ENABLED): serve solo
+# a saltare la costruzione dell'infobox per-richiesta quando il debug e' spento.
+_DEBUG_INFOBOX = config.get_setting('debug', default=False)
+
+# ── Riuso trasporto (v2 FASE 2) ──────────────────────────────────────────────
+# Un CipherSuiteAdapter per configurazione, CONDIVISO tra le richieste: il
+# connection pooling urllib3 (keep-alive) vive nell'adapter, quindi riusare
+# l'adapter riusa socket e sessioni TLS (prima: adapter+handshake nuovi a ogni
+# richiesta). La requests.Session resta fresca per chiamata, cosi' cookie
+# wiring, header merge e redirect restano identici a prima. Condividerlo e'
+# sicuro perche' CipherSuiteAdapter ignora il parametro 'domain' e l'override
+# DoH e' un monkey-patch GLOBALE di urllib3 (vedi resolverdns.py:43-63); i
+# socket keep-alive morti sono gia' assorbiti dal retry interno dell'adapter
+# (flushedDns, resolverdns.py:113). Rollback: http_session_reuse=false.
+_shared_adapters = {}
+_adapters_lock = Lock()
+
+
+def _get_shared_adapter(verify, override_dns):
+    key = (bool(verify), bool(override_dns))
+    with _adapters_lock:
+        a = _shared_adapters.get(key)
+        if a is None:
+            from core import resolverdns
+            a = resolverdns.CipherSuiteAdapter(
+                domain='',
+                override_dns=override_dns,
+                verify_ssl=verify,
+                pool_connections=16,
+                pool_maxsize=8)
+            _shared_adapters[key] = a
+    return a
+
 
 def get_user_agent():
     # Returns the global user agent to be used when necessary for the url.
@@ -140,11 +173,36 @@ def load_cookies(alfa_s=False):
 
 load_cookies()
 
+# Firma del cookiejar per salvare cookies.dat SOLO quando cambia davvero
+# (prima veniva riscritto su disco dopo OGNI richiesta). Iterare ~decine di
+# cookie costa microsecondi; una write su flash 5-50 ms. Semantica invariata:
+# ogni VERO cambiamento viene persistito subito.
+_cookies_sig = [None]
+
+
+def _jar_signature_locked():
+    # da chiamare con cookies_lock gia' acquisito (Lock non rientrante)
+    return hash(tuple(sorted((c.domain, c.path, c.name, c.value or '', c.expires or 0)
+                             for c in cj)))
+
+
 def save_cookies(alfa_s=False):
     cookies_lock.acquire()
     if not alfa_s: logger.debug("Saving cookies...")
     cj.save(cookies_file, ignore_discard=True)
+    _cookies_sig[0] = _jar_signature_locked()
     cookies_lock.release()
+
+
+def _save_cookies_if_changed(alfa_s=False):
+    with cookies_lock:
+        if _jar_signature_locked() == _cookies_sig[0]:
+            return
+    save_cookies(alfa_s=alfa_s)
+
+
+with cookies_lock:
+    _cookies_sig[0] = _jar_signature_locked()
 
 
 def random_useragent():
@@ -166,6 +224,11 @@ def random_useragent():
 
 
 def show_infobox(info_dict):
+    if not _DEBUG_INFOBOX:
+        # A debug spento le logger.debug sotto scarterebbero tutto comunque, ma
+        # la COSTRUZIONE del box (wrap/ljust/format per ogni campo) avverrebbe
+        # lo stesso, per ogni richiesta HTTP. Uscita subito.
+        return
     logger.debug()
     from textwrap import wrap
 
@@ -282,8 +345,13 @@ def downloadpage(url, **opt):
         session = requests.session()
 
         if not opt.get('use_requests', False):
-            from core import resolverdns
-            session.mount('https://', resolverdns.CipherSuiteAdapter(domain=domain, override_dns=config.get_setting('resolver_dns'), verify_ssl=opt.get('verify', True)))
+            if config.get_setting('http_session_reuse', default=True):
+                session.mount('https://', _get_shared_adapter(opt.get('verify', True),
+                                                              config.get_setting('resolver_dns')))
+            else:
+                # percorso legacy identico a prima del riuso (rollback a un flip)
+                from core import resolverdns
+                session.mount('https://', resolverdns.CipherSuiteAdapter(domain=domain, override_dns=config.get_setting('resolver_dns'), verify_ssl=opt.get('verify', True)))
 
     req_headers = default_headers.copy()
 
@@ -464,7 +532,7 @@ def downloadpage(url, **opt):
         pass
 
     if opt.get('cookies', True):
-        save_cookies(alfa_s=opt.get('alfa_s', False))
+        _save_cookies_if_changed(alfa_s=opt.get('alfa_s', False))
 
     if not 'api.themoviedb' in url and not opt.get('alfa_s', False):
         show_infobox(info_dict)

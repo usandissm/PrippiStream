@@ -60,7 +60,7 @@ Fatti verificati da NON ri-derivare:
 - [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`); baseline PC raccolta 2026-07-03 (vedi tabella Misure) — ⏳ baseline Fire Stick prevista settimana prossima
 - [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
 - [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire 15gg + pool enrich max 8; build 1.9.903 — ✅ TESTATA 2026-07-03: miss 40%→7,8%, richieste TMDB -41%, rete -32%. Nota: `_tmdb_get_trailer` (prippihome:5489) chiama TMDB /videos direttamente via httptools senza cache — micro-win possibile in F2/F3
-- [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
+- [x] **FASE 2** — riuso trasporto HTTP (adapter condiviso, gate `http_session_reuse`) + cookie-save solo su cambiamento + infobox saltato a debug off; build 1.9.904 — ⏳ da testare dall'utente (checklist FASE 2)
 - [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
 - [ ] **FASE 4** — memoizzazione settings + SQLite WAL
 - [ ] **FASE 8a** — pulizia Stream4me: rimozioni a rischio zero
