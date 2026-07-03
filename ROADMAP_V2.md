@@ -59,7 +59,7 @@ Fatti verificati da NON ri-derivare:
 - [x] **SETUP** — workspace scollegato, versione 1.9.900, questo documento
 - [x] **FASE 0** — strumentazione `[PERF]` implementata (commit `0979cc4`); baseline PC raccolta 2026-07-03 (vedi tabella Misure) — ⏳ baseline Fire Stick prevista settimana prossima
 - [x] **Port v1.5.3** — merge da v1 (commit `e2977c8`): feature 4K/FHD + fix live setting + domini; build test 1.9.901
-- [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire default 15gg + pool enrich max 8 worker; build test 1.9.903 — ⏳ da testare dall'utente (checklist FASE 1)
+- [x] **FASE 1** — fix cache TMDB (hit by-ID + niente cache di errori/{}) + expire 15gg + pool enrich max 8; build 1.9.903 — ✅ TESTATA 2026-07-03: miss 40%→7,8%, richieste TMDB -41%, rete -32%. Nota: `_tmdb_get_trailer` (prippihome:5489) chiama TMDB /videos direttamente via httptools senza cache — micro-win possibile in F2/F3
 - [ ] **FASE 2** — riuso trasporto HTTP + cookie-save su cambiamento
 - [ ] **FASE 3** — snapshot su disco delle righe home + cold paint economico
 - [ ] **FASE 4** — memoizzazione settings + SQLite WAL
@@ -77,11 +77,11 @@ Fatti verificati da NON ri-derivare:
 
 | Metrica | Baseline (F0) | Post F1 | Post F2 | Post F3 | Post F4+8ab | Post F5 | Post F6 |
 |---|---|---|---|---|---|---|---|
-| Home cold: click→paint (PC) | **~4,9 s** (fetch_main 1,0-1,1s + assemble 0,04-0,08s + enrich_sync 3,5s + paint 0,2-0,3s) | | | | | | |
-| Home warm/snapshot: click→paint | **N/A — ogni riapertura è cold** (processo muore, cache in-memory persa: confermato, 2° open = cold identico) | | | | | | |
-| Archive fetch 21 righe (bg) | 3,7-4,1 s | | | | | | |
-| TMDB hit-rate cache | **599 hit / 401 miss (40% miss)**; 1.291 richieste HTTP, 247 s rete cumulativi, avg 192 ms | | | | | | |
-| Click card→video (1° play, PC) | 1,7 s (launcher findvideos) | | | | | | |
+| Home cold: click→paint (PC) | **~4,9 s** (fetch_main 1,0-1,1s + assemble 0,04-0,08s + enrich_sync 3,5s + paint 0,2-0,3s) | ~5,1-5,3 s (invariato: enrich_sync ora CPU/SqliteDict-bound, non rete — atteso; si abbatte con F3) | | | | | |
+| Home warm/snapshot: click→paint | **N/A — ogni riapertura è cold** (processo muore, cache in-memory persa: confermato, 2° open = cold identico) | idem (atteso, fix in F3) | | | | | |
+| Archive fetch 21 righe (bg) | 3,7-4,1 s | 3,2-4,3 s (14-15 righe) | | | | | |
+| TMDB hit-rate cache | **599 hit / 401 miss (40% miss)**; 1.291 richieste HTTP, 247 s rete cumulativi, avg 192 ms | **1.843 hit / 157 miss (7,8% miss)**; 758 req HTTP (-41%), 168 s rete (-32%), con giro più ricco (play cineblog01+trailer) | | | | | |
+| Click card→video (1° play, PC) | 1,7 s (launcher findvideos SC) | 6,8 s ma canale cineblog01 (catena uprot/maxstream) — non confrontabile con SC | | | | | |
 | Click card→video (play successivi) | (non misurato, 1 solo play nel giro) | | | | | | |
 | Fluidità scroll (soggettiva 1-5) | PC: fluido (non indicativo — misurare su FS) | | | | | | |
 
