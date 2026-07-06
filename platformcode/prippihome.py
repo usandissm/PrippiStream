@@ -8910,6 +8910,17 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             t = (it.thumbnail or '').strip()
             return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
 
+        # Catena di priorità per fonte (numero più basso = preferito) quando lo
+        # STESSO film arriva da più canali: SC sempre primo, poi hd4me (parte in
+        # streaming via Mega), poi CB01 (murato da Cloudflare → ultima spiaggia),
+        # poi qualsiasi altra fonte. Ordina solo il "vincitore" per titolo, non
+        # l'ordine tra titoli diversi.
+        _SRC_PRIO = {'sc': 0, 'streamingcommunity': 0, 'hd4me': 1, 'cineblog01': 2}
+
+        def _src_prio(it):
+            ch = (getattr(it, '_search_channel', '') or getattr(it, 'channel', '') or '').lower()
+            return _SRC_PRIO.get(ch, 5)
+
         # Dedup by tmdb_id and by normalized title. Priority Anime: when the same
         # title appears from both an anime source and a non-anime one, the anime
         # version wins (keeps the anime source so playback uses the anime channel).
@@ -8965,6 +8976,12 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                 if (getattr(it, '_search_type', '') == 'anime'
                         and getattr(prev, '_search_type', '') != 'anime'
                         and (matched_by_tmdb or not prev_tmdb)):
+                    deduped[dup_idx] = it
+                # Scala di priorità per fonte (SC > hd4me > CB01 > altri): a parità
+                # di titolo tieni la fonte preferita. Non scavalca mai un vincitore
+                # anime (che resta gestito dalla regola sopra).
+                elif (getattr(prev, '_search_type', '') != 'anime'
+                        and _src_prio(it) < _src_prio(prev)):
                     deduped[dup_idx] = it
                 continue
             if tkey is None and not nt:
