@@ -8726,6 +8726,29 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
         _q_has_art    = bool(_ART_RE.match(_q_norm_raw))
         _q_stripped   = _ART_RE.sub('', _q_norm_raw, count=1).strip()
 
+        # Tolleranza sugli stopword INTERNI: i cataloghi titolano lo stesso film
+        # in modi diversi ("I pirati DELLA Silicon Valley" su CB01 vs "I pirati
+        # DI Silicon Valley" su hd4me). Quando la query porta l'articolo
+        # iniziale (= l'utente ha digitato il titolo per intero) confrontiamo
+        # anche le sequenze di parole significative, ignorando articoli e
+        # preposizioni (it+en). Minimo 2 parole: con una sola ("la la land" ->
+        # "land") il confronto accetterebbe troppo.
+        _SEARCH_STOPWORDS = {
+            'il', 'lo', 'la', 'i', 'gli', 'le', 'l', 'un', 'uno', 'una',
+            'di', 'del', 'dello', 'della', 'dei', 'degli', 'delle',
+            'a', 'ad', 'al', 'allo', 'alla', 'ai', 'agli', 'alle',
+            'da', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle',
+            'in', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle',
+            'con', 'col', 'coi', 'su', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle',
+            'per', 'tra', 'fra', 'e', 'ed', 'o', 'od',
+            'the', 'an', 'of', 'and', 'or', 'to', 'on', 'at',
+        }
+
+        def _sig_words(s):
+            return [w for w in s.split() if w not in _SEARCH_STOPWORDS]
+
+        _q_sig = _sig_words(_q_norm_raw)
+
         def _title_match_query(r_norm):
             """Return True if r_norm is a title-match for the current query."""
             # Direct match (exact, or result is query + quality/year suffix)
@@ -8740,6 +8763,13 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                         or r_stripped.startswith(_q_stripped + ' ')
                         or _q_stripped.startswith(r_stripped + ' ')):
                     return True
+                # Stesse parole significative in sequenza (un lato può estendere
+                # l'altro, es. suffisso anno/qualità) -> stesso titolo.
+                if len(_q_sig) >= 2:
+                    r_sig = _sig_words(r_norm)
+                    k = min(len(_q_sig), len(r_sig))
+                    if k >= 2 and _q_sig[:k] == r_sig[:k]:
+                        return True
             return False
 
         # FIX: get_channels returns a list of strings (channel names), not dicts.
@@ -8876,6 +8906,12 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             is_sc    = (getattr(it, '_search_channel', '') == 'sc')
             is_cb01  = (getattr(it, '_search_channel', '') == 'cineblog01')
             exact    = (clean == query_clean)
+            if not exact and len(_q_sig) >= 2:
+                # Stesse parole significative = stesso titolo frasato diverso
+                # ("I pirati DI Silicon Valley" per query "... DELLA ..."):
+                # deve ordinarsi come exact, non affondare in fondo alla lista.
+                _c = _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', '', clean)).strip()
+                exact = (_sig_words(_c) == _q_sig)
             starts   = clean.startswith(query_clean)
             contains = (query_clean in clean)
             # Tuple: (priority_bucket 0-10, title for stable secondary sort)
@@ -8901,9 +8937,16 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
             t = _re.sub(r'[^a-z0-9 ]', '', t)
             t = _re.sub(r'\s+', ' ', t).strip()
-            # strip leading articles (IT + EN)
-            t = _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
-            return t
+            # Chiave senza stopword: le varianti di titolo dello STESSO film
+            # devono collidere ("I pirati della Silicon Valley" CB01 / "I pirati
+            # di Silicon Valley" hd4me) così la priorità per fonte sceglie il
+            # vincitore invece di mostrare due tile.
+            sig = ' '.join(_sig_words(t))
+            if sig:
+                return sig
+            # Titolo fatto di soli stopword: tieni la vecchia chiave
+            # (solo articolo iniziale via).
+            return _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
 
         def _valid_thumb(it):
             """Return True only if thumbnail is a usable URL or local path."""
