@@ -8345,7 +8345,11 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             self._cancelled.set()
             self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
-            _open_search()
+            # Propaga la home window: senza, la nuova finestra di ricerca
+            # perde la delega play (_launch/_play_episode_direct_nonsc) e le
+            # serie a menu (mediasetplay 'epmenu') finivano in un RunPlugin
+            # folder che non riproduce nulla.
+            _open_search(parent_window=self._parent_window)
             return
         if control_id in SEARCH_FILTER_MAP:
             self._apply_filter(SEARCH_FILTER_MAP[control_id])
@@ -8573,7 +8577,23 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                         t_ep.daemon = True
                         t_ep.start()
                     else:
-                        self._launch_item(item)
+                        # Senza home window: risolvi comunque l'episodio scelto
+                        # (numerazione globale) e lancialo direttamente.
+                        _played = False
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            _hit = [e for e in _eps
+                                    if int(getattr(e, 'episode', 0) or 0) == int(sel_e)]
+                            if _hit:
+                                _pre_play_set_lang(_hit[0])
+                                xbmc.executebuiltin(
+                                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                                    % _hit[0].tourl())
+                                _played = True
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent ep play: %s' % str(_exc))
+                        if not _played:
+                            self._launch_item(item)
                 else:
                     self._launch_item(item)
             elif result == 'download' and self._parent_window is not None:
@@ -8604,9 +8624,20 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                 if self._parent_window is not None:
                     self._parent_window._launch(item, source_window=self)
                 else:
-                    _pre_play_set_lang(item)
+                    # Rete di sicurezza senza home window: le serie a menu
+                    # (epmenu/episodios) non sono riproducibili via RunPlugin
+                    # diretto → risolvi qui il primo episodio del canale.
+                    _tgt = item
+                    if getattr(item, 'action', '') in _CH_MENU_ACTIONS:
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            if _eps:
+                                _tgt = _eps[0]
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent first-ep: %s' % str(_exc))
+                    _pre_play_set_lang(_tgt)
                     xbmc.executebuiltin(
-                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % _tgt.tourl())
                 return
 
             # ── 4K check (movies only, before normal path) ────────────────
