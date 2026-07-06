@@ -152,6 +152,112 @@ def search(item, text):
         return []
 
 
+# Classi di risoluzione (in "larghezza" convenzionale, serve solo l'ordine)
+# riconosciute nel nome release, es. "Titanic (1997) BDRip 1080p ... 8.49 GB".
+_RES_TOKENS = [
+    (_re.compile(r'2160p|4k', _re.I), 3840),
+    (_re.compile(r'1080p', _re.I), 1920),
+    (_re.compile(r'm?720p', _re.I), 1280),
+    (_re.compile(r'576p', _re.I), 1000),
+    (_re.compile(r'480p', _re.I), 850),
+]
+_SIZE_RE = _re.compile(r'(\d+(?:[.,]\d+)?)\s*(gb|mb)', _re.I)
+
+
+def _quality_score(title):
+    """(classe risoluzione, MB) estratti dal nome release; (0, 0) se ignoto."""
+    t = title or ''
+    res = 0
+    for rx, width in _RES_TOKENS:
+        if rx.search(t):
+            res = width
+            break
+    size = 0.0
+    m = _SIZE_RE.search(t)
+    if m:
+        size = float(m.group(1).replace(',', '.'))
+        if m.group(2).lower() == 'gb':
+            size *= 1024
+    return (res, size)
+
+
+# Lista A-Z di TUTTI i post (~8200: un post per release/edizione, anche quelli
+# fuori dal catalogo di ricerca). Voce: id, t (titolo release con qualità e
+# peso), o (1 = link offline). Indicizzata per (titolo-base, anno).
+_alphabet = {'idx': None, 'ts': 0}
+
+_TITLE_YEAR_RE = _re.compile(r'^(.*?)\((\d{4})\)')
+
+
+def _base_year(release_title):
+    """Da "Titanic (1997) BDRip 1080p ..." -> ("titanic", "1997")."""
+    m = _TITLE_YEAR_RE.match(release_title or '')
+    if not m:
+        return '', ''
+    return _norm(m.group(1)), m.group(2)
+
+
+def _get_alphabet_index():
+    now = _time.time()
+    if _alphabet['idx'] is not None and (now - _alphabet['ts']) < _CATALOG_TTL:
+        return _alphabet['idx']
+    try:
+        resp = httptools.downloadpage(_CACHE + '/alphabet.json',
+                                      headers={'Referer': host})
+        j = _json.loads(resp.data)
+        idx = {}
+        for g in (j.get('data') or []):
+            for it in (g.get('items') or []):
+                b, y = _base_year(it.get('t') or '')
+                if b and y:
+                    idx.setdefault((b, y), []).append(it)
+        if idx:
+            _alphabet['idx'] = idx
+            _alphabet['ts'] = now
+    except Exception as exc:
+        support.logger.error('hd4me alphabet: %s' % str(exc))
+    return _alphabet['idx'] or {}
+
+
+def _best_edition(post_url, base_title):
+    """hd4me pubblica un post per release: lo stesso film può avere più
+    edizioni (720p/1080p/REMASTERED...) e il catalogo di ricerca punta a
+    quella "canonica", che non sempre è la migliore. Cerca in alphabet.json
+    le altre edizioni — stesso titolo base e stesso ANNO (i remake
+    condividono il titolo!) — e ritorna il link Mega di quella con
+    (risoluzione, peso) maggiore, oppure '' se il canonico resta il migliore."""
+    m = _re.search(r'/posts/(\d+)\.json', post_url or '')
+    base, year = _base_year(base_title)
+    if not m or not base:
+        return ''
+    pid = m.group(1)
+    base_score = _quality_score(base_title)
+    cands = []
+    for it in _get_alphabet_index().get((base, year), []):
+        if str(it.get('id')) == pid or it.get('o'):  # sé stesso / offline
+            continue
+        score = _quality_score(it.get('t') or '')
+        if score > base_score:
+            cands.append((score, it))
+    # Prova le candidate dalla migliore: deve avere il link Mega e risultare
+    # ancora online nel proprio JSON (alphabet può essere stantio).
+    for score, it in sorted(cands, key=lambda c: c[0], reverse=True)[:3]:
+        try:
+            resp = httptools.downloadpage(_CACHE + '/posts/%s.json' % it['id'],
+                                          headers={'Referer': host})
+            j2 = _json.loads(getattr(resp, 'data', '') or '')
+            if not isinstance(j2, dict) or j2.get('online') is False:
+                continue
+            alt = (j2.get('movie') or {}).get('test') or ''
+            if alt:
+                support.logger.info('hd4me: edizione migliore di %r -> %r'
+                                    % (base_title, j2.get('title')))
+                return alt
+        except Exception:
+            continue
+    return ''
+
+
 def _mega_to_old(url):
     """Converte il link Mega nuovo (/file/ID#KEY o /folder/ID#KEY) nel formato
     #!ID!KEY / #F!ID!KEY che lib/megaserver sa parsare."""
@@ -169,15 +275,25 @@ def findvideos(item):
     try:
         resp = httptools.downloadpage(item.url, headers={'Referer': host})
         data = getattr(resp, 'data', '') or ''
-        mega = ''
+        mega, title = '', ''
         try:
             j = _json.loads(data)
-            mega = ((j.get('movie') or {}).get('test') or '') if isinstance(j, dict) else ''
+            if isinstance(j, dict):
+                title = j.get('title') or ''
+                mega = (j.get('movie') or {}).get('test') or ''
         except Exception:
             pass
         if not mega:
             m = _re.search(r'https://mega\.nz/(?:file|folder)/[A-Za-z0-9_\-]+#[A-Za-z0-9_\-]+', data)
             mega = m.group(0) if m else ''
+        # Se esiste un'edizione con risoluzione/peso maggiore, usa quella.
+        # Qualsiasi errore qui non deve MAI rompere il play del canonico.
+        try:
+            alt = _best_edition(item.url, title)
+            if alt:
+                mega = alt
+        except Exception as exc:
+            support.logger.info('hd4me best-edition skip: %s' % str(exc))
         if not mega:
             support.logger.info('hd4me findvideos: nessun link Mega in %s' % item.url)
             return []
