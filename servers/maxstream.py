@@ -121,9 +121,9 @@ def _get_embed_page(page_url):
                             % (furl, html[:100]))
                 if _is_dead(html):
                     return None, None, True
-                if not _re.search(r'/watch_?free/', furl) and html:
+                if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
                     m = scrapertools.find_single_match(
-                        html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
+                        html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
                     if m:
                         furl = m
                 return html, furl, False
@@ -149,9 +149,9 @@ def _get_embed_page(page_url):
             # Find watchfree URL: either resp.url (when redirect was followed),
             # or inside the HTML body (meta-refresh / JS redirect / iframe from proxy).
             # The host now uses the path "/watch_free/" (underscore); accept both.
-            if not _re.search(r'/watch_?free/', furl) and html:
+            if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
                 m = scrapertools.find_single_match(
-                    html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
+                    html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
                 if m:
                     furl = m
                     logger.info('maxstream._get_embed_page uprots watchfree in HTML: %r' % furl)
@@ -171,7 +171,7 @@ def _get_embed_page(page_url):
         dead_confirmed = False
         for mode in ('raw', 'plain', 'cs', 'default'):
             html_uprots, final_url, dead = _try_uprots(mode)
-            if _re.search(r'/watch_?free/', final_url or ''):
+            if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
                 dead_confirmed = False
                 break
             if dead and mode != 'raw':
@@ -181,7 +181,7 @@ def _get_embed_page(page_url):
         if dead_confirmed:
             return None
 
-        if _re.search(r'/watch_?free/', final_url or ''):
+        if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
             # watchfree path: /watch_free/VIEW_ID/FILE_ID/TOKEN
             # FILE_ID (parts[2]) is the id used by emhuih, NOT the view/movie id (parts[1]).
             # parts[1] is session-specific and changes per request; parts[2] is stable.
