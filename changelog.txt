@@ -1,4 +1,4 @@
-## Prossima
+## 1.5.5
 - Ricerca più intelligente: articoli e preposizioni non contano più ("della"/"di"…), trovi il titolo anche se è scritto in modo leggermente diverso.
 - Nuova fonte video per i film nella ricerca, con scelta automatica dell'edizione di qualità migliore quando ne esistono più versioni.
 - Serie Mediaset e Rai nella ricerca: una sola scheda per la serie con le stagioni vere e l'elenco puntate, invece di una scheda per ogni puntata.
