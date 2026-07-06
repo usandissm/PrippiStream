@@ -32,7 +32,14 @@ except Exception:
     except Exception:
         BANK, GW, GH, SCALE = {}, 14, 22, 8
 
-DARK = 120          # max(R,G,B) below this == "ink" (digit) pixel
+# max(R,G,B) sotto questa soglia = pixel "inchiostro" (cifra).
+# Da luglio 2026 uprot ha cambiato il rendering (immagine 135x48 invece di
+# 200x50, con strisce diagonali grigio-oliva che COLLEGANO le cifre e battono la
+# segmentazione a colonne). Le cifre restano più SCURE delle strisce e delle
+# stelline pastello del rumore: abbassare la soglia da 120 a 95 stacca le strisce
+# e riseparara le cifre (verificato sui campioni reali: es. "5684" tornava 1 solo
+# blob a 120, 4 cifre corrette a 95).
+DARK = 95
 KNN = 3
 
 # ----------------------------------------------------------------- PNG decode
@@ -348,20 +355,29 @@ import base64 as _b64
 
 _IMG_RE = re.compile(r'data:image/png;base64,([A-Za-z0-9+/=]+)')
 _TOKEN_RE = re.compile(r'maxstream\.video/uprots/')
-# How many digits the captcha expects, e.g. pattern="[0-9]{4}". uprot has used
-# both 3 and 4; read it so the OCR segments into the right number of glyphs.
-_NDIGITS_RE = re.compile(r"""pattern=["']\[0-9\]\{(\d+)\}""")
+# Quante cifre attende il captcha. uprot è passato da 3→4→5 cifre nel tempo e ha
+# anche cambiato il markup dell'input, quindi leggiamo il conteggio da PIÙ forme
+# invece che dal solo pattern="[0-9]{n}" (che con 5 cifre non matcha più):
+#   pattern="[0-9]{5}"  |  pattern="\d{5}"  |  maxlength="5"  |  minlength="5"
+# Il segnale dalla pagina è affidabile; l'auto-detect dall'immagine è il fallback.
+_NDIGITS_RES = (
+    re.compile(r"""pattern\s*=\s*["']\s*\[0-9\]\s*\{(\d+)\}"""),
+    re.compile(r"""maxlength\s*=\s*["']?(\d+)"""),
+    re.compile(r"""minlength\s*=\s*["']?(\d+)"""),
+)
 
 
 def _digit_count(html, default=4):
-    m = _NDIGITS_RE.search(html or '')
-    if m:
-        try:
-            n = int(m.group(1))
-            if 2 <= n <= 8:
-                return n
-        except Exception:
-            pass
+    h = html or ''
+    for rx in _NDIGITS_RES:
+        m = rx.search(h)
+        if m:
+            try:
+                n = int(m.group(1))
+                if 3 <= n <= 8:
+                    return n
+            except Exception:
+                pass
     return default
 
 
@@ -384,7 +400,7 @@ def _img_bytes(html):
         return None
 
 
-def solve_uprot(msf_url, downloadpage, max_attempts=6):
+def solve_uprot(msf_url, downloadpage, max_attempts=8):
     """Drive the uprot.net captcha and return the HTML that contains the real
     maxstream.video/uprots/ links, or None.
 
@@ -416,10 +432,20 @@ def solve_uprot(msf_url, downloadpage, max_attempts=6):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
-        # Digit count from the page pattern (reliable); None -> auto-detect from
-        # the image. Either way the solver self-adapts if uprot changes 3↔4↔5.
-        code = solve_image(img, _digit_count(html, default=None))
-        logger.info('uprot_captcha attempt %d -> code=%s' % (attempt + 1, code))
+        # Conteggio cifre: prima dalla pagina se lo espone (autorevole → risolve
+        # al 1° colpo). Altrimenti auto-detect dall'immagine (affidabile con la
+        # nuova soglia DARK) e, poiché il conteggio varia tra 4 e 5, ciclo i
+        # candidati [auto, 4, 5] sui tentativi — un POST errato dà solo un captcha
+        # nuovo, quindi in pochi tentativi si copre il conteggio giusto.
+        _npage = _digit_count(html, default=None)
+        if _npage:
+            _n = _npage
+        else:
+            _cands = [_auto_digit_count(img), 4, 5]
+            _n = _cands[attempt % len(_cands)]
+        code = solve_image(img, _n)
+        logger.info('uprot_captcha attempt %d -> code=%s (page_n=%s, tried_n=%s)'
+                    % (attempt + 1, code, _npage, _n))
         if not code:
             # unreadable image -> fetch a fresh one
             html = downloadpage(msf_url, headers=hdr).data or ''

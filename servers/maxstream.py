@@ -121,9 +121,9 @@ def _get_embed_page(page_url):
                             % (furl, html[:100]))
                 if _is_dead(html):
                     return None, None, True
-                if not _re.search(r'/watch_?free/', furl) and html:
+                if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
                     m = scrapertools.find_single_match(
-                        html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
+                        html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
                     if m:
                         furl = m
                 return html, furl, False
@@ -149,26 +149,41 @@ def _get_embed_page(page_url):
             # Find watchfree URL: either resp.url (when redirect was followed),
             # or inside the HTML body (meta-refresh / JS redirect / iframe from proxy).
             # The host now uses the path "/watch_free/" (underscore); accept both.
-            if not _re.search(r'/watch_?free/', furl) and html:
+            if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
                 m = scrapertools.find_single_match(
-                    html, r'(https?://[^\s"\'<>]+/watch_?free/[^\s"\'<>]+)')
+                    html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
                 if m:
                     furl = m
                     logger.info('maxstream._get_embed_page uprots watchfree in HTML: %r' % furl)
             return html, furl, False
 
+        # La modalità 'raw' usa una requests.Session NUOVA, senza i cookie di
+        # sessione uprot (PHPSESSID) che il captcha ha impostato nel cookie jar
+        # di httptools. Quando il token /uprots/ è legato a quella sessione,
+        # maxstream risponde "Error (131) File id error" alla richiesta 'raw'
+        # anche se il file è VIVO (parte dal browser). Prima un 'dead' da QUALSIASI
+        # modalità faceva 'return None' subito → il contenuto risultava morto per
+        # sbaglio. Ora un 'dead' della sola 'raw' NON è definitivo: proviamo anche
+        # le modalità httptools (che portano i cookie). È 'dead' davvero solo se
+        # nessuna modalità produce un watch_free E almeno una modalità CON cookie
+        # lo conferma.
         final_url = ''
+        dead_confirmed = False
         for mode in ('raw', 'plain', 'cs', 'default'):
             html_uprots, final_url, dead = _try_uprots(mode)
-            if dead:
-                return None
-            if _re.search(r'/watch_?free/', final_url or ''):
+            if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
+                dead_confirmed = False
                 break
+            if dead and mode != 'raw':
+                # 'dead' da una modalità con cookie di sessione = autorevole.
+                dead_confirmed = True
+                break
+        if dead_confirmed:
+            return None
 
-        if _re.search(r'/watch_?free/', final_url or ''):
-            # watchfree path: /watch_free/VIEW_ID/FILE_ID/TOKEN
-            # FILE_ID (parts[2]) is the id used by emhuih, NOT the view/movie id (parts[1]).
-            # parts[1] is session-specific and changes per request; parts[2] is stable.
+        if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
+            # freewatcher path: /freewatcher/VIEW_ID/FILE_ID/TOKEN (era /watch_free/).
+            # FILE_ID (parts[2]) è l'id usato da emhuih, NON il view id (parts[1]).
             try:
                 parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
                 session_id = parts[2] if len(parts) >= 3 else None

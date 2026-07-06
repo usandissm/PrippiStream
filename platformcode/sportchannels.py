@@ -639,6 +639,76 @@ def _parse_sport_backend():
     return online
 
 
+def _hls_playable(url, headers, timeout=6):
+    """True se l'HLS è DAVVERO riproducibile adesso, non solo un file #EXTM3U.
+
+    Il probe precedente si fermava a '#EXTM3U nei primi 64 byte': un master
+    playlist o una CDN che serve il manifest ma nega i segmenti (403) passava il
+    check e poi falliva in ISA ('error opening .../index.m3u8'). Qui:
+      - scarica il manifest (intero, è piccolo);
+      - se è un MASTER (#EXT-X-STREAM-INF) risolve la prima variante e verifica
+        che risponda con un altro #EXTM3U;
+      - poi, sulla media playlist, estrae il PRIMO segmento e ne verifica la
+        raggiungibilità reale (status 200) con un GET di pochi byte.
+    Un canale morto (segmenti 403 / CDN vuota) viene così escluso dalla home."""
+    try:
+        body = _http_get(url, headers=headers, timeout=timeout)
+    except Exception:
+        body = None
+    if not body or '#EXTM3U' not in body:
+        return False
+    base = url.rsplit('/', 1)[0] + '/'
+
+    def _abs(u):
+        u = u.strip()
+        if u.startswith('http'):
+            return u
+        if u.startswith('/'):
+            m = re.match(r'(https?://[^/]+)', url)
+            return (m.group(1) if m else base.rstrip('/')) + u
+        return base + u
+
+    # Master playlist → scendi di un livello alla prima variante.
+    if '#EXT-X-STREAM-INF' in body:
+        var = None
+        for line in body.splitlines():
+            line = line.strip()
+            if line and not line.startswith('#'):
+                var = _abs(line)
+                break
+        if not var:
+            return False
+        try:
+            sub = _http_get(var, headers=headers, timeout=timeout)
+        except Exception:
+            sub = None
+        if not sub or '#EXTM3U' not in sub:
+            return False
+        body, base = sub, var.rsplit('/', 1)[0] + '/'
+
+    # Media playlist → verifica che il primo segmento risponda davvero.
+    seg = None
+    for line in body.splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            seg = _abs(line)
+            break
+    if not seg:
+        # nessun segmento elencato (playlist vuota) = non riproducibile
+        return False
+    try:
+        h = dict(headers or {})
+        h['Range'] = 'bytes=0-1'
+        resp = urlopen(Request(seg, headers=h), timeout=timeout)
+        code = resp.getcode()
+        resp.read(2)
+        resp.close()
+        return code in (200, 206)
+    except Exception as exc:
+        logger.debug('[Sport] hls_playable segment fail %s: %s' % (seg[:80], exc))
+        return False
+
+
 def _sky_channel_valid(par):
     """True if a sky@@ channel is currently playable: the backend returns a
     non-expired manifest whose default_KID matches the ClearKey it provides.
@@ -700,17 +770,9 @@ def _freeshot_ok(code):
     if not url:
         logger.debug('[Sport] freeshot_ok %s: no token/url' % code)
         return False
-    try:
-        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA,
-                                             'Referer': _FREESHOT_REFERER}), timeout=6)
-        head = resp.read(64) or b''
-        resp.close()
-        ok = b'#EXTM3U' in head
-        logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else 'CDN served no manifest'))
-        return ok
-    except Exception as exc:
-        logger.debug('[Sport] freeshot_ok %s: CDN fetch failed (%s)' % (code, exc))
-        return False
+    ok = _hls_playable(url, {'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER}, timeout=6)
+    logger.debug('[Sport] freeshot_ok %s: %s' % (code, 'OK' if ok else 'not playable'))
+    return ok
 
 
 def _iptvorg_ok(display_name):
@@ -721,15 +783,9 @@ def _iptvorg_ok(display_name):
     if not url:
         logger.debug('[Sport] iptvorg_ok %s: not found in iptv-org list' % display_name)
         return False
-    try:
-        resp = urlopen(Request(url, headers={'User-Agent': _NOWTV_UA}), timeout=5)
-        ok = resp.getcode() == 200
-        resp.close()
-        logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, 'OK' if ok else 'HTTP %s' % resp.getcode()))
-        return ok
-    except Exception as exc:
-        logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, exc))
-        return False
+    ok = _hls_playable(url, {'User-Agent': _NOWTV_UA}, timeout=6)
+    logger.debug('[Sport] iptvorg_ok %s: %s' % (display_name, 'OK' if ok else 'not playable'))
+    return ok
 
 
 def _channel_token_valid(ch):
@@ -1313,18 +1369,9 @@ def _daddy_ok(code):
     res = resolve_daddy(code)
     if not res:
         return False
-    try:
-        from lib import requests as _rq
-        r = _rq.get(res[0], headers={'User-Agent': _NOWTV_UA, 'Referer': res[1]},
-                    timeout=6, verify=False, stream=True)
-        head = next(r.iter_content(64), b'') or b''
-        r.close()
-        ok = b'#EXTM3U' in head
-        logger.debug('[Sport] daddy_ok %s: %s' % (code, 'OK' if ok else 'CDN served no manifest'))
-        return ok
-    except Exception as exc:
-        logger.debug('[Sport] daddy_ok %s: %s' % (code, exc))
-        return False
+    ok = _hls_playable(res[0], {'User-Agent': _NOWTV_UA, 'Referer': res[1]}, timeout=6)
+    logger.debug('[Sport] daddy_ok %s: %s' % (code, 'OK' if ok else 'not playable'))
+    return ok
 
 
 def _daddy_live_ids():
