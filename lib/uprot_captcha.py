@@ -384,7 +384,27 @@ def _img_bytes(html):
         return None
 
 
-def solve_uprot(msf_url, downloadpage, max_attempts=6):
+def _dump_captcha(img):
+    """Se esiste la cartella <data_path>/captcha_dump/, salva lì il PNG del
+    captcha (nome = hash+timestamp). Serve a raccogliere campioni reali per
+    ri-addestrare il BANK OCR (che oggi non ha esemplari di 0 e 9). L'utente
+    attiva creando la cartella, disattiva cancellandola. Nessun overhead se
+    la cartella non esiste."""
+    try:
+        import os as _os
+        from platformcode import config as _cfg
+        d = _os.path.join(_cfg.get_data_path(), 'captcha_dump')
+        if not _os.path.isdir(d):
+            return
+        import time as _t
+        name = 'cap_%d_%d.png' % (int(_t.time() * 1000), len(img))
+        with open(_os.path.join(d, name), 'wb') as f:
+            f.write(img)
+    except Exception:
+        pass
+
+
+def solve_uprot(msf_url, downloadpage, max_attempts=14):
     """Drive the uprot.net captcha and return the HTML that contains the real
     maxstream.video/uprots/ links, or None.
 
@@ -416,10 +436,13 @@ def solve_uprot(msf_url, downloadpage, max_attempts=6):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
+        _dump_captcha(img)
         # Digit count from the page pattern (reliable); None -> auto-detect from
         # the image. Either way the solver self-adapts if uprot changes 3↔4↔5.
-        code = solve_image(img, _digit_count(html, default=None))
-        logger.info('uprot_captcha attempt %d -> code=%s' % (attempt + 1, code))
+        _npat = _digit_count(html, default=None)
+        code = solve_image(img, _npat)
+        logger.info('uprot_captcha attempt %d -> code=%s (pattern_n=%s)'
+                    % (attempt + 1, code, _npat))
         if not code:
             # unreadable image -> fetch a fresh one
             html = downloadpage(msf_url, headers=hdr).data or ''

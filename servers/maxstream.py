@@ -157,13 +157,29 @@ def _get_embed_page(page_url):
                     logger.info('maxstream._get_embed_page uprots watchfree in HTML: %r' % furl)
             return html, furl, False
 
+        # La modalità 'raw' usa una requests.Session NUOVA, senza i cookie di
+        # sessione uprot (PHPSESSID) che il captcha ha impostato nel cookie jar
+        # di httptools. Quando il token /uprots/ è legato a quella sessione,
+        # maxstream risponde "Error (131) File id error" alla richiesta 'raw'
+        # anche se il file è VIVO (parte dal browser). Prima un 'dead' da QUALSIASI
+        # modalità faceva 'return None' subito → il contenuto risultava morto per
+        # sbaglio. Ora un 'dead' della sola 'raw' NON è definitivo: proviamo anche
+        # le modalità httptools (che portano i cookie). È 'dead' davvero solo se
+        # nessuna modalità produce un watch_free E almeno una modalità CON cookie
+        # lo conferma.
         final_url = ''
+        dead_confirmed = False
         for mode in ('raw', 'plain', 'cs', 'default'):
             html_uprots, final_url, dead = _try_uprots(mode)
-            if dead:
-                return None
             if _re.search(r'/watch_?free/', final_url or ''):
+                dead_confirmed = False
                 break
+            if dead and mode != 'raw':
+                # 'dead' da una modalità con cookie di sessione = autorevole.
+                dead_confirmed = True
+                break
+        if dead_confirmed:
+            return None
 
         if _re.search(r'/watch_?free/', final_url or ''):
             # watchfree path: /watch_free/VIEW_ID/FILE_ID/TOKEN
