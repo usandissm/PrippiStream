@@ -400,30 +400,6 @@ def _img_bytes(html):
         return None
 
 
-def _dump_captcha(img, html=None):
-    """Se esiste la cartella <data_path>/captcha_dump/, salva lì il PNG del
-    captcha E l'HTML della pagina (per capire dove sta il conteggio cifre quando
-    page_n=None). Diagnostico: la banca OCR (cifre 1-8 = alfabeto reale di uprot)
-    è corretta; a fallire è il CONTEGGIO/segmentazione quando i captcha passano a
-    5 cifre e la pagina non espone pattern/maxlength. L'utente attiva creando la
-    cartella, disattiva cancellandola. Nessun overhead se la cartella non esiste."""
-    try:
-        import os as _os
-        from platformcode import config as _cfg
-        d = _os.path.join(_cfg.get_data_path(), 'captcha_dump')
-        if not _os.path.isdir(d):
-            return
-        import time as _t
-        stamp = int(_t.time() * 1000)
-        with open(_os.path.join(d, 'cap_%d_%d.png' % (stamp, len(img))), 'wb') as f:
-            f.write(img)
-        if html:
-            with open(_os.path.join(d, 'page_%d.html' % stamp), 'w', encoding='utf-8') as f:
-                f.write(html)
-    except Exception:
-        pass
-
-
 def solve_uprot(msf_url, downloadpage, max_attempts=8):
     """Drive the uprot.net captcha and return the HTML that contains the real
     maxstream.video/uprots/ links, or None.
@@ -456,7 +432,6 @@ def solve_uprot(msf_url, downloadpage, max_attempts=8):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
-        _dump_captcha(img, html)
         # Conteggio cifre: prima dalla pagina se lo espone (autorevole → risolve
         # al 1° colpo). Altrimenti auto-detect dall'immagine (affidabile con la
         # nuova soglia DARK) e, poiché il conteggio varia tra 4 e 5, ciclo i

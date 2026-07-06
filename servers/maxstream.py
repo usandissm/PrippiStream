@@ -67,54 +67,6 @@ def _resolve_stayonline(page_url):
     return None
 
 
-def _fetch_via_cf_worker(url, referer='https://uprot.net/'):
-    """Scarica *url* instradandolo attraverso i Cloudflare worker-proxy
-    dell'addon (Px-Host/Px-Token): il worker fa il fetch lato-server e a volte
-    passa dove cloudscraper fallisce sulla sfida 'Just a moment'. Prova tutti i
-    proxy finché uno torna contenuto reale (non la challenge CF). HTML o ''."""
-    try:
-        from core.httptools import cf_proxy_list
-    except Exception:
-        return ''
-    try:
-        parse = urlparse.urlparse(url)
-    except Exception:
-        return ''
-    for cf in cf_proxy_list:
-        try:
-            worker = urlparse.urlunparse((parse.scheme, cf['url'], parse.path,
-                                          parse.params, parse.query, parse.fragment))
-            r = httptools.downloadpage(worker, headers={
-                'Px-Host': parse.netloc, 'Px-Token': cf['token'],
-                'Referer': referer}, CF=True)
-            html = getattr(r, 'data', '') or ''
-            if html and 'Just a moment' not in html and '<title>Attention' not in html:
-                logger.info('maxstream._fetch_via_cf_worker OK via %s (%d bytes)'
-                            % (cf['url'], len(html)))
-                return html
-        except Exception as e:
-            logger.info('maxstream._fetch_via_cf_worker %s: %s' % (cf['url'], e))
-    return ''
-
-
-def _dump_freewatcher(freewatcher_url, html):
-    """DIAGNOSTICO: salva la pagina freewatcher (già scaricata) in
-    <data_path>/captcha_dump/ per ispezionare la struttura del nuovo player.
-    Attivo solo se la cartella esiste."""
-    try:
-        import os as _os
-        from platformcode import config as _cfg
-        d = _os.path.join(_cfg.get_data_path(), 'captcha_dump')
-        if not _os.path.isdir(d):
-            return
-        import time as _t
-        with open(_os.path.join(d, 'freewatcher_%d.html' % int(_t.time())), 'w',
-                  encoding='utf-8') as f:
-            f.write('<!-- URL: %s -->\n%s' % (freewatcher_url, html or ''))
-    except Exception:
-        pass
-
-
 def _get_embed_page(page_url):
     """
     Given a maxstream URL (either /uprots/TOKEN or /emhuih/ID or /e/ID),
@@ -237,28 +189,6 @@ def _get_embed_page(page_url):
                 session_id = parts[2] if len(parts) >= 3 else None
             except Exception:
                 session_id = None
-            # A luglio 2026 maxstream ha spostato il player: emhuih/<fileid> ora
-            # dà 404 e la pagina freewatcher (che porta al player) è dietro
-            # Cloudflare 'Just a moment' che cloudscraper non passa. Tentativo:
-            # instradare freewatcher attraverso i CF worker-proxy dell'addon
-            # (fetch lato-server). Se torna contenuto reale, si estrae lo stream
-            # direttamente (m3u8) o si segue l'iframe del player.
-            fw_html = _fetch_via_cf_worker(final_url)
-            _dump_freewatcher(final_url, fw_html)
-            if fw_html:
-                m3u8 = scrapertools.find_single_match(
-                    fw_html, r'(https?://[^\s"\'<>]+\.m3u8[^\s"\'<>]*)')
-                if m3u8:
-                    logger.info('maxstream freewatcher→m3u8 diretto: %r' % m3u8)
-                    return fw_html
-                iframe = scrapertools.find_single_match(
-                    fw_html, r'<iframe[^>]+src=["\']([^"\']+)["\']')
-                if iframe:
-                    if iframe.startswith('//'):
-                        iframe = 'https:' + iframe
-                    logger.info('maxstream freewatcher→iframe: %r' % iframe)
-                    return _get_embed_page(iframe)
-            # Fallback storico: emhuih/<fileid> (finché non torna 404 ovunque).
             if session_id:
                 page_url = 'https://maxstream.video/emhuih/' + session_id
                 logger.info('maxstream._get_embed_page uprots→emhuih: %r' % page_url)
