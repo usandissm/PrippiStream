@@ -234,7 +234,19 @@ def epmenu(item):
     if item.seriesid:
         if type(item.seriesid) == list:
             res = []
-            for s in item.seriesid:
+            seasons = list(item.seriesid)
+            # L'API elenca le stagioni dalla più recente ("R.I.S. 5" per
+            # prima): ordina per numero nel titolo (l'ULTIMO numero; la base
+            # senza numero = stagione 1) così l'ordine è 1, 2, 3…
+            def _snum(s):
+                import re as _re_s
+                m = _re_s.search(r'(\d+)(?!.*\d)', s.get('title') or '')
+                return int(m.group(1)) if m else 0
+            if any(_snum(s) for s in seasons):
+                seasons.sort(key=_snum)
+            else:
+                seasons.reverse()
+            for s in seasons:
                 itemlist.append(
                     item.clone(seriesid = s['id'],
                                title=support.typo(s['title'], 'bold')))

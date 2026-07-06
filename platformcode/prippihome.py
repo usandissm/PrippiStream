@@ -4521,10 +4521,14 @@ def _animeunity_fallback_episodes(item):
 _CH_MENU_ACTIONS = ('episodios', 'epmenu', 'epMenu')
 
 
-def _expand_channel_menu(ch_module, item, depth=0):
+def _expand_channel_menu(ch_module, item, depth=0, parent_title=''):
     """Espande ricorsivamente i livelli-menu di un canale (epmenu Mediaset:
-    stagioni → sottobrand; epMenu Rai: stagioni/blocchi) fino alla lista
-    piatta di episodi playabili (action='findvideos')."""
+    stagioni → sottobrand; epMenu Rai: blocchi → stagioni) fino alla lista
+    piatta di episodi playabili (action='findvideos'). Ogni episodio riceve
+    `_leaf_menu` = titolo del menu che lo conteneva DIRETTAMENTE (la stagione
+    Mediaset, il set 'Stagione 2' Rai) e `_leaf_parent` = il menu sopra (il
+    blocco Rai 'Episodi'/'Highlights'/'Extra'): sono le stagioni del picker,
+    col padre usato per disambiguare i nomi duplicati."""
     action = getattr(item, 'action', '') or ''
     if action not in _CH_MENU_ACTIONS:
         action = 'episodios'
@@ -4532,12 +4536,20 @@ def _expand_channel_menu(ch_module, item, depth=0):
     if fn is None:
         return []
     out = []
+    leaf_name = None
     for it in (fn(item) or []):
         sub = getattr(it, 'action', '')
         if sub == 'findvideos':
+            if leaf_name is None:
+                leaf_name = re.sub(r'\[/?[^\]]+\]', '',
+                                   (getattr(item, 'title', '') or '')).strip()
+            it._leaf_menu = leaf_name
+            it._leaf_parent = parent_title
             out.append(it)
         elif depth < 3 and sub in _CH_MENU_ACTIONS:
-            out.extend(_expand_channel_menu(ch_module, it, depth + 1))
+            _par = re.sub(r'\[/?[^\]]+\]', '',
+                          (getattr(item, 'title', '') or '')).strip()
+            out.extend(_expand_channel_menu(ch_module, it, depth + 1, _par))
     return out
 
 
@@ -4576,11 +4588,38 @@ def _get_channel_episodes(item):
         import importlib
         ch_module = importlib.import_module('channels.%s' % channel)
         ep_list = _expand_channel_menu(ch_module, item)
+        # Stagioni: ogni episodio porta _leaf_menu = titolo del menu che lo
+        # conteneva direttamente. Run consecutivi di (_leaf_menu, _leaf_parent)
+        # diversi = le stagioni del picker (_disp_season/_disp_ep/_season_name).
+        # Nomi duplicati (Rai: 'Stagione 5' sia in Episodi che in Highlights/
+        # Extra) vengono disambiguati col menu padre. Canali piatti
+        # (AnimeUnity…): un solo run → nessun attributo, il picker mostra la
+        # singola 'Stagione 1' come sempre.
+        runs = []
+        for ep in ep_list:
+            key = (getattr(ep, '_leaf_menu', '') or '',
+                   getattr(ep, '_leaf_parent', '') or '')
+            if not runs or runs[-1][0] != key:
+                runs.append((key, []))
+            runs[-1][1].append(ep)
+        if len(runs) > 1:
+            name_count = {}
+            for (name, _par), _sub in runs:
+                name_count[name] = name_count.get(name, 0) + 1
+            for gi, ((name, par), sub) in enumerate(runs, 1):
+                disp_name = name
+                if name and name_count[name] > 1 and par and par != name:
+                    disp_name = u'%s · %s' % (par, name)
+                for j, ep in enumerate(sub, 1):
+                    ep._disp_season = gi
+                    ep._disp_ep = j
+                    ep._season_name = disp_name or (u'Stagione %d' % gi)
         # Mediaset/Rai non numerano le puntate (episode assente o duplicato tra
-        # stagioni appiattite): rinumera in sequenza così il picker (che mostra
-        # S01Exx) e il play-by-number puntano allo stesso episodio. I canali
-        # con numerazione propria e univoca (AnimeUnity, One Piece) restano
-        # intatti.
+        # stagioni appiattite): rinumera in sequenza così il picker e il
+        # play-by-number puntano allo stesso episodio (la numerazione GLOBALE
+        # resta la chiave di selezione; quella per-stagione è solo display).
+        # I canali con numerazione propria e univoca (AnimeUnity, One Piece)
+        # restano intatti.
         nums = []
         for ep in ep_list:
             try:
@@ -7420,7 +7459,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         sel_s, sel_e, sel_title = picker._selected
                         self._selected_season  = sel_s
                         self._selected_episode = sel_e
-                        _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
+                        # per i canali con stagioni reali sel_e è il numero
+                        # GLOBALE: nelle label usa il codice per-stagione
+                        _ep_code = (getattr(picker, '_selected_disp', '')
+                                    or (u'S%02dE%02d' % (sel_s, sel_e)))
                         _ep_lbl  = u'%s' % _ep_code
                         if sel_title:
                             _ep_lbl += u'  –  ' + sel_title
@@ -7662,6 +7704,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
         self._seasons   = []      # list of season dicts from TMDB
         self._cur_season_num = self._cw_season
         self._selected  = None    # (season, episode, title) on confirmation
+        self._selected_disp = ''  # codice display per-stagione (es. 'S02E05')
         self._dd_open   = False   # season dropdown expanded?
 
     def onInit(self):
@@ -7720,8 +7763,10 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
             pass
 
     def _load_seasons_channel(self):
-        """Channel mode. One Piece → one tab per SAGA; other channels → a single
-        flat 'Stagione 1' tab. Episodes always come from the channel's episodios()."""
+        """Channel mode. One Piece → one tab per SAGA; canali con menu-stagioni
+        (mediasetplay/raiplay) → una tab per stagione reale; other channels → a
+        single flat 'Stagione 1' tab. Episodes always come from the channel's
+        episodios()."""
         try:
             # ── One Piece: saga tabs (absolute episode numbering) ──
             if self._channel == 'onepiece':
@@ -7747,6 +7792,37 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     self._cur_season_num = self._seasons[sel_idx]['season_number']
                     self._load_episodes_channel(sel_idx)
                     return
+            # ── stagioni reali dal menu del canale (mediasetplay/raiplay) ──
+            # _get_channel_episodes attacca _disp_season/_season_name quando il
+            # primo livello del canale è un menu di stagioni; qui diventano tab.
+            ep_list = _get_channel_episodes(self._channel_item)
+            groups = []
+            for ep in ep_list:
+                s = int(getattr(ep, '_disp_season', 0) or 0)
+                if s and all(g[0] != s for g in groups):
+                    groups.append((s, getattr(ep, '_season_name', '')
+                                   or (u'Stagione %d' % s)))
+            if len(groups) > 1:
+                self._seasons = [{'season_number': s, 'name': n}
+                                 for s, n in groups]
+                sel_idx = 0
+                # preseleziona la stagione dell'episodio CW (numeraz. globale)
+                for ep in ep_list:
+                    if int(getattr(ep, 'episode', 0) or 0) == self._cw_ep:
+                        _s = int(getattr(ep, '_disp_season', 0) or 0)
+                        for i, (gs, _n) in enumerate(groups):
+                            if gs == _s:
+                                sel_idx = i
+                        break
+                items = []
+                for s, n in groups:
+                    li = xbmcgui.ListItem(label=n)
+                    li.setProperty('season_number', str(s))
+                    items.append(li)
+                self._fill_season_dd(items, sel_idx)
+                self._cur_season_num = groups[sel_idx][0]
+                self._load_episodes_channel(sel_idx)
+                return
             # ── default: single flat season ──
             self._seasons = [{'season_number': 1, 'name': u'Stagione 1'}]
             li = xbmcgui.ListItem(label=u'Stagione 1')
@@ -7772,6 +7848,10 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
             if saga and is_op:
                 ep_list = [ep for ep in ep_list
                            if saga['start'] <= int(getattr(ep, 'episode', 0) or 0) <= saga['end']]
+            elif saga and any(getattr(ep, '_disp_season', 0) for ep in ep_list):
+                # stagioni reali dal menu canale: mostra solo quella scelta
+                ep_list = [ep for ep in ep_list
+                           if int(getattr(ep, '_disp_season', 0) or 0) == saga_num]
             watched = set(
                 tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
                 if len(w) == 2
@@ -7791,7 +7871,14 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     is_current = (ep_num == self._cw_ep)
                     is_watched = (ep_num in watched_eps)
                 else:
-                    ep_code = u'S01E%02d' % ep_num
+                    # display per-stagione quando il canale ha stagioni reali;
+                    # ep_num (globale) resta la chiave di selezione/CW
+                    _ds = int(getattr(ep, '_disp_season', 0) or 0)
+                    _de = int(getattr(ep, '_disp_ep', 0) or 0)
+                    if _ds and _de:
+                        ep_code = u'S%02dE%02d' % (_ds, _de)
+                    else:
+                        ep_code = u'S01E%02d' % ep_num
                     is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
                     is_watched = ((1, ep_num) in watched)
                 # One Piece main episodes have a generic "Episodio N" title → drop it
@@ -7810,6 +7897,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                 _li.setProperty('ep_num',     str(ep_num))
                 _li.setProperty('season_num', str(saga_num))
                 _li.setProperty('ep_title',   ep_title)
+                _li.setProperty('disp_code',  ep_code)
                 _li.setProperty('overview',   (getattr(ep, 'plot', '') or '')[:200])
                 _li.setProperty('runtime',    '')
                 items.append(_li)
@@ -7973,6 +8061,9 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     title = li.getProperty('ep_title') or ''
                     if s and e:
                         self._selected = (s, e, title)
+                        # codice per-stagione da mostrare nelle label (l'ep_num
+                        # in _selected è quello GLOBALE usato per il play)
+                        self._selected_disp = li.getProperty('disp_code') or ''
                         self.close()
             except Exception as exc:
                 logger.error('[EpisodePicker] onClick episode: %s' % str(exc))
