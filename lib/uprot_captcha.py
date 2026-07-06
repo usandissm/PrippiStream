@@ -32,7 +32,14 @@ except Exception:
     except Exception:
         BANK, GW, GH, SCALE = {}, 14, 22, 8
 
-DARK = 120          # max(R,G,B) below this == "ink" (digit) pixel
+# max(R,G,B) sotto questa soglia = pixel "inchiostro" (cifra).
+# Da luglio 2026 uprot ha cambiato il rendering (immagine 135x48 invece di
+# 200x50, con strisce diagonali grigio-oliva che COLLEGANO le cifre e battono la
+# segmentazione a colonne). Le cifre restano più SCURE delle strisce e delle
+# stelline pastello del rumore: abbassare la soglia da 120 a 95 stacca le strisce
+# e riseparara le cifre (verificato sui campioni reali: es. "5684" tornava 1 solo
+# blob a 120, 4 cifre corrette a 95).
+DARK = 95
 KNN = 3
 
 # ----------------------------------------------------------------- PNG decode
@@ -450,17 +457,17 @@ def solve_uprot(msf_url, downloadpage, max_attempts=8):
                 continue
             return None
         _dump_captcha(img, html)
-        # Conteggio cifre: prima dalla pagina (affidabile → risolve al 1° colpo).
-        # Se la pagina non lo espone (markup nuovo dei captcha a 5 cifre), NON
-        # affidarsi all'auto-detect (sbaglia sui 5 vicini): prova i conteggi
-        # candidati con BIAS su 5 (il conteggio attuale noto) — 5,5,4,5,3,5,4…
-        # Un POST errato dà solo un captcha nuovo, quindi più tentativi a n=5
-        # aumentano la probabilità di leggerne uno corretto.
+        # Conteggio cifre: prima dalla pagina se lo espone (autorevole → risolve
+        # al 1° colpo). Altrimenti auto-detect dall'immagine (affidabile con la
+        # nuova soglia DARK) e, poiché il conteggio varia tra 4 e 5, ciclo i
+        # candidati [auto, 4, 5] sui tentativi — un POST errato dà solo un captcha
+        # nuovo, quindi in pochi tentativi si copre il conteggio giusto.
         _npage = _digit_count(html, default=None)
         if _npage:
             _n = _npage
         else:
-            _n = (5, 5, 4, 5, 3, 5, 4)[attempt % 7]
+            _cands = [_auto_digit_count(img), 4, 5]
+            _n = _cands[attempt % len(_cands)]
         code = solve_image(img, _n)
         logger.info('uprot_captcha attempt %d -> code=%s (page_n=%s, tried_n=%s)'
                     % (attempt + 1, code, _npage, _n))
