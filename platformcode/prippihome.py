@@ -2511,16 +2511,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                  kwargs={'source_window': source_window})
             t.daemon = True
             t.start()
-        elif item.action == 'episodios':
+        elif item.action in _CH_MENU_ACTIONS:
             # _select_episode uses SC's JSON API — only for SC items.
             if getattr(item, 'channel', '') == 'streamingcommunity':
                 t = threading.Thread(target=self._select_episode, args=(item,))
                 t.daemon = True
                 t.start()
             else:
-                # Non-SC show (e.g. AnimeUnity): play first episode by default,
-                # handled entirely inside PrippiStream (the season/episode picker
-                # in the detail card is used to choose a different episode).
+                # Non-SC show (AnimeUnity 'episodios', mediasetplay 'epmenu',
+                # raiplay…): play first episode by default, handled entirely
+                # inside PrippiStream (the season/episode picker in the detail
+                # card is used to choose a different episode).
                 t = threading.Thread(target=self._play_episode_direct_nonsc,
                                      args=(item, 1))
                 t.daemon = True
@@ -2602,9 +2603,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                             args=(item, sel_s, sel_e))
                     t_ep.daemon = True
                     t_ep.start()
-                elif _item_action == 'episodios' or _cw_show_url:
-                    # Non-SC show (e.g. AnimeUnity), including CW items (action='findvideos'
-                    # but _cw_show_url is set).
+                elif _item_action in _CH_MENU_ACTIONS or _cw_show_url:
+                    # Non-SC show (e.g. AnimeUnity/mediasetplay), including CW items
+                    # (action='findvideos' but _cw_show_url is set).
                     t_ep = threading.Thread(target=self._play_episode_direct_nonsc,
                                             args=(item, sel_e))
                     t_ep.daemon = True
@@ -3961,7 +3962,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # episodios() uses item.url as the base for building episode URLs,
             # so we must pass the show-level item, not the episode item.
             _show_url = getattr(item, '_cw_show_url', '') or ''
-            if _show_url and getattr(item, 'action', '') != 'episodios':
+            if _show_url and getattr(item, 'action', '') not in _CH_MENU_ACTIONS:
                 import re as _re_sh2
                 _show_item = item.clone(url=_show_url, action='episodios')
                 if not getattr(_show_item, 'api_ep_url', ''):
@@ -4284,10 +4285,49 @@ def _animeunity_fallback_episodes(item):
         return []
 
 
+# Azioni che rappresentano un livello-menu di un canale (stagioni, sottobrand)
+# e non ancora episodi playabili: mediasetplay usa 'epmenu', raiplay 'epMenu',
+# e raiplay può restituire menù di stagioni da episodios() stesso.
+_CH_MENU_ACTIONS = ('episodios', 'epmenu', 'epMenu')
+
+
+def _expand_channel_menu(ch_module, item, depth=0, parent_title=''):
+    """Espande ricorsivamente i livelli-menu di un canale (epmenu Mediaset:
+    stagioni → sottobrand; epMenu Rai: blocchi → stagioni) fino alla lista
+    piatta di episodi playabili (action='findvideos'). Ogni episodio riceve
+    `_leaf_menu` = titolo del menu che lo conteneva DIRETTAMENTE (la stagione
+    Mediaset, il set 'Stagione 2' Rai) e `_leaf_parent` = il menu sopra (il
+    blocco Rai 'Episodi'/'Highlights'/'Extra'): sono le stagioni del picker,
+    col padre usato per disambiguare i nomi duplicati."""
+    action = getattr(item, 'action', '') or ''
+    if action not in _CH_MENU_ACTIONS:
+        action = 'episodios'
+    fn = getattr(ch_module, action, None)
+    if fn is None:
+        return []
+    out = []
+    leaf_name = None
+    for it in (fn(item) or []):
+        sub = getattr(it, 'action', '')
+        if sub == 'findvideos':
+            if leaf_name is None:
+                leaf_name = re.sub(r'\[/?[^\]]+\]', '',
+                                   (getattr(item, 'title', '') or '')).strip()
+            it._leaf_menu = leaf_name
+            it._leaf_parent = parent_title
+            out.append(it)
+        elif depth < 3 and sub in _CH_MENU_ACTIONS:
+            _par = re.sub(r'\[/?[^\]]+\]', '',
+                          (getattr(item, 'title', '') or '')).strip()
+            out.extend(_expand_channel_menu(ch_module, it, depth + 1, _par))
+    return out
+
+
 def _get_channel_episodes(item):
     """Fetch (and cache for 5 min) the episode list for a non-SC show *item*.
 
-    Calls the owning channel's episodios() and returns the list of playable
+    Calls the owning channel's episodios() (expanding the season/menu levels
+    of channels like mediasetplay/raiplay) and returns the list of playable
     episode Items (action='findvideos'). Cached so the episode picker and the
     subsequent direct-play don't fetch the API twice.
     """
@@ -4317,9 +4357,50 @@ def _get_channel_episodes(item):
     try:
         import importlib
         ch_module = importlib.import_module('channels.%s' % channel)
-        eps = ch_module.episodios(item)
-        ep_list = [ep for ep in (eps or [])
-                   if getattr(ep, 'action', '') == 'findvideos']
+        ep_list = _expand_channel_menu(ch_module, item)
+        # Stagioni: ogni episodio porta _leaf_menu = titolo del menu che lo
+        # conteneva direttamente. Run consecutivi di (_leaf_menu, _leaf_parent)
+        # diversi = le stagioni del picker (_disp_season/_disp_ep/_season_name).
+        # Nomi duplicati (Rai: 'Stagione 5' sia in Episodi che in Highlights/
+        # Extra) vengono disambiguati col menu padre. Canali piatti
+        # (AnimeUnity…): un solo run → nessun attributo, il picker mostra la
+        # singola 'Stagione 1' come sempre.
+        runs = []
+        for ep in ep_list:
+            key = (getattr(ep, '_leaf_menu', '') or '',
+                   getattr(ep, '_leaf_parent', '') or '')
+            if not runs or runs[-1][0] != key:
+                runs.append((key, []))
+            runs[-1][1].append(ep)
+        if len(runs) > 1:
+            name_count = {}
+            for (name, _par), _sub in runs:
+                name_count[name] = name_count.get(name, 0) + 1
+            for gi, ((name, par), sub) in enumerate(runs, 1):
+                disp_name = name
+                if name and name_count[name] > 1 and par and par != name:
+                    disp_name = u'%s · %s' % (par, name)
+                for j, ep in enumerate(sub, 1):
+                    ep._disp_season = gi
+                    ep._disp_ep = j
+                    ep._season_name = disp_name or (u'Stagione %d' % gi)
+        # Mediaset/Rai non numerano le puntate (episode assente o duplicato tra
+        # stagioni appiattite): rinumera in sequenza così il picker e il
+        # play-by-number puntano allo stesso episodio (la numerazione GLOBALE
+        # resta la chiave di selezione; quella per-stagione è solo display).
+        # I canali con numerazione propria e univoca (AnimeUnity, One Piece)
+        # restano intatti.
+        nums = []
+        for ep in ep_list:
+            try:
+                nums.append(int(getattr(ep, 'episode', 0) or 0))
+            except Exception:
+                nums.append(0)
+        nonzero = [n for n in nums if n > 0]
+        if ep_list and (len(nonzero) != len(ep_list)
+                        or len(set(nonzero)) != len(nonzero)):
+            for i, ep in enumerate(ep_list):
+                ep.episode = i + 1
     except Exception as exc:
         logger.error('[NonSC-EP] episodios(%s) failed: %s' % (channel, str(exc)))
     # CB01 lists some anime under /serietv/ with a layout episodios() can't read
@@ -7113,13 +7194,14 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 _item_action = getattr(item, 'action', '') or ''
                 _cw_show_url = getattr(item, '_cw_show_url', '') or ''
                 if _channel and _channel != 'streamingcommunity' and \
-                        (_item_action == 'episodios' or _cw_show_url):
-                    # Channel-based show (e.g. AnimeUnity): open the SAME season/episode
-                    # picker used for SC, but sourcing episodes from the channel itself.
+                        (_item_action in _CH_MENU_ACTIONS or _cw_show_url):
+                    # Channel-based show (e.g. AnimeUnity, mediasetplay 'epmenu'):
+                    # open the SAME season/episode picker used for SC, but sourcing
+                    # episodes from the channel itself.
                     # CW items have action='findvideos' and url=episode-URL; restore the
                     # show-level item so _get_channel_episodes gets the correct show URL.
                     import re as _re_sh
-                    if _cw_show_url and _item_action != 'episodios':
+                    if _cw_show_url and _item_action not in _CH_MENU_ACTIONS:
                         show_item = item.clone(url=_cw_show_url, action='episodios')
                         # Rebuild api_ep_url if missing (AnimeUnity: /anime/{id}-{slug})
                         if not getattr(show_item, 'api_ep_url', ''):
@@ -7147,7 +7229,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                         sel_s, sel_e, sel_title = picker._selected
                         self._selected_season  = sel_s
                         self._selected_episode = sel_e
-                        _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
+                        # per i canali con stagioni reali sel_e è il numero
+                        # GLOBALE: nelle label usa il codice per-stagione
+                        _ep_code = (getattr(picker, '_selected_disp', '')
+                                    or (u'S%02dE%02d' % (sel_s, sel_e)))
                         _ep_lbl  = u'%s' % _ep_code
                         if sel_title:
                             _ep_lbl += u'  –  ' + sel_title
@@ -7389,6 +7474,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
         self._seasons   = []      # list of season dicts from TMDB
         self._cur_season_num = self._cw_season
         self._selected  = None    # (season, episode, title) on confirmation
+        self._selected_disp = ''  # codice display per-stagione (es. 'S02E05')
         self._dd_open   = False   # season dropdown expanded?
 
     def onInit(self):
@@ -7447,8 +7533,10 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
             pass
 
     def _load_seasons_channel(self):
-        """Channel mode. One Piece → one tab per SAGA; other channels → a single
-        flat 'Stagione 1' tab. Episodes always come from the channel's episodios()."""
+        """Channel mode. One Piece → one tab per SAGA; canali con menu-stagioni
+        (mediasetplay/raiplay) → una tab per stagione reale; other channels → a
+        single flat 'Stagione 1' tab. Episodes always come from the channel's
+        episodios()."""
         try:
             # ── One Piece: saga tabs (absolute episode numbering) ──
             if self._channel == 'onepiece':
@@ -7474,6 +7562,37 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     self._cur_season_num = self._seasons[sel_idx]['season_number']
                     self._load_episodes_channel(sel_idx)
                     return
+            # ── stagioni reali dal menu del canale (mediasetplay/raiplay) ──
+            # _get_channel_episodes attacca _disp_season/_season_name quando il
+            # primo livello del canale è un menu di stagioni; qui diventano tab.
+            ep_list = _get_channel_episodes(self._channel_item)
+            groups = []
+            for ep in ep_list:
+                s = int(getattr(ep, '_disp_season', 0) or 0)
+                if s and all(g[0] != s for g in groups):
+                    groups.append((s, getattr(ep, '_season_name', '')
+                                   or (u'Stagione %d' % s)))
+            if len(groups) > 1:
+                self._seasons = [{'season_number': s, 'name': n}
+                                 for s, n in groups]
+                sel_idx = 0
+                # preseleziona la stagione dell'episodio CW (numeraz. globale)
+                for ep in ep_list:
+                    if int(getattr(ep, 'episode', 0) or 0) == self._cw_ep:
+                        _s = int(getattr(ep, '_disp_season', 0) or 0)
+                        for i, (gs, _n) in enumerate(groups):
+                            if gs == _s:
+                                sel_idx = i
+                        break
+                items = []
+                for s, n in groups:
+                    li = xbmcgui.ListItem(label=n)
+                    li.setProperty('season_number', str(s))
+                    items.append(li)
+                self._fill_season_dd(items, sel_idx)
+                self._cur_season_num = groups[sel_idx][0]
+                self._load_episodes_channel(sel_idx)
+                return
             # ── default: single flat season ──
             self._seasons = [{'season_number': 1, 'name': u'Stagione 1'}]
             li = xbmcgui.ListItem(label=u'Stagione 1')
@@ -7499,6 +7618,10 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
             if saga and is_op:
                 ep_list = [ep for ep in ep_list
                            if saga['start'] <= int(getattr(ep, 'episode', 0) or 0) <= saga['end']]
+            elif saga and any(getattr(ep, '_disp_season', 0) for ep in ep_list):
+                # stagioni reali dal menu canale: mostra solo quella scelta
+                ep_list = [ep for ep in ep_list
+                           if int(getattr(ep, '_disp_season', 0) or 0) == saga_num]
             watched = set(
                 tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
                 if len(w) == 2
@@ -7518,7 +7641,14 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     is_current = (ep_num == self._cw_ep)
                     is_watched = (ep_num in watched_eps)
                 else:
-                    ep_code = u'S01E%02d' % ep_num
+                    # display per-stagione quando il canale ha stagioni reali;
+                    # ep_num (globale) resta la chiave di selezione/CW
+                    _ds = int(getattr(ep, '_disp_season', 0) or 0)
+                    _de = int(getattr(ep, '_disp_ep', 0) or 0)
+                    if _ds and _de:
+                        ep_code = u'S%02dE%02d' % (_ds, _de)
+                    else:
+                        ep_code = u'S01E%02d' % ep_num
                     is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
                     is_watched = ((1, ep_num) in watched)
                 # One Piece main episodes have a generic "Episodio N" title → drop it
@@ -7537,6 +7667,7 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                 _li.setProperty('ep_num',     str(ep_num))
                 _li.setProperty('season_num', str(saga_num))
                 _li.setProperty('ep_title',   ep_title)
+                _li.setProperty('disp_code',  ep_code)
                 _li.setProperty('overview',   (getattr(ep, 'plot', '') or '')[:200])
                 _li.setProperty('runtime',    '')
                 items.append(_li)
@@ -7700,6 +7831,9 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
                     title = li.getProperty('ep_title') or ''
                     if s and e:
                         self._selected = (s, e, title)
+                        # codice per-stagione da mostrare nelle label (l'ep_num
+                        # in _selected è quello GLOBALE usato per il play)
+                        self._selected_disp = li.getProperty('disp_code') or ''
                         self.close()
             except Exception as exc:
                 logger.error('[EpisodePicker] onClick episode: %s' % str(exc))
@@ -7776,13 +7910,21 @@ def _is_pagination_item(item):
     (it rendered as a clickable tile that opened an empty trailer card)."""
     if getattr(item, 'nextPage', False):
         return True
+    # A 'list' item in search results is a folder/pagination marker, never a
+    # playable title (SC's next-page has contentType='list').
+    if (getattr(item, 'contentType', '') or '') == 'list':
+        return True
     title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
                    (getattr(item, 'title', '') or '')).strip().lower()
+    # Drop trailing decoration: SC titles it "Next Page >" — the chevron made
+    # the equality check miss it and the tile reached the grid.
+    title = re.sub(u'[\\s>»›…]+$', '', title)
     if not title:
         return False
     try:
         loc = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
                      config.get_localized_string(30992) or '').strip().lower()
+        loc = re.sub(u'[\\s>»›…]+$', '', loc)
     except Exception:
         loc = ''
     return title in (loc, 'next page', 'successivo', 'pagina successiva', 'avanti')
@@ -7973,7 +8115,11 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             self._cancelled.set()
             self._pf_cancelled.set()  # cancel prefetch on close
             self.close()
-            _open_search()
+            # Propaga la home window: senza, la nuova finestra di ricerca
+            # perde la delega play (_launch/_play_episode_direct_nonsc) e le
+            # serie a menu (mediasetplay 'epmenu') finivano in un RunPlugin
+            # folder che non riproduce nulla.
+            _open_search(parent_window=self._parent_window)
             return
         if control_id in SEARCH_FILTER_MAP:
             self._apply_filter(SEARCH_FILTER_MAP[control_id])
@@ -8201,7 +8347,23 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                         t_ep.daemon = True
                         t_ep.start()
                     else:
-                        self._launch_item(item)
+                        # Senza home window: risolvi comunque l'episodio scelto
+                        # (numerazione globale) e lancialo direttamente.
+                        _played = False
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            _hit = [e for e in _eps
+                                    if int(getattr(e, 'episode', 0) or 0) == int(sel_e)]
+                            if _hit:
+                                _pre_play_set_lang(_hit[0])
+                                xbmc.executebuiltin(
+                                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                                    % _hit[0].tourl())
+                                _played = True
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent ep play: %s' % str(_exc))
+                        if not _played:
+                            self._launch_item(item)
                 else:
                     self._launch_item(item)
             elif result == 'download' and self._parent_window is not None:
@@ -8232,9 +8394,20 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                 if self._parent_window is not None:
                     self._parent_window._launch(item, source_window=self)
                 else:
-                    _pre_play_set_lang(item)
+                    # Rete di sicurezza senza home window: le serie a menu
+                    # (epmenu/episodios) non sono riproducibili via RunPlugin
+                    # diretto → risolvi qui il primo episodio del canale.
+                    _tgt = item
+                    if getattr(item, 'action', '') in _CH_MENU_ACTIONS:
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            if _eps:
+                                _tgt = _eps[0]
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent first-ep: %s' % str(_exc))
+                    _pre_play_set_lang(_tgt)
                     xbmc.executebuiltin(
-                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % _tgt.tourl())
                 return
 
             # ── 4K check (movies only, before normal path) ────────────────
@@ -8496,6 +8669,29 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
         _q_has_art    = bool(_ART_RE.match(_q_norm_raw))
         _q_stripped   = _ART_RE.sub('', _q_norm_raw, count=1).strip()
 
+        # Tolleranza sugli stopword INTERNI: i cataloghi titolano lo stesso film
+        # in modi diversi ("I pirati DELLA Silicon Valley" su CB01 vs "I pirati
+        # DI Silicon Valley" su hd4me). Quando la query porta l'articolo
+        # iniziale (= l'utente ha digitato il titolo per intero) confrontiamo
+        # anche le sequenze di parole significative, ignorando articoli e
+        # preposizioni (it+en). Minimo 2 parole: con una sola ("la la land" ->
+        # "land") il confronto accetterebbe troppo.
+        _SEARCH_STOPWORDS = {
+            'il', 'lo', 'la', 'i', 'gli', 'le', 'l', 'un', 'uno', 'una',
+            'di', 'del', 'dello', 'della', 'dei', 'degli', 'delle',
+            'a', 'ad', 'al', 'allo', 'alla', 'ai', 'agli', 'alle',
+            'da', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle',
+            'in', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle',
+            'con', 'col', 'coi', 'su', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle',
+            'per', 'tra', 'fra', 'e', 'ed', 'o', 'od',
+            'the', 'an', 'of', 'and', 'or', 'to', 'on', 'at',
+        }
+
+        def _sig_words(s):
+            return [w for w in s.split() if w not in _SEARCH_STOPWORDS]
+
+        _q_sig = _sig_words(_q_norm_raw)
+
         def _title_match_query(r_norm):
             """Return True if r_norm is a title-match for the current query."""
             # Direct match (exact, or result is query + quality/year suffix)
@@ -8510,6 +8706,13 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                         or r_stripped.startswith(_q_stripped + ' ')
                         or _q_stripped.startswith(r_stripped + ' ')):
                     return True
+                # Stesse parole significative in sequenza (un lato può estendere
+                # l'altro, es. suffisso anno/qualità) -> stesso titolo.
+                if len(_q_sig) >= 2:
+                    r_sig = _sig_words(r_norm)
+                    k = min(len(_q_sig), len(r_sig))
+                    if k >= 2 and _q_sig[:k] == r_sig[:k]:
+                        return True
             return False
 
         # FIX: get_channels returns a list of strings (channel names), not dicts.
@@ -8646,6 +8849,12 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             is_sc    = (getattr(it, '_search_channel', '') == 'sc')
             is_cb01  = (getattr(it, '_search_channel', '') == 'cineblog01')
             exact    = (clean == query_clean)
+            if not exact and len(_q_sig) >= 2:
+                # Stesse parole significative = stesso titolo frasato diverso
+                # ("I pirati DI Silicon Valley" per query "... DELLA ..."):
+                # deve ordinarsi come exact, non affondare in fondo alla lista.
+                _c = _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', '', clean)).strip()
+                exact = (_sig_words(_c) == _q_sig)
             starts   = clean.startswith(query_clean)
             contains = (query_clean in clean)
             # Tuple: (priority_bucket 0-10, title for stable secondary sort)
@@ -8671,14 +8880,32 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
             t = _re.sub(r'[^a-z0-9 ]', '', t)
             t = _re.sub(r'\s+', ' ', t).strip()
-            # strip leading articles (IT + EN)
-            t = _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
-            return t
+            # Chiave senza stopword: le varianti di titolo dello STESSO film
+            # devono collidere ("I pirati della Silicon Valley" CB01 / "I pirati
+            # di Silicon Valley" hd4me) così la priorità per fonte sceglie il
+            # vincitore invece di mostrare due tile.
+            sig = ' '.join(_sig_words(t))
+            if sig:
+                return sig
+            # Titolo fatto di soli stopword: tieni la vecchia chiave
+            # (solo articolo iniziale via).
+            return _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
 
         def _valid_thumb(it):
             """Return True only if thumbnail is a usable URL or local path."""
             t = (it.thumbnail or '').strip()
             return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
+
+        # Catena di priorità per fonte (numero più basso = preferito) quando lo
+        # STESSO film arriva da più canali: SC sempre primo, poi hd4me (parte in
+        # streaming via Mega), poi CB01 (murato da Cloudflare → ultima spiaggia),
+        # poi qualsiasi altra fonte. Ordina solo il "vincitore" per titolo, non
+        # l'ordine tra titoli diversi.
+        _SRC_PRIO = {'sc': 0, 'streamingcommunity': 0, 'hd4me': 1, 'cineblog01': 2}
+
+        def _src_prio(it):
+            ch = (getattr(it, '_search_channel', '') or getattr(it, 'channel', '') or '').lower()
+            return _SRC_PRIO.get(ch, 5)
 
         # Dedup by tmdb_id and by normalized title. Priority Anime: when the same
         # title appears from both an anime source and a non-anime one, the anime
@@ -8735,6 +8962,12 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                 if (getattr(it, '_search_type', '') == 'anime'
                         and getattr(prev, '_search_type', '') != 'anime'
                         and (matched_by_tmdb or not prev_tmdb)):
+                    deduped[dup_idx] = it
+                # Scala di priorità per fonte (SC > hd4me > CB01 > altri): a parità
+                # di titolo tieni la fonte preferita. Non scavalca mai un vincitore
+                # anime (che resta gestito dalla regola sopra).
+                elif (getattr(prev, '_search_type', '') != 'anime'
+                        and _src_prio(it) < _src_prio(prev)):
                     deduped[dup_idx] = it
                 continue
             if tkey is None and not nt:
