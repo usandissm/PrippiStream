@@ -67,6 +67,29 @@ def _resolve_stayonline(page_url):
     return None
 
 
+def _dump_freewatcher(freewatcher_url):
+    """DIAGNOSTICO: scarica la pagina freewatcher (via cloudscraper, che ne
+    risolve il Cloudflare) e la salva in <data_path>/captcha_dump/ così si può
+    trovare il nuovo endpoint del player (emhuih ora 404). Attivo solo se la
+    cartella esiste; non solleva mai."""
+    try:
+        import os as _os
+        from platformcode import config as _cfg
+        d = _os.path.join(_cfg.get_data_path(), 'captcha_dump')
+        if not _os.path.isdir(d):
+            return
+        r = httptools.downloadpage(freewatcher_url, cloudscraper=True,
+                                   headers={'Referer': 'https://uprot.net/'})
+        html = getattr(r, 'data', '') or ''
+        import time as _t
+        with open(_os.path.join(d, 'freewatcher_%d.html' % int(_t.time())), 'w',
+                  encoding='utf-8') as f:
+            f.write('<!-- URL: %s -->\n%s' % (freewatcher_url, html))
+        logger.info('maxstream._dump_freewatcher: %d bytes salvati' % len(html))
+    except Exception as e:
+        logger.info('maxstream._dump_freewatcher error: %s' % e)
+
+
 def _get_embed_page(page_url):
     """
     Given a maxstream URL (either /uprots/TOKEN or /emhuih/ID or /e/ID),
@@ -182,14 +205,18 @@ def _get_embed_page(page_url):
             return None
 
         if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
-            # watchfree path: /watch_free/VIEW_ID/FILE_ID/TOKEN
-            # FILE_ID (parts[2]) is the id used by emhuih, NOT the view/movie id (parts[1]).
-            # parts[1] is session-specific and changes per request; parts[2] is stable.
+            # freewatcher path: /freewatcher/VIEW_ID/FILE_ID/TOKEN (era /watch_free/).
+            # FILE_ID (parts[2]) è l'id usato da emhuih, NON il view id (parts[1]).
             try:
                 parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
                 session_id = parts[2] if len(parts) >= 3 else None
             except Exception:
                 session_id = None
+            # DIAGNOSTICO (v2): a luglio 2026 maxstream ha spostato il player →
+            # emhuih/<fileid> ora dà 404. Cattura la pagina freewatcher (via
+            # cloudscraper, che risolve il suo Cloudflare) così si trova il nuovo
+            # endpoint del player. Attivo solo se esiste la cartella captcha_dump.
+            _dump_freewatcher(final_url)
             if session_id:
                 page_url = 'https://maxstream.video/emhuih/' + session_id
                 logger.info('maxstream._get_embed_page uprots→emhuih: %r' % page_url)
