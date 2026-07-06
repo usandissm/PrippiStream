@@ -2727,16 +2727,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                  kwargs={'source_window': source_window})
             t.daemon = True
             t.start()
-        elif item.action == 'episodios':
+        elif item.action in _CH_MENU_ACTIONS:
             # _select_episode uses SC's JSON API — only for SC items.
             if getattr(item, 'channel', '') == 'streamingcommunity':
                 t = threading.Thread(target=self._select_episode, args=(item,))
                 t.daemon = True
                 t.start()
             else:
-                # Non-SC show (e.g. AnimeUnity): play first episode by default,
-                # handled entirely inside PrippiStream (the season/episode picker
-                # in the detail card is used to choose a different episode).
+                # Non-SC show (AnimeUnity 'episodios', mediasetplay 'epmenu',
+                # raiplay…): play first episode by default, handled entirely
+                # inside PrippiStream (the season/episode picker in the detail
+                # card is used to choose a different episode).
                 t = threading.Thread(target=self._play_episode_direct_nonsc,
                                      args=(item, 1))
                 t.daemon = True
@@ -2819,9 +2820,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                             args=(item, sel_s, sel_e))
                     t_ep.daemon = True
                     t_ep.start()
-                elif _item_action == 'episodios' or _cw_show_url:
-                    # Non-SC show (e.g. AnimeUnity), including CW items (action='findvideos'
-                    # but _cw_show_url is set).
+                elif _item_action in _CH_MENU_ACTIONS or _cw_show_url:
+                    # Non-SC show (e.g. AnimeUnity/mediasetplay), including CW items
+                    # (action='findvideos' but _cw_show_url is set).
                     t_ep = threading.Thread(target=self._play_episode_direct_nonsc,
                                             args=(item, sel_e))
                     t_ep.daemon = True
@@ -4191,7 +4192,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # episodios() uses item.url as the base for building episode URLs,
             # so we must pass the show-level item, not the episode item.
             _show_url = getattr(item, '_cw_show_url', '') or ''
-            if _show_url and getattr(item, 'action', '') != 'episodios':
+            if _show_url and getattr(item, 'action', '') not in _CH_MENU_ACTIONS:
                 import re as _re_sh2
                 _show_item = item.clone(url=_show_url, action='episodios')
                 if not getattr(_show_item, 'api_ep_url', ''):
@@ -4514,10 +4515,37 @@ def _animeunity_fallback_episodes(item):
         return []
 
 
+# Azioni che rappresentano un livello-menu di un canale (stagioni, sottobrand)
+# e non ancora episodi playabili: mediasetplay usa 'epmenu', raiplay 'epMenu',
+# e raiplay può restituire menù di stagioni da episodios() stesso.
+_CH_MENU_ACTIONS = ('episodios', 'epmenu', 'epMenu')
+
+
+def _expand_channel_menu(ch_module, item, depth=0):
+    """Espande ricorsivamente i livelli-menu di un canale (epmenu Mediaset:
+    stagioni → sottobrand; epMenu Rai: stagioni/blocchi) fino alla lista
+    piatta di episodi playabili (action='findvideos')."""
+    action = getattr(item, 'action', '') or ''
+    if action not in _CH_MENU_ACTIONS:
+        action = 'episodios'
+    fn = getattr(ch_module, action, None)
+    if fn is None:
+        return []
+    out = []
+    for it in (fn(item) or []):
+        sub = getattr(it, 'action', '')
+        if sub == 'findvideos':
+            out.append(it)
+        elif depth < 3 and sub in _CH_MENU_ACTIONS:
+            out.extend(_expand_channel_menu(ch_module, it, depth + 1))
+    return out
+
+
 def _get_channel_episodes(item):
     """Fetch (and cache for 5 min) the episode list for a non-SC show *item*.
 
-    Calls the owning channel's episodios() and returns the list of playable
+    Calls the owning channel's episodios() (expanding the season/menu levels
+    of channels like mediasetplay/raiplay) and returns the list of playable
     episode Items (action='findvideos'). Cached so the episode picker and the
     subsequent direct-play don't fetch the API twice.
     """
@@ -4547,9 +4575,23 @@ def _get_channel_episodes(item):
     try:
         import importlib
         ch_module = importlib.import_module('channels.%s' % channel)
-        eps = ch_module.episodios(item)
-        ep_list = [ep for ep in (eps or [])
-                   if getattr(ep, 'action', '') == 'findvideos']
+        ep_list = _expand_channel_menu(ch_module, item)
+        # Mediaset/Rai non numerano le puntate (episode assente o duplicato tra
+        # stagioni appiattite): rinumera in sequenza così il picker (che mostra
+        # S01Exx) e il play-by-number puntano allo stesso episodio. I canali
+        # con numerazione propria e univoca (AnimeUnity, One Piece) restano
+        # intatti.
+        nums = []
+        for ep in ep_list:
+            try:
+                nums.append(int(getattr(ep, 'episode', 0) or 0))
+            except Exception:
+                nums.append(0)
+        nonzero = [n for n in nums if n > 0]
+        if ep_list and (len(nonzero) != len(ep_list)
+                        or len(set(nonzero)) != len(nonzero)):
+            for i, ep in enumerate(ep_list):
+                ep.episode = i + 1
     except Exception as exc:
         logger.error('[NonSC-EP] episodios(%s) failed: %s' % (channel, str(exc)))
     # CB01 lists some anime under /serietv/ with a layout episodios() can't read
@@ -7343,13 +7385,14 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 _item_action = getattr(item, 'action', '') or ''
                 _cw_show_url = getattr(item, '_cw_show_url', '') or ''
                 if _channel and _channel != 'streamingcommunity' and \
-                        (_item_action == 'episodios' or _cw_show_url):
-                    # Channel-based show (e.g. AnimeUnity): open the SAME season/episode
-                    # picker used for SC, but sourcing episodes from the channel itself.
+                        (_item_action in _CH_MENU_ACTIONS or _cw_show_url):
+                    # Channel-based show (e.g. AnimeUnity, mediasetplay 'epmenu'):
+                    # open the SAME season/episode picker used for SC, but sourcing
+                    # episodes from the channel itself.
                     # CW items have action='findvideos' and url=episode-URL; restore the
                     # show-level item so _get_channel_episodes gets the correct show URL.
                     import re as _re_sh
-                    if _cw_show_url and _item_action != 'episodios':
+                    if _cw_show_url and _item_action not in _CH_MENU_ACTIONS:
                         show_item = item.clone(url=_cw_show_url, action='episodios')
                         # Rebuild api_ep_url if missing (AnimeUnity: /anime/{id}-{slug})
                         if not getattr(show_item, 'api_ep_url', ''):
@@ -8006,13 +8049,21 @@ def _is_pagination_item(item):
     (it rendered as a clickable tile that opened an empty trailer card)."""
     if getattr(item, 'nextPage', False):
         return True
+    # A 'list' item in search results is a folder/pagination marker, never a
+    # playable title (SC's next-page has contentType='list').
+    if (getattr(item, 'contentType', '') or '') == 'list':
+        return True
     title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
                    (getattr(item, 'title', '') or '')).strip().lower()
+    # Drop trailing decoration: SC titles it "Next Page >" — the chevron made
+    # the equality check miss it and the tile reached the grid.
+    title = re.sub(u'[\\s>»›…]+$', '', title)
     if not title:
         return False
     try:
         loc = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
                      config.get_localized_string(30992) or '').strip().lower()
+        loc = re.sub(u'[\\s>»›…]+$', '', loc)
     except Exception:
         loc = ''
     return title in (loc, 'next page', 'successivo', 'pagina successiva', 'avanti')

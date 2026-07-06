@@ -153,7 +153,13 @@ def search(item, text):
     item.args = {'uxReference':'main', 'params':'channel≈', 'query':text}
 
     try:
-        return peliculas(item)
+        itemlist = peliculas(item)
+        # Nella ricerca l'API restituisce anche le singole PUNTATE (type
+        # 'episode') e le clip/backstage (type 'extra'): ognuna diventava una
+        # tile "film". Teniamo solo le serie (epmenu) e i film veri; gli
+        # episodi si raggiungono dalla serie.
+        return [it for it in itemlist
+                if getattr(it, 'msp_type', '') not in ('episode', 'extra')]
     # Continua la ricerca in caso di errore
     except:
         import sys
@@ -207,6 +213,10 @@ def peliculas(item):
                                    url=url,
                                    video_id=video_id,
                                    seriesid = it.get('seriesTvSeasons', it.get('id','')),
+                                   # il nome del campo varia con la forma della
+                                   # risposta: 'programType' nelle entries dei
+                                   # blocks di ricerca, 'type' altrove
+                                   msp_type = it.get('programType') or it.get('programtype') or it.get('type', ''),
                                    disable_videolibrary = True,
                                    forcethumb=True))
     if res['next']:
