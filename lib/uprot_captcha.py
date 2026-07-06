@@ -393,13 +393,13 @@ def _img_bytes(html):
         return None
 
 
-def _dump_captcha(img):
+def _dump_captcha(img, html=None):
     """Se esiste la cartella <data_path>/captcha_dump/, salva lì il PNG del
-    captcha (nome = hash+timestamp). Diagnostico per il caso 5 CIFRE: la banca
-    OCR (cifre 1-8, che è l'alfabeto reale di uprot) è corretta; a fallire è la
-    SEGMENTAZIONE quando il captcha passa a 5 cifre. Con qualche campione reale
-    si tara la segmentazione. L'utente attiva creando la cartella, disattiva
-    cancellandola. Nessun overhead se la cartella non esiste."""
+    captcha E l'HTML della pagina (per capire dove sta il conteggio cifre quando
+    page_n=None). Diagnostico: la banca OCR (cifre 1-8 = alfabeto reale di uprot)
+    è corretta; a fallire è il CONTEGGIO/segmentazione quando i captcha passano a
+    5 cifre e la pagina non espone pattern/maxlength. L'utente attiva creando la
+    cartella, disattiva cancellandola. Nessun overhead se la cartella non esiste."""
     try:
         import os as _os
         from platformcode import config as _cfg
@@ -407,14 +407,17 @@ def _dump_captcha(img):
         if not _os.path.isdir(d):
             return
         import time as _t
-        name = 'cap_%d_%d.png' % (int(_t.time() * 1000), len(img))
-        with open(_os.path.join(d, name), 'wb') as f:
+        stamp = int(_t.time() * 1000)
+        with open(_os.path.join(d, 'cap_%d_%d.png' % (stamp, len(img))), 'wb') as f:
             f.write(img)
+        if html:
+            with open(_os.path.join(d, 'page_%d.html' % stamp), 'w', encoding='utf-8') as f:
+                f.write(html)
     except Exception:
         pass
 
 
-def solve_uprot(msf_url, downloadpage, max_attempts=6):
+def solve_uprot(msf_url, downloadpage, max_attempts=8):
     """Drive the uprot.net captcha and return the HTML that contains the real
     maxstream.video/uprots/ links, or None.
 
@@ -446,16 +449,18 @@ def solve_uprot(msf_url, downloadpage, max_attempts=6):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
-        _dump_captcha(img)
-        # Conteggio cifre: prima dalla pagina (affidabile). Se la pagina non lo
-        # espone (markup cambiato), NON affidarsi al solo auto-detect — che sui
-        # captcha a 5 cifre vicine sbaglia: prova i conteggi candidati 5→4→3
-        # ciclando sui tentativi (un POST errato dà solo un nuovo captcha).
+        _dump_captcha(img, html)
+        # Conteggio cifre: prima dalla pagina (affidabile → risolve al 1° colpo).
+        # Se la pagina non lo espone (markup nuovo dei captcha a 5 cifre), NON
+        # affidarsi all'auto-detect (sbaglia sui 5 vicini): prova i conteggi
+        # candidati con BIAS su 5 (il conteggio attuale noto) — 5,5,4,5,3,5,4…
+        # Un POST errato dà solo un captcha nuovo, quindi più tentativi a n=5
+        # aumentano la probabilità di leggerne uno corretto.
         _npage = _digit_count(html, default=None)
         if _npage:
             _n = _npage
         else:
-            _n = (5, 4, 3)[attempt % 3]
+            _n = (5, 5, 4, 5, 3, 5, 4)[attempt % 7]
         code = solve_image(img, _n)
         logger.info('uprot_captcha attempt %d -> code=%s (page_n=%s, tried_n=%s)'
                     % (attempt + 1, code, _npage, _n))
