@@ -348,20 +348,29 @@ import base64 as _b64
 
 _IMG_RE = re.compile(r'data:image/png;base64,([A-Za-z0-9+/=]+)')
 _TOKEN_RE = re.compile(r'maxstream\.video/uprots/')
-# How many digits the captcha expects, e.g. pattern="[0-9]{4}". uprot has used
-# both 3 and 4; read it so the OCR segments into the right number of glyphs.
-_NDIGITS_RE = re.compile(r"""pattern=["']\[0-9\]\{(\d+)\}""")
+# Quante cifre attende il captcha. uprot è passato da 3→4→5 cifre nel tempo e ha
+# anche cambiato il markup dell'input, quindi leggiamo il conteggio da PIÙ forme
+# invece che dal solo pattern="[0-9]{n}" (che con 5 cifre non matcha più):
+#   pattern="[0-9]{5}"  |  pattern="\d{5}"  |  maxlength="5"  |  minlength="5"
+# Il segnale dalla pagina è affidabile; l'auto-detect dall'immagine è il fallback.
+_NDIGITS_RES = (
+    re.compile(r"""pattern\s*=\s*["']\s*\[0-9\]\s*\{(\d+)\}"""),
+    re.compile(r"""maxlength\s*=\s*["']?(\d+)"""),
+    re.compile(r"""minlength\s*=\s*["']?(\d+)"""),
+)
 
 
 def _digit_count(html, default=4):
-    m = _NDIGITS_RE.search(html or '')
-    if m:
-        try:
-            n = int(m.group(1))
-            if 2 <= n <= 8:
-                return n
-        except Exception:
-            pass
+    h = html or ''
+    for rx in _NDIGITS_RES:
+        m = rx.search(h)
+        if m:
+            try:
+                n = int(m.group(1))
+                if 3 <= n <= 8:
+                    return n
+            except Exception:
+                pass
     return default
 
 
@@ -386,10 +395,11 @@ def _img_bytes(html):
 
 def _dump_captcha(img):
     """Se esiste la cartella <data_path>/captcha_dump/, salva lì il PNG del
-    captcha (nome = hash+timestamp). Serve a raccogliere campioni reali per
-    ri-addestrare il BANK OCR (che oggi non ha esemplari di 0 e 9). L'utente
-    attiva creando la cartella, disattiva cancellandola. Nessun overhead se
-    la cartella non esiste."""
+    captcha (nome = hash+timestamp). Diagnostico per il caso 5 CIFRE: la banca
+    OCR (cifre 1-8, che è l'alfabeto reale di uprot) è corretta; a fallire è la
+    SEGMENTAZIONE quando il captcha passa a 5 cifre. Con qualche campione reale
+    si tara la segmentazione. L'utente attiva creando la cartella, disattiva
+    cancellandola. Nessun overhead se la cartella non esiste."""
     try:
         import os as _os
         from platformcode import config as _cfg
@@ -404,7 +414,7 @@ def _dump_captcha(img):
         pass
 
 
-def solve_uprot(msf_url, downloadpage, max_attempts=14):
+def solve_uprot(msf_url, downloadpage, max_attempts=6):
     """Drive the uprot.net captcha and return the HTML that contains the real
     maxstream.video/uprots/ links, or None.
 
@@ -437,12 +447,18 @@ def solve_uprot(msf_url, downloadpage, max_attempts=14):
                 continue
             return None
         _dump_captcha(img)
-        # Digit count from the page pattern (reliable); None -> auto-detect from
-        # the image. Either way the solver self-adapts if uprot changes 3↔4↔5.
-        _npat = _digit_count(html, default=None)
-        code = solve_image(img, _npat)
-        logger.info('uprot_captcha attempt %d -> code=%s (pattern_n=%s)'
-                    % (attempt + 1, code, _npat))
+        # Conteggio cifre: prima dalla pagina (affidabile). Se la pagina non lo
+        # espone (markup cambiato), NON affidarsi al solo auto-detect — che sui
+        # captcha a 5 cifre vicine sbaglia: prova i conteggi candidati 5→4→3
+        # ciclando sui tentativi (un POST errato dà solo un nuovo captcha).
+        _npage = _digit_count(html, default=None)
+        if _npage:
+            _n = _npage
+        else:
+            _n = (5, 4, 3)[attempt % 3]
+        code = solve_image(img, _n)
+        logger.info('uprot_captcha attempt %d -> code=%s (page_n=%s, tried_n=%s)'
+                    % (attempt + 1, code, _npage, _n))
         if not code:
             # unreadable image -> fetch a fresh one
             html = downloadpage(msf_url, headers=hdr).data or ''
