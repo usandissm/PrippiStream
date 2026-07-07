@@ -38,6 +38,14 @@ Vincoli:
 | 9 | Asset sovradimensionati (logo.png 1.06MB, logo_banner.png 613KB) | resources/media/ |
 | 10 | `set_setting('show_once', True)` scritto a ogni invocazione | launcher.py:40 |
 | 11 | Lavoro morto a runtime: `torrent.elementum_monitor` OGNI SECONDO; `viewmodeMonitor` 1Hz; `verify_directories_created` ricrea cartelle videolibrary + sources.xml a ogni boot | service.py:188-189, config.py:363-411 |
+| 12 | BUG: `MAX_ROWS=50` ma l'XML ha 40 slot (id 2000-2390) → con >40 righe `getControl(2400+)` = RuntimeError | prippihome.py:473 |
+| 13 | `_nuke_all_vixcloud_bookmarks`: SELECT+2 DELETE+commit su MyVideos.db a OGNI apertura home | prippihome.py:5099, lancio :1381 |
+| 14 | Backdrop TMDB `/t/p/original` (fino a 3840px) per preloader CW e detail fanart — decode costoso su ARM | prippihome.py:167, :6978 |
+| 15 | Cache module-level senza scadenza (`_trailer_cache`, `_plot_it_cache`) + invoker caldo (F6, processo persistente) = crescita RAM monotona | prippihome.py:135, :140 |
+| 16 | `_get_it_overview` fetcha SEMPRE anche en-US pur con trama it-IT valida → 2 req TMDB al primo focus di ogni titolo | prippihome.py:5454, :5471 |
+| 17 | db.sqlite ~100MB / 18,6k voci tmdb_cache mai potato (nota F4) — ogni lettura paga su flash | core/__init__.py |
+| 18 | Asset: ~670KB ORFANI (2 loghi 400×400 nelle cartelle skin + sm/dark/light) + logo_prippistream 204KB e logo_banner 136KB malcompressi (un 512² analogo pesa 11KB) + ~1,5MB screenshot store inclusi nello zip | resources/ |
+| 19 | Design: overlay hero = rettangolo piatto `900D0D0D` con bordo verticale NETTO a x=1050 che taglia la fanart; poster non-focus a piena luminosità (la card a fuoco non "stacca"); micro-copy inglese SET/EXIT in una UI italiana | PrippiHome.xml 1080i:40-44, :102, :119 |
 
 Fatti verificati da NON ri-derivare:
 - `CipherSuiteAdapter.__init__` non usa `domain`; il DoH è un monkey-patch globale
@@ -51,6 +59,21 @@ Fatti verificati da NON ri-derivare:
 - Updater interno permanentemente disabilitato (updater.py:52-55); aggiornamenti
   solo via repo Kodi (mai downgrade).
 - Pattern sessione persistente di riferimento: animeunity.py:34-56.
+- **`720p/PrippiHome.xml` NON è più sorgente fedele del 1080i** (30 righe/27
+  wraplist vs 40/36; mancano i group 7000-7290; drift presente già da v1.5.0).
+  **MAI eseguire `tools/scale_1080i.py`**: ha il path hardcoded al repo v1 e
+  rigenerare il 1080i dal 720p attuale DISTRUGGEREBBE 10 righe. Ogni edit XML
+  va fatto TESTUALMENTE su ENTRAMBI i file, con i valori pixel propri di
+  ciascuno (scala 1.5×; colordiffuse/label identici).
+- Le 40 coppie zoom Focus/Unfocus del 1080i (30 nel 720p) sono testualmente
+  UNIFORMI (`start="100" end="105" time="150"` / `start="105" end="100"
+  time="110"`) → replace testuale sicuro. La coppia 100↔110 del bottone EXIT
+  (1080i:124-125) è a parte: NON toccarla.
+- `_sc_rows_cache` è un alias di `_cache['data']` (assegnati sempre insieme:
+  prippihome.py:1208, :1319-1320, :1575-1576).
+- `_fetch_cw_backdrops` (prippihome.py:167) alimenta SIA il preloader home
+  (:1107) SIA lo slideshow del DetailWindow (:6913): le URL devono restare
+  IDENTICHE nei due punti o il preload non scalda la texture giusta.
 
 ---
 
@@ -67,9 +90,15 @@ Fatti verificati da NON ri-derivare:
 - [x] **FASE 8b** — import lazy xbmc_videolibrary in service.py; verify_directories_created gated su `videolibrary_kodi`; update_sources(downloads) gated su `downloadenabled`; build 1.9.907 — ✅ TESTATA 2026-07-03: gate verificato (cartelle videolibrary NON ricreate — mtime 30/06, run 03/07; residue vuote eliminate a mano)
 - [x] **FASE 5** — progress bar: 10 controlli/card → 1 (texture `$INFO[ListItem.Property(bar_step),progress/bar_,.png]`, 9 PNG pre-renderizzati 708×12 con colori identici — track 44FFFFFF, fill E50914; 140 blocchi collassati = **1.260 controlli in meno**: 1080i 800→80, 720p 600→60); asset: logo_banner 599→136KB (2000×416→960×200 = 2× del box 480×100), logo.png 1037→255KB (1254²→512²); rimossi PrippiHome_v7.xml (non referenziati, già esclusi dallo zip); build 1.9.908 — ✅ TESTATA 2026-07-03: "va una scheggia", barra e loghi ok, 0 errori skin nel log
 - [x] **FASE 6** — `reuselanguageinvoker` + guardia `show_once` + pausa enrich bg durante play (wrapper `_wait_and_restore` con finally); build 1.9.909 — ✅ TESTATA 2026-07-03: play consecutivi ok "tutto regolare e svelto"; invoker caldo visibile nei numeri (1° play SC 2,5s → successivi 1,19-1,33s); 0 errori da stato persistente
-- [ ] **FASE 7** — extra opzionali gated (solo se i numeri li giustificano)
+- [x] **FASE 7** — ~~extra opzionali gated~~ **ASSORBITA nelle FASI 9-10** (2026-07-07): `hd_backdrops` → risolto in 9b senza gate (w780/w1280 fissi, impercettibile a 1080p); trim slot 40→38 → sostituito dal fix `MAX_ROWS=40` in 9a; potatura db.sqlite → promossa a FASE 9c; drop cartella 720p → follow-up post-2.0 (richiede prima la riconciliazione del drift, vedi Fatti verificati)
 - [x] **FASE 8c** — chirurgia motore videolibrary (build 1.9.910): **riscritta `mark_auto_as_watched`** — il thread legacy girava per TUTTA la riproduzione in un BUSY-LOOP SENZA SLEEP (is_playing+getTime a ciclo continuo = CPU rubata al decoder, il peggio proprio su ARM) → ora campiona a 500ms; restano identici prefs lingua post-AV, soglia "visto" e salvataggio posizione in db['viewed'] (letto dal resume legacy platformtools:1549); eliminati dal path play: import di specials.videolibrary (mark_content_as_watched2), macchina next-episode legacy (next_ep() faceva un listdir della videolibrary a OGNI play di episodio — default next_ep=1!), sync Trakt, popup post-play. Rimosse `next_ep()`+classe `NextDialog` (~105 righe) e `add_next_to_playlist` (platformtools); autorenumber non chiama più update_videolibrary (ultimo import raggiungibile di specials.videolibrary — il file resta ma non viene mai più parsato nell'uso normale, import residui solo in funzioni library-gated); settings orfane next_ep/next_ep_type/next_ep_seconds rimosse (0 letture; launcher:479 legge l'ATTRIBUTO item.next_ep, non il setting) — ⏳ **DA TESTARE (zip 1.9.910)**. Checklist: (1) titolo guardato oltre l'80% → riaperto NON deve proporre resume da fine; (2) titolo a metà → resume ok (tile CW e riavvio); (3) episodio serie quasi alla fine → overlay next-episode Prippi ok; (4) lingua audio ITA ok all'avvio; (5) play CB01 multiserver → nessun popup post-play; (6) play cross-canale generale
-- [ ] **Verifica finale end-to-end** → riporto nel repo principale → release 2.0.0
+- [ ] **FASE 9a** (build 1.9.929-930) — Home: PERF grafica + fix sicuri + igiene runtime (MAX_ROWS, codice morto, alias cache, throttle vixcloud-nuke). *Nota: le build 1.9.911-928 sono state usate dal lavoro parallelo hd4me/ricerca (già portato su v1.5.5)*
+- [ ] **FASE 9b** (1.9.931-933) — Home: rete/RAM più leggere (backdrop w780/w1280, cap cache, skip en-US hero plot)
+- [ ] **FASE 9c** (1.9.934) — service: potatura giornaliera db.sqlite + VACUUM
+- [ ] **FASE 10a** (1.9.935) — Asset & packaging (ricompressioni, orfani, screenshot fuori dallo zip, guardia scale_1080i)
+- [ ] **FASE 10b** (1.9.936-937) — Estetica: hero scrim a gradiente, micro-polish, setting "Animazioni ridotte"
+- [ ] **FASE 10c** (1.9.938, OPZIONALE) — Estetica: angoli arrotondati card (+ ~-120 controlli)
+- [ ] **Verifica finale end-to-end** (il giro Fire Stick valida 8c + FASI 9-10 tutto insieme, con confronto [PERF] incluse le nuove metriche grafiche/RAM) → riporto nel repo principale → release 2.0.0
 
 ## Misure `[PERF]` (compilare)
 
@@ -86,6 +115,20 @@ Fatti verificati da NON ri-derivare:
 | Fluidità scroll (soggettiva 1-5) | PC: fluido (non indicativo — misurare su FS) | | | | | | |
 
 Note baseline PC: workers.dev (proxy CF live) 2,7-2,8 s/richiesta; youtube (trailer) 21 req/21,6 s; SC 31 req avg 560 ms.
+
+### Misure `[PERF]` grafica/RAM (nuove — baseline da raccogliere con la build 1.9.929 PRIMA di applicare 9a.2+)
+
+| Metrica | Come si misura | Baseline pre-9a (PC) | Post 9x | Post 10x | FS |
+|---|---|---|---|---|---|
+| Focus→hero aggiornato (ms) | mark `home.hero_ms` in `_update_hero` | | | | |
+| Popolamento riga addItems (ms, media) | mark `home.row_populate_ms` in `_populate_single_row` | | | | |
+| RAM processo al paint / post-enrich (MB) | mark `home.mem_mb` via `System.Memory(used)` | | | | |
+| FPS durante scroll righe | overlay debug Kodi (Impostazioni→Sistema→Logging→Riga verde FPS, o `debug.showloginfo`); SOLO su FS, con zoom on/off | n/a su PC | | | |
+| Peso zip installabile (MB) | dimensione file in docs/plugin.video.prippistream/ | | | | |
+
+Procedura FS per gli FPS: attivare l'overlay debug, scorrere 10 righe su/giù a
+velocità costante, annotare FPS min/typ; ripetere con "Animazioni ridotte" ON.
+Confronto anche RAM totale Kodi da Impostazioni→Info sistema durante lo scroll.
 
 ---
 
@@ -242,11 +285,187 @@ step 1 e 9; item senza progresso; scroll più fluido; loghi identici.
 focus restore; cambio setting → re-render; exit durante playback senza freeze.
 **Rollback**: revert riga addon.xml.
 
-## FASE 7 — Extra opzionali (gated, solo se i numeri li giustificano)
+## FASE 7 — ASSORBITA (vedi Stato fasi)
 
-- `hd_backdrops` (default true): a false → backdrop `w1280` invece di `original`
-  (tmdb.py:1717/1760, prippihome.py:93/6524).
-- Trim slot riga 40→38; drop cartella 720p.
+Gli item sono confluiti in: 9a (MAX_ROWS al posto del trim slot), 9b (backdrop
+w780/w1280 senza gate), 9c (potatura db). Drop cartella 720p → post-2.0.
+
+---
+
+# FASI 9-10 — Alleggerimento + estetica HOME (aggiunte 2026-07-07)
+
+> Derivate dall'analisi senior grafica/design/funzionale della home (colli di
+> bottiglia 12-19). Si implementano SUBITO in attesa del test Fire Stick della
+> 1.9.910: il giro FS validerà poi 8c+9+10 tutto insieme. Ordine ottimizzato:
+> prima il py (9a→9b→9c, raggruppato per file), poi asset (10a), poi estetica
+> (10b→10c). Ogni fase = 1-2 commit, bump build, test su Kodi PC.
+
+## FASE 9a — Home: PERF grafica + fix sicuri + igiene runtime (build 1.9.929-930)
+
+File: platformcode/prippihome.py, platformcode/perf.py
+
+1. **PERF grafica** (commit 1, build 1.9.929 — raccogliere la baseline PC PRIMA
+   del resto): mark `home.hero_ms` in `_update_hero`; `home.row_populate_ms`
+   attorno ad addItems in `_populate_single_row`; `home.mem_mb` via
+   `xbmc.getInfoLabel('System.Memory(used)')` al paint e a fine
+   `_bg_enrich_inplace`. Compilare la tabella "Misure grafica/RAM".
+2. **MAX_ROWS 50→40** (:473) + commento corretto ("40 slot statici nel 1080i,
+   id 2000-2390 step 10"). Usi verificati tutti `min()`/`range()` → sicuro.
+3. **Rimuovere `_fetch_videos_for_rows`** (:6074-6076, stub `pass`, 0 chiamanti).
+4. **Unificare `_sc_rows_cache` → `_cache['data']`**: eliminare la global :204,
+   sostituire le letture :1239-1241 e :2537, rimuovere assegnazioni
+   (:1208, :1317-1319, :1550, :1575) e `global` orfani (`_cache` è solo mutato,
+   mai ribindato → nessun `global _cache` necessario).
+5. **Throttle `_nuke_all_vixcloud_bookmarks`** (commit 2, build 1.9.930):
+   guardia a inizio funzione con marker `.vixnuke_last` in
+   `config.get_data_path()` (pattern `_purge_legacy_videolibrary` :10799);
+   skip se mtime <24h, touch a fine corsa. La pulizia puntuale per-play
+   `_clear_kodi_resume` (:5087) resta e copre i bookmark in-sessione.
+
+**Test**: `py -m py_compile`; `grep -c _sc_rows_cache`=0; scroll completo 40
+righe; toggle live righe SKY/Sport/TV a home aperta (esercita :2537); riapertura
+warm <30min; guardare a metà un episodio SC → riaprirlo senza dialog resume
+Kodi; 2ª apertura → log skip vixnuke; log senza errori getControl.
+**Rollback**: revert per punto.
+
+## FASE 9b — Home: rete/RAM più leggere (build 1.9.931-933)
+
+File: platformcode/prippihome.py
+
+1. **Backdrop ridimensionati** (1.9.931): :167 `t/p/original`→`w780`
+   (URL CONDIVISA preloader/slideshow — vedi Fatti verificati); :6978
+   `_load_hd_fanart` `original`→`w1280`. Se la resa TV non convince in test:
+   ripiego w1280 anche su :167.
+2. **Cap cache module-level** (1.9.932): helper
+   `_cache_put(d, key, val, cap=400)` con eviction FIFO (dict ordinati Py3.7+)
+   sui punti di scrittura di `_trailer_cache` (:6059), `_plot_it_cache`
+   (:2138, :2145, :6995, :6999), `_cw_backdrops_cache` (:171). NON toccare i
+   `pop()` esistenti (:2143, :2155). Nota: `_plot_it_cache[tid]=''` è
+   sentinella "fetch in corso" — l'eviction = al più un doppio fetch, innocuo.
+3. **Skip fetch en-US hero plot** (1.9.933): in `_get_it_overview`, dopo
+   :5470: `if it_ov and _looks_italian(it_ov): return it_ov`. Helper
+   `_looks_italian` = ≥2 stopword italiane distinte (' il ',' la ',' di ',
+   ' che ',' un ',' una ',' della ',' gli ',' più ',' è ',' anche ',' nel ')
+   E nessun marker inglese forte (' the ',' and ',' with ',' his ',' her ').
+   Check fallito → percorso attuale invariato (fetch en-US + translate).
+   **Test standalone PRIMA nello scratchpad** con ~10 trame reali it/en
+   (incluse trame en con "di" nei nomi propri).
+
+**Test**: trama hero in italiano su vari titoli; 1 titolo senza traduzione IT
+su TMDB → deve ancora passare da `_translate_to_it` (log); slideshow detail CW
+istantaneo (conferma URL preload coerenti); `home.mem_mb` ≤ baseline; sfondo
+detail nitido a distanza-divano. **Rollback**: revert per punto.
+
+## FASE 9c — service: potatura giornaliera db.sqlite (build 1.9.934)
+
+File: service.py
+
+Nuova `_prune_tmdb_cache()`: (a) marker `.tmdb_prune_last` <24h → return;
+(b) attesa iniziale ~120s con `Monitor.waitForAbort` (non competere col boot);
+(c) se `tmdb_cache_expire == 4` ("no expire", core/tmdb.py:128-130) → NIENTE
+potatura (scelta utente), solo VACUUM condizionale; (d) potatura voci >30gg via
+`db['tmdb_cache'].iteritems()` (streaming; formato voce `[result, datetime]`,
+tmdb.py:168) con try/except per-entry e `xbmc.sleep(0)` ogni ~500 voci;
+(e) VACUUM con connessione raw `sqlite3.connect(db_path, timeout=30)` +
+`PRAGMA busy_timeout=30000`, SOLO se `freelist_count*page_size > 8MB`
+(WAL-compatibile; SQLITE_BUSY tollerato → log e riprova domani); (f) touch
+marker a fine corsa. Registrazione: `schedule.every().day.do(run_threaded,
+_prune_tmdb_cache, ())` accanto a :324 + run al boot (il marker rate-limita);
+`run_threaded` è già tracciato da `join_threads()` pre-reload (:369).
+
+**Test standalone PRIMA**: copia del db.sqlite reale (~100MB) nello scratchpad
++ script con lib.sqlitedict del repo → voci potate e size before/after VACUUM.
+In Kodi: riavvio → dopo ~2min log riepilogo prune; cache TMDB funzionante
+(`[PERF] tmdb.cache` hit); 2° riavvio → skip da marker.
+**Rollback**: rimuovere la schedulazione.
+
+## FASE 10a — Asset & packaging (build 1.9.935)
+
+File: resources/media/, resources/skins/, tools/
+
+1. **Ricompressione** (script Pillow one-off nello scratchpad, NON committato):
+   `media/logo_prippistream.png` 204KB→≤30KB e `logo_banner.png` 136KB→≤40KB
+   via `quantize(colors=256, method=FASTOCTREE)` + `optimize=True` (fondi scuri
+   → quantizzazione invisibile); `logo.png` 255KB: prima SOLO optimize lossless
+   (è l'icona dello store — quantizzare solo se indistinguibile a zoom 200%);
+   mai ridimensionare (Kodi vuole 512×512).
+2. **Eliminare 5 orfani** (~670KB, zero refs ri-verificati fuori da docs/):
+   `skins/Default/1080i/logo_prippistream.png`,
+   `skins/Default/720p/logo_prippistream.png`,
+   `media/logo_prippistream_sm.png`, `media/dark-logo.png`,
+   `media/light-logo.png`.
+3. **make_addon_zip.py**: aggiungere screenshot-1/2/3.png a `exclude_names`
+   (:25) — lo store GitHub li legge dal repo git, non dallo zip (~1,5MB).
+4. **scale_1080i.py**: path relativi allo script (pattern make_addon_zip) +
+   guardia anti-disastro (conta wraplist 2xxx in SRC e DST; SRC<DST → exit con
+   messaggio) + commento-warning sul drift 720p/1080i. NON eseguirlo.
+
+**Test**: confronto visivo before/after dei 3 PNG; `git status` pulito; zip
+-~2,5MB, listato senza screenshot/orfani/tools; in Kodi overlay caricamento,
+banner (Home/Browse/Search/EpisodePicker) e icona ok. Se un logo appare
+"vecchio" → è la texture cache di Kodi (Textures13.db), non un bug.
+**Rollback**: git revert asset.
+
+## FASE 10b — Estetica: hero scrim + micro-polish + "Animazioni ridotte" (build 1.9.936-937)
+
+File: PrippiHome.xml (1080i E 720p, edit testuali — MAI scale_1080i),
+resources/settings.xml, platformcode/prippihome.py, changelog.txt
+
+1. **Hero scrim a gradiente** (il miglioramento visivo più forte): Pillow
+   genera `hgrad.png` (~480×8, nero con rampa alpha 230→0, <1KB) in
+   `skins/Default/media/`; sostituisce l'overlay piatto `900D0D0D` 1050×486
+   (1080i:40-44 + equivalente 720p) con il gradiente stretchato (width ~1250
+   nel 1080i) → sparisce lo spigolo verticale a x=1050, hero stile Netflix.
+   Costo runtime identico (1 texture come prima). Opzionale: sottile fade
+   verticale sul bordo basso dell'hero verso le righe.
+2. **Dim poster non a fuoco**: `colordiffuse="E0FFFFFF"` sulle texture
+   poster/fanart_image degli `itemlayout` (portrait+landscape, entrambi i
+   file) → la card a fuoco (100% + zoom + frame) stacca di più. Se troppo
+   scuro in test → alzare a E8/F0.
+3. **Micro-copy italiano**: `[B]SET[/B]`→`[B]OPZIONI[/B]` (1080i:102, 120px ok
+   con font10) e `[B]EXIT[/B]`→`[B]ESCI[/B]` (1080i:119) — coerenza con
+   "Ricerca…"/"Sfoglia".
+4. **Setting "Animazioni ridotte (per device lenti)"** (`reduced_animations`,
+   bool, default false) in settings.xml sezione Personalizzazione (niente
+   emoji). prippihome.py: aggiungere a `_LIVE_SETTING_KEYS` (:209); set/clear
+   `self.setProperty('reduced_anim','1')` in onInit (FUORI dal blocco
+   first-run) e in `_apply_live_settings` (:2524) → effetto immediato senza
+   riavvio (regola live-settings; `_read_live_settings` usa già
+   `xbmcaddon.Addon()` fresco). XML: aggiungere
+   `condition="String.IsEmpty(Window.Property(reduced_anim))"` alle 40+30
+   coppie zoom (replace testuale delle 2 righe uniformi; NON toccare la coppia
+   del bottone EXIT). **Test empirico obbligatorio** della condition dentro
+   focusedlayout; piano B se ignorata = doppio `<focusedlayout condition>`
+   (Kodi 18+); degrado comunque graceful (condition ignorata = zoom sempre
+   attivo, zero crash).
+5. changelog.txt: nota utente in `## Prossima`.
+
+**Test**: well-formedness (`ET.parse` su entrambi gli XML); conteggi condition
+= 80 nel 1080i / 60 nel 720p, totale zoom invariato; toggle a home aperta →
+zoom sparisce/torna SUBITO; fanart chiara a fuoco → titolo/trama leggibili
+senza spigolo; contrasto focus/non-focus gradevole; OPZIONI/ESCI.
+Gotcha noto: cambiando il toggle con un poster zoomato, il primo movimento può
+fare uno scatto secco — si normalizza subito, nessuna azione.
+**Rollback**: revert commit.
+
+## FASE 10c — Estetica: angoli arrotondati card (build 1.9.938, OPZIONALE)
+
+File: PrippiHome.xml ×2 + nuove maschere PNG
+
+Le card sono rettangoli vivi; le UI streaming moderne usano raggi 8-12px.
+Tecnica Kodi = **diffuse mask**: Pillow genera maschere rounded-rect bianche
+alle dimensioni ESATTE dei controlli immagine (poster 262×330 / 268×330,
+landscape 362×200 / 258×160…, <1KB l'una, in `skins/Default/media/masks/`) —
+la diffuse si stretcha sul controllo, quindi la maschera deve avere lo stesso
+aspect per non deformare i raggi. Applicare `diffuse="masks/<nome>.png"` alle
+texture card (itemlayout + focusedlayout). Il frame di selezione a 4 strisce
+dritte (1080i:346-349) stonerebbe sugli angoli tondi → sostituirlo con UNA
+image con `<bordertexture border="N">` a cornice arrotondata 9-slice =
+**-3 controlli/riga ≈ -120 controlli nel 1080i** (estetica E alleggerimento).
+
+**Test**: iterazione visiva su Kodi PC (raggio, spessore cornice, resa su
+poster scuri SKY/Sport); FPS/scroll su FS al giro di validazione.
+**Rollback**: revert del singolo commit (nessuna dipendenza dalle altre fasi).
 
 ## FASE 8c — Chirurgia motore videolibrary (DIFFERITA)
 
@@ -281,6 +500,15 @@ Solo dopo la validazione di tutte le fasi perf, con giro di test dedicato:
 
 1. Kodi Windows: cold/warm start, snapshot path, scroll completo, Sfoglia,
    Ricerca, 5 play cross-canale, download offline, live, One Piece, gate 18+.
-2. Device lento: confronto `[PERF]` vs baseline.
-3. `tools/test_*.py` verdi dove applicabili.
-4. Riporto nel repo principale → versione 2.0.0 → release standard.
+2. Estetica (FASI 10b/10c): hero senza spigolo con fanart chiare, contrasto
+   focus/non-focus, OPZIONI/ESCI, toggle "Animazioni ridotte" live, angoli
+   tondi uniformi portrait+landscape (se 10c tenuta).
+3. Igiene runtime (FASI 9x): log skip vixnuke alla 2ª apertura; riepilogo
+   prune db nel log del service + skip al riavvio successivo.
+4. Device lento (Fire Stick): valida 8c + FASI 9-10 TUTTO INSIEME — confronto
+   `[PERF]` vs baseline, incluse le metriche grafiche/RAM nuove e gli FPS
+   overlay con zoom on/off.
+5. `tools/test_*.py` verdi dove applicabili.
+6. Riporto nel repo principale (prima: allineamento fix v1.5.x → v2 con
+   `git fetch <path-v1>` + cherry-pick, vedi memoria di progetto) →
+   versione 2.0.0 → release standard.
