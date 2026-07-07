@@ -250,6 +250,16 @@ if __name__ == "__main__":
     except Exception:
         pass  # YouTube not installed yet — will be suppressed on next service start
 
+    # Diagnostica build di test: se il log prestazioni e' attivo, avvia l'invio
+    # periodico del kodi.log al PC di raccolta (solo uscita, nessuna porta aperta
+    # sulla box). Serve a raccogliere le misure [PERF] dalla box senza adb.
+    if config.get_setting('perf_log', default=False):
+        try:
+            from platformcode import logpush
+            logpush.start()
+        except Exception:
+            logger.error('logpush: ' + traceback.format_exc())
+
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
 

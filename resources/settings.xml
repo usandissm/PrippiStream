@@ -133,7 +133,7 @@
         <setting label="Diagnostica" type="lsep"/>
         <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING).
              Visibile nei build di test 1.9.9xx; da nascondere per la release 2.0. -->
-        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="false"/>
+        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="true"/>
         <setting id="send_log_to_dev" type="action"
                  label="Invia Log allo Sviluppatore"
                  action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiAic2VuZF9sb2dfdG9fZGV2IiwgImNoYW5uZWwiOiAic2V0dGluZyJ9)"/>
