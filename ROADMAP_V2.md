@@ -102,7 +102,7 @@ Fatti verificati da NON ri-derivare:
 
 ## Misure `[PERF]` (compilare)
 
-**PC** = Windows dev (baseline 2026-07-03, build 1.9.902). **FS** = Fire Stick (baseline prevista settimana prossima).
+**PC** = Windows dev (baseline 2026-07-03, build 1.9.902). **FS** = Fire Stick (non ancora disponibile). **BOX** = vecchia Android box cinese ~10$ dell'utente (2026-07-07: DISPONIBILE SUBITO — è il caso peggiore reale: con le prime versioni di PrippiStream era quasi/totalmente inutilizzabile nei menù, video però fluido = decodifica hw ok, collo di bottiglia tutto su GUI/CPU → banco di prova ideale per il progetto; requisito: Kodi 19+ sul dispositivo). Piano misure: baseline BOX con build 1.9.928 PRIMA delle FASI 9-10, poi re-test BOX a fasi finite per il delta su ARM reale; FS quando arriva.
 
 | Metrica | Baseline (F0) | Post F1 | Post F2 | Post F3 | Post F4+8ab | Post F5 | Post F6 |
 |---|---|---|---|---|---|---|---|
