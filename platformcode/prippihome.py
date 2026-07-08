@@ -895,6 +895,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # Cleared while a modal dialog is open — background thread must NOT modify the UI
         self._bg_ui_pause = threading.Event()
         self._bg_ui_pause.set()   # initially NOT paused
+        # Tier-3 nav-pause: cleared mentre l'utente NAVIGA (tasti/focus), ri-settato
+        # dal watcher ~1,2s dopo l'ultima azione. I lavori bg (enrich, trailer,
+        # extra-source, re-render poster) aspettano ENTRAMBI gli eventi via
+        # _bg_gate() così non rubano GIL/rete proprio mentre si scorre la home.
+        self._nav_idle = threading.Event()
+        self._nav_idle.set()      # initially idle (nessuna navigazione in corso)
+        self._nav_kick = threading.Event()
+        self._last_nav_ts = 0.0
         # Set by background threads to request a CW row refresh on the GUI thread.
         # Checked (and drained) in onFocus, which always runs on the GUI thread.
         self._cw_refresh_pending = False
@@ -949,6 +957,12 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # first-run: onInit ri-fires al ritorno dal playback e ri-applicarla
         # è gratis e robusto.
         self._apply_reduced_anim()
+        # Watcher nav-pause (Tier-3): un solo daemon per finestra.
+        if not getattr(self, '_nav_watcher_started', False):
+            self._nav_watcher_started = True
+            _tnav = threading.Thread(target=self._nav_idle_watcher)
+            _tnav.daemon = True
+            _tnav.start()
         # Loading overlay starts visible in XML — just start background fetch.
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
@@ -1144,7 +1158,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         return
                     # Pause preloading while a modal (e.g. DetailWindow) is open, so
                     # we don't fight it for the GUI/texture loader.
-                    self._bg_ui_pause.wait(timeout=15)
+                    self._bg_gate(15)
                     try:
                         self.getControl(HOME_PRELOAD_IMG).setImage(u)
                     except Exception:
@@ -1511,9 +1525,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 # v2 FASE 6: pausa anche mentre un play sta partendo/riproducendo
                 # o un dialog è aperto (_bg_ui_pause clearato da _launch/dialoghi,
                 # ri-settato in finally da _wait_and_restore).
-                while (not self._bg_ui_pause.is_set() and self._alive
+                # Tier-3: e mentre l'utente NAVIGA (_nav_idle clearato da _mark_nav).
+                while ((not self._bg_ui_pause.is_set() or not self._nav_idle.is_set())
+                       and self._alive
                        and not mon.abortRequested() and not _shutdown_event.is_set()):
-                    xbmc.sleep(500)
+                    xbmc.sleep(300)
                 if not items:
                     continue
                 # Skip CW row only — 4K is now enriched here like SC rows.
@@ -1619,7 +1635,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if i not in self._populated or i >= len(self.rows_data):
             return
         # Wait until no modal dialog is open (avoids C++ render-engine collision).
-        self._bg_ui_pause.wait(timeout=15)
+        self._bg_gate(15)
         if not self._alive:
             return
         wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
@@ -1766,7 +1782,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if i not in self._populated:
             # First paint hasn't happened yet — let _populate_single_row do it.
             return
-        self._bg_ui_pause.wait(timeout=15)
+        self._bg_gate(15)
         if not self._alive:
             return
         wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
@@ -1858,9 +1874,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             while _dl_active() and self._alive and not _monitor_bg.abortRequested():
                 xbmc.sleep(1500)
             # v2 FASE 6: idem mentre un play sta partendo/riproducendo.
-            while (not self._bg_ui_pause.is_set() and self._alive
+            # Tier-3: e mentre l'utente naviga.
+            while ((not self._bg_ui_pause.is_set() or not self._nav_idle.is_set())
+                   and self._alive
                    and not _monitor_bg.abortRequested() and not _shutdown_event.is_set()):
-                xbmc.sleep(500)
+                xbmc.sleep(300)
 
             # Step 1: collect which content types are needed across all SC rows
             needed_types = set()
@@ -1893,6 +1911,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             for i in range(len(self.rows_data)):
                 if not self._alive or _monitor_bg.abortRequested():
                     return
+                self._bg_gate(10)   # Tier-3: non lavorare mentre si naviga/riproduce
                 with self._rows_lock:
                     if i >= len(self.rows_data):
                         break
@@ -1942,7 +1961,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # Runs AFTER all enrichment threads have completed, so thread count is low.
             # Uses 2 workers max and a lightweight /videos endpoint — safe for Kodi.
             if self._alive and not _monitor_bg.abortRequested():
-                _fetch_trailers_small(list(self.rows_data))
+                _fetch_trailers_small(list(self.rows_data), gate=self._bg_gate)
 
         except Exception as exc:
             logger.error('[PrippiHome] _bg_enrich_rows: %s' % str(exc))
@@ -1957,7 +1976,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             return
         # Wait until no modal dialog is open (avoids C++ render-engine collision).
         # Timeout ensures we never block forever if something goes wrong.
-        self._bg_ui_pause.wait(timeout=15)
+        self._bg_gate(15)
         if not self._alive:
             return
         wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
@@ -2225,6 +2244,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def onFocus(self, control_id):
         """Fires when a control gains focus — always on the Kodi GUI thread."""
+        self._mark_nav()   # Tier-3: pausa i lavori bg mentre si naviga
         # Drain any pending CW refresh requested by a background thread.
         # Must run here (GUI thread) because wl.reset()/addItems() require it.
         if self._cw_refresh_pending:
@@ -2298,6 +2318,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self._alive = False
             self.close()
             return
+        self._mark_nav()   # Tier-3: pausa i lavori bg mentre si naviga
 
         # Context menu (C / long-press) on a download tile → same Play/Delete menu
         # as a left-click (see _show_download_menu).
@@ -2568,6 +2589,37 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         logger.info('[PrippiHome] onSettingsChanged — changed=%s (new=%s)' % (sorted(changed), new))
         if changed:
             self._apply_live_settings(changed)
+
+    def _mark_nav(self):
+        """Chiamata a OGNI azione/focus di navigazione: mette in pausa i lavori
+        background finché l'utente non si ferma (~1,2s). Costo per keypress:
+        un timestamp + al più un clear/set di Event — nessun thread per tasto."""
+        self._last_nav_ts = time.time()
+        if self._nav_idle.is_set():
+            self._nav_idle.clear()
+        self._nav_kick.set()
+
+    def _nav_idle_watcher(self):
+        """Unico thread daemon: quando arriva navigazione (_nav_kick) aspetta il
+        periodo di quiete (1,2s dall'ULTIMA azione) e ri-setta _nav_idle. Da
+        fermo non consuma nulla (bloccato sul wait dell'Event)."""
+        while self._alive and not _shutdown_event.is_set():
+            if not self._nav_kick.wait(timeout=2):
+                continue
+            self._nav_kick.clear()
+            while self._alive and not _shutdown_event.is_set():
+                rem = 1.2 - (time.time() - self._last_nav_ts)
+                if rem <= 0:
+                    break
+                xbmc.sleep(max(50, int(min(rem, 0.4) * 1000)))
+            self._nav_idle.set()
+
+    def _bg_gate(self, timeout=15):
+        """Punto d'attesa unico per i lavori background che toccano UI/rete:
+        rispetta sia la pausa dura (play/dialoghi, _bg_ui_pause) sia la pausa
+        di navigazione (_nav_idle). I timeout evitano stalli permanenti."""
+        self._bg_ui_pause.wait(timeout=timeout)
+        self._nav_idle.wait(timeout=timeout)
 
     def _apply_reduced_anim(self):
         """Setta/pulisce Window.Property(reduced_anim), letta dalla condition
@@ -6070,9 +6122,11 @@ def _youtube_search_trailer(title, year='', kind=''):
         return None
 
 
-def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
+def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20, gate=None):
     """
     Fetch trailers via YouTube search (youtubei internal API).
+    gate: callable opzionale (es. _bg_gate della home) chiamata tra un avvio
+    worker e l'altro — Tier-3: non cercare trailer mentre l'utente naviga.
     Results are cached in the module-level _trailer_cache dict so that
     repeated window opens never re-fetch the same id.
     per_row: max items to take from each row.
@@ -6162,6 +6216,11 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
             return
         # Refill active pool up to 2
         while pending and len(active) < 2:
+            if gate is not None:
+                try:
+                    gate(10)   # Tier-3: aspetta che l'utente si fermi
+                except Exception:
+                    pass
             t = pending.pop(0)
             t.start()
             active.append(t)
