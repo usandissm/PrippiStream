@@ -120,13 +120,16 @@ Note baseline PC: workers.dev (proxy CF live) 2,7-2,8 s/richiesta; youtube (trai
 
 ### Misure `[PERF]` grafica/RAM (nuove — baseline da raccogliere con la build 1.9.929 PRIMA di applicare 9a.2+)
 
-| Metrica | Come si misura | Baseline pre-9a (PC) | Post 9x | Post 10x | FS |
-|---|---|---|---|---|---|
-| Focus→hero aggiornato (ms) | mark `home.hero_ms` in `_update_hero` | | | | |
-| Popolamento riga addItems (ms, media) | mark `home.row_populate_ms` in `_populate_single_row` | | | | |
-| RAM processo al paint / post-enrich (MB) | mark `home.mem_mb` via `System.Memory(used)` | | | | |
-| FPS durante scroll righe | overlay debug Kodi (Impostazioni→Sistema→Logging→Riga verde FPS, o `debug.showloginfo`); SOLO su FS, con zoom on/off | n/a su PC | | | |
-| Peso zip installabile (MB) | dimensione file in docs/plugin.video.prippistream/ | | | | |
+| Metrica | Come si misura | PC (post 9-10, build 1.9.939/940, 2026-07-08) | BOX | FS |
+|---|---|---|---|---|
+| Focus→hero aggiornato (ms) | mark `home.hero_ms` in `_update_hero` | n=123: mediana **8 ms**, max 126 (fetch trama 1° focus ~90) | | |
+| Popolamento riga addItems (ms) | mark `home.row_populate_ms` | tipico **0-15 ms** (anche riga 4K da 251 item: 14 ms); outlier 2-2,9 s su 1 riga durante il flood enrich post-paint (contesa GIL/rete — candidato Tier-3 defer, da guardare su ARM) | | |
+| RAM sistema al paint / post-enrich | mark `home.mem_mb` (System.Memory used — su PC rumorosa, significativa sul BOX 2GB) | 12,4→13,2 GB (PC 32GB, delta ~0,2-0,45 GB con tutto il sistema) | | |
+| Warm reopen (assemble+paint) | mark esistenti F3 | 0,55-1,2 s (3 riaperture: 387+164 / 805+125 / 673+414 ms) ≈ baseline F3 | | |
+| FPS durante scroll righe | overlay debug Kodi, zoom on/off | n/a su PC | | |
+| Peso zip installabile (MB) | file in docs/ | **5,4 MB** (era 7,8) | = | = |
+
+Note validazione PC 2026-07-08 (build 1.9.939 "funziona tutto" + 1.9.940 fix riga TV): throttle vixnuke ATTIVO nel log ("throttled <24h, skipping"); prune eseguito e rispettoso del setting utente (`no_expire=True` → 0 potate, VACUUM saltato con 0MB liberi); tmdb cache ~3% miss; zero errori getControl/skin; gli errori nel log sono i preesistenti (titoli assenti su TMDB, probe live flaky).
 
 Procedura FS per gli FPS: attivare l'overlay debug, scorrere 10 righe su/giù a
 velocità costante, annotare FPS min/typ; ripetere con "Animazioni ridotte" ON.
