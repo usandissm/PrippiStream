@@ -267,7 +267,7 @@
                     <control type="image">
                         <left>8</left><top>3</top>
                         <width>354</width><height>200</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(fanart_image)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/fanart_354x200.png">$INFO[ListItem.Property(fanart_image)]</texture>
                         <aspectratio>keep</aspectratio>
                     </control>
                     <control type="label">
@@ -298,7 +298,7 @@
                         <control type="image">
                             <left>2</left><top>0</top>
                             <width>366</width><height>203</height>
-                            <texture colordiffuse="F0FFFFFF">white.png</texture>
+                            <texture border="20" colordiffuse="F0FFFFFF">masks/fill.png</texture>
                             <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
                             <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
                         </control>
@@ -311,16 +311,9 @@
                             <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                         </control>
                         <control type="image">
-                            <left>2</left><top>0</top>
-                            <width>366</width><height>4</height>
-                            <texture colordiffuse="FFE50914">white.png</texture>
-                            <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                            <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                        </control>
-                        <control type="image">
                             <left>4</left><top>3</top>
                             <width>362</width><height>200</height>
-                            <texture>$INFO[ListItem.Property(fanart_image)]</texture>
+                            <texture diffuse="masks/fanart_362x200.png">$INFO[ListItem.Property(fanart_image)]</texture>
                             <aspectratio>keep</aspectratio>
                             <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                             <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
@@ -370,24 +363,9 @@
                     <left>-400</left><top>52</top>
                     <width>370</width><height>250</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>366</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>203</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>366</left><top>0</top>
-                        <width>4</width><height>203</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>199</top>
-                        <width>370</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>370</width><height>203</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>203</top>
@@ -435,7 +413,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -472,25 +450,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -535,24 +503,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -600,7 +553,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -637,25 +590,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -700,24 +643,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -765,7 +693,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -802,25 +730,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -865,24 +783,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -931,7 +834,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -968,25 +871,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1031,24 +924,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1097,7 +975,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1134,25 +1012,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1197,24 +1065,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1263,7 +1116,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1300,25 +1153,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1363,24 +1206,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1429,7 +1257,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1466,25 +1294,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1529,24 +1347,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1595,7 +1398,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1632,25 +1435,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1695,24 +1488,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1761,7 +1539,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1798,25 +1576,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -1861,24 +1629,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -1927,7 +1680,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1964,25 +1717,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2027,24 +1770,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2093,7 +1821,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2130,25 +1858,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2193,24 +1911,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2259,7 +1962,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2296,25 +1999,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2359,24 +2052,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2425,7 +2103,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2462,25 +2140,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2525,24 +2193,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2591,7 +2244,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2628,25 +2281,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2691,24 +2334,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2757,7 +2385,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2794,25 +2422,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -2857,24 +2475,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -2923,7 +2526,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2960,25 +2563,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3023,24 +2616,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3089,7 +2667,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3126,25 +2704,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3189,24 +2757,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3255,7 +2808,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3292,25 +2845,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3355,24 +2898,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3421,7 +2949,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3458,25 +2986,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3521,24 +3039,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3587,7 +3090,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3623,25 +3126,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3686,24 +3179,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3752,7 +3230,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3788,25 +3266,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -3851,24 +3319,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -3917,7 +3370,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3953,25 +3406,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4016,24 +3459,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4082,7 +3510,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4118,25 +3546,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4181,24 +3599,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4247,7 +3650,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4283,25 +3686,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4346,24 +3739,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4412,7 +3790,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4448,25 +3826,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4511,24 +3879,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4577,7 +3930,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4613,25 +3966,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4676,24 +4019,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4742,7 +4070,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4778,25 +4106,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -4841,24 +4159,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -4907,7 +4210,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4943,25 +4246,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5006,24 +4299,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5072,7 +4350,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5108,25 +4386,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5171,24 +4439,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5237,7 +4490,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5272,25 +4525,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5334,24 +4577,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5400,7 +4628,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5435,25 +4663,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5497,24 +4715,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5563,7 +4766,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5598,25 +4801,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5660,24 +4853,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5726,7 +4904,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5761,25 +4939,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5823,24 +4991,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -5889,7 +5042,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5924,25 +5077,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -5986,24 +5129,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -6052,7 +5180,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6087,25 +5215,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -6149,24 +5267,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -6215,7 +5318,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6250,25 +5353,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -6312,24 +5405,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -6378,7 +5456,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6413,25 +5491,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -6475,24 +5543,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -6541,7 +5594,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6576,25 +5629,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -6638,24 +5681,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
@@ -6704,7 +5732,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF" diffuse="masks/poster_262x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6739,25 +5767,15 @@
                         <animation effect="fade" start="100" end="0" time="90" tween="sine">Unfocus</animation>
                     </control>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                        <animation effect="fade" start="0" end="100" time="140" tween="sine">Focus</animation>
-                        <animation effect="fade" start="100" end="0" time="100" tween="sine">Unfocus</animation>
-                    </control>
-                    <control type="image">
                         <left>4</left><top>3</top>
                         <width>268</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture diffuse="masks/poster_268x330.png">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                         <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
                         <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
-                    <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
-                    <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
-                    <control type="image"><left>0</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>274</left><top>0</top><width>4</width><height>336</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
-                    <control type="image"><left>0</left><top>332</top><width>278</width><height>4</height><texture colordiffuse="FFFFFFFF">white.png</texture></control>
+                    <!-- selection frame ON TOP — rounded ring (9-slice), replaces the 4 straight strips -->
+                    <control type="image"><left>0</left><top>0</top><width>278</width><height>336</height><texture border="20" colordiffuse="FFFFFFFF">masks/ring.png</texture></control>
                     <control type="label">
                         <left>4</left><top>344</top>
                         <width>268</width><height>105</height>
@@ -6801,24 +5819,9 @@
                     <left>-278</left><top>54</top>
                     <width>278</width><height>450</height>
                     <control type="image">
-                        <left>2</left><top>0</top>
-                        <width>274</width><height>4</height>
-                        <texture colordiffuse="FFE50914">white.png</texture>
-                    </control>
-                    <control type="image">
                         <left>0</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>273</left><top>0</top>
-                        <width>4</width><height>339</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
-                    </control>
-                    <control type="image">
-                        <left>0</left><top>334</top>
-                        <width>278</width><height>4</height>
-                        <texture colordiffuse="F0FFFFFF">white.png</texture>
+                        <width>278</width><height>338</height>
+                        <texture border="20" colordiffuse="F0FFFFFF">masks/ring.png</texture>
                     </control>
                     <control type="image">
                         <left>2</left><top>339</top>
