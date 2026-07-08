@@ -1738,11 +1738,14 @@ class Tmdb(object):
             elif k == 'vote_count':
                 ret_infoLabels['votes'] = v
 
+            # v2 FASE 9b: niente '/original' per le immagini degli item — le tile
+            # mostrano poster a <=500px e l'hero e' un crop 1920x486: decodificare
+            # original (anche 2000x3000 / 3840x2160) costa carissimo su ARM.
             elif k in ['poster_path', 'profile_path']:
-                ret_infoLabels['thumbnail'] = 'https://image.tmdb.org/t/p/original' + v
+                ret_infoLabels['thumbnail'] = 'https://image.tmdb.org/t/p/w500' + v
 
             elif k == 'backdrop_path':
-                ret_infoLabels['fanart'] = 'https://image.tmdb.org/t/p/original' + v
+                ret_infoLabels['fanart'] = 'https://image.tmdb.org/t/p/w1280' + v
 
             elif k == 'id':
                 ret_infoLabels['tmdb_id'] = v

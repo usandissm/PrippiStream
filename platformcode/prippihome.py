@@ -164,7 +164,10 @@ def _fetch_cw_backdrops(tmdb_id, ctype):
         for b in (data or {}).get('backdrops', [])[:6]:
             fp = b.get('file_path') or ''
             if fp:
-                urls.append('https://image.tmdb.org/t/p/original' + fp)
+                # w780 e non original: lo slideshow sta dietro un overlay scuro e
+                # queste URL alimentano SIA il preloader home SIA il DetailWindow
+                # (devono restare identiche perche' il preload scaldi la texture giusta).
+                urls.append('https://image.tmdb.org/t/p/w780' + fp)
     except Exception as exc:
         logger.error('[CW preload] backdrops fetch %s: %s' % (tmdb_id, str(exc)[:80]))
     with _cw_backdrops_lock:
@@ -6999,7 +7002,7 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             data = _Tmdb.get_json(url_it) or {}
             path = data.get('backdrop_path') or ''
             if path:
-                hq_url = 'https://image.tmdb.org/t/p/original' + path
+                hq_url = 'https://image.tmdb.org/t/p/w1280' + path
                 self.getControl(DW_BG_FANART).setImage(hq_url)
             # For TV shows, prepend seasons count to META1
             if ctype == 'tv' and data:
