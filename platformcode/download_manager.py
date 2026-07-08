@@ -416,14 +416,30 @@ def _resolve_media(page_url, channel='', item=None):
     for si in _order_dl_servers(server_items):
         srv = (getattr(si, 'server', '') or '').lower()
         try:
-            urls, ok, _ = servertools.resolve_video_urls_for_playing(srv, si.url)
+            urls, ok, msg = servertools.resolve_video_urls_for_playing(srv, si.url)
             if ok and urls:
                 u = urls[-1][1]
                 if _is_image(u):
                     continue
                 logger.info('[DLManager] resolved %s via %s -> %.60s'
                             % (ch, srv, u))
+                # mega resolves to the local megaserver proxy which always
+                # serves a single progressive file — never classify it as HLS
+                # (a Mega file without a video extension would otherwise be
+                # probed as a playlist, i.e. downloaded whole into memory).
+                if srv == 'mega':
+                    # Mega FOLDER split in multiple parts: >5 parts resolve to
+                    # a .pls playlist, 2-5 parts to one url per part. Neither
+                    # is a single downloadable film — downloading urls[-1]
+                    # would silently save only the LAST part.
+                    if u.split('?')[0].lower().endswith('.pls') or len(urls) > 1:
+                        last_err = 'film in piu parti (cartella Mega), non scaricabile'
+                        continue
+                    return u, 'file', _media_headers(srv, u)
                 return u, _kind_for(u), _media_headers(srv, u)
+            if not ok and msg:
+                # e.g. Mega daily-quota exceeded — keep the real reason
+                last_err = str(msg)[:120]
         except Exception as exc:
             last_err = str(exc)[:120]
     raise RuntimeError('no playable url for %s (%s)' % (ch, last_err or 'none'))
@@ -948,13 +964,38 @@ class DownloadManager(object):
             downloads_db.update_fields(key, progress=round(pct, 1),
                                        total_bytes=nbytes)
 
+        retried = False
         try:
-            file_downloader.download_file(
-                url, headers, out_path, progress_cb=_progress,
-                cancel_evt=cancel_evt, encrypt=cipher.process)
-        except file_downloader.DownloadCancelled:
-            downloads_db.update_fields(key, status='paused')
-            return
+            while True:
+                try:
+                    file_downloader.download_file(
+                        url, headers, out_path, progress_cb=_progress,
+                        cancel_evt=cancel_evt, encrypt=cipher.process,
+                        resume_key='dl:%s' % key)
+                    break
+                except file_downloader.DownloadCancelled:
+                    downloads_db.update_fields(key, status='paused')
+                    return
+                except Exception as exc:
+                    if retried:
+                        raise
+                    retried = True
+                    logger.info('[DLManager] file retry %s: %s'
+                                % (key, str(exc)[:120]))
+                    # Re-resolve once: tokenized URLs expire and the local
+                    # Mega proxy dies with a NEW random port — get a fresh
+                    # media URL; the stable resume_key lets the partial file
+                    # continue via Range from where it stopped.
+                    try:
+                        _it = job['item']
+                        info2 = probe_tracks(
+                            _it.url, channel=(getattr(_it, 'channel', '') or ''),
+                            item=_it)
+                        v2 = (info2.get('variants') or [{}])[0]
+                        url = v2.get('url') or url
+                        headers = info2.get('headers') or headers
+                    except Exception:
+                        pass
         finally:
             self._cancels.pop(key, None)
 

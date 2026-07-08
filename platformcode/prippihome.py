@@ -146,6 +146,20 @@ _enrich_cache = {}
 # Never expires — trailer links are stable YouTube IDs.
 _trailer_cache = {}
 
+# Audio-language hint per YouTube video id: 'it' when the trailer was found via
+# an Italian-intent query (or TMDB language=it). Used to decide subtitles when
+# the stream reports no usable audio language ('und' is common on YT uploads).
+_trailer_lang_hint = {}
+
+
+def _hint_for_trailer_url(url):
+    """Return the recorded language hint ('it' or '') for a plugin://…video_id=X url."""
+    try:
+        m = re.search(r'video_id=([A-Za-z0-9_\-]+)', url or '')
+        return _trailer_lang_hint.get(m.group(1), '') if m else ''
+    except Exception:
+        return ''
+
 # Italian plot cache: tmdb_id -> Italian overview string.
 # Populated by _load_hd_fanart (DetailWindow) and home hero background fetch.
 # Persists across window opens so already-fetched plots are shown instantly.
@@ -5985,13 +5999,16 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
 
         for lang in ('it', 'en'):
             videos = _fetch(lang)
+            hint = 'it' if lang == 'it' else ''
             # Prefer Trailer type on YouTube
             for v in videos:
                 if v.get('site') == 'YouTube' and v.get('type') == 'Trailer':
+                    _cache_put(_trailer_lang_hint, v['key'], hint)
                     return v['key']
             # Accept any YouTube video from this language
             for v in videos:
                 if v.get('site') == 'YouTube':
+                    _cache_put(_trailer_lang_hint, v['key'], hint)
                     return v['key']
 
         return None
@@ -6097,22 +6114,26 @@ def _youtube_search_trailer(title, year='', kind=''):
             # Fallback: first result
             return videos[0][0] if videos else None
 
-        # Build the query list by content kind.
+        # Build the query list by content kind. Each query carries the audio
+        # language it implies: Italian-intent queries almost always land on an
+        # Italian-audio upload, which often reports language 'und' — the hint
+        # lets _maybe_set_subtitles skip the (redundant) Italian subtitles.
         if kind == 'anime':
-            queries = ['%s opening' % title, '%s sigla' % title,
-                       '%s anime opening' % title, '%s trailer' % title]
+            queries = [('%s opening' % title, ''), ('%s sigla' % title, ''),
+                       ('%s anime opening' % title, ''), ('%s trailer' % title, '')]
         elif kind == 'kdrama':
-            queries = ['%s trailer' % title, '%s kdrama trailer' % title,
-                       '%s korean drama trailer' % title]
+            queries = [('%s trailer' % title, ''), ('%s kdrama trailer' % title, ''),
+                       ('%s korean drama trailer' % title, '')]
         else:
             queries = [
-                ' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']),
-                '%s trailer italiano' % title,
-                '%s%s trailer official' % (title, (' ' + year) if year else ''),
+                (' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']), 'it'),
+                ('%s trailer italiano' % title, 'it'),
+                ('%s%s trailer official' % (title, (' ' + year) if year else ''), ''),
             ]
-        for i, q in enumerate(queries, 1):
+        for i, (q, hint) in enumerate(queries, 1):
             vid = _yt_search(q)
             if vid:
+                _cache_put(_trailer_lang_hint, vid, hint)
                 logger.info('[YTSearch] "%s" (%s) → q%d → %s' % (title, kind or 'std', i, vid))
                 return vid
         return None
@@ -7269,13 +7290,21 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 threading.Thread(target=self._enter_cinema_mode, daemon=True).start()
                 # Watcher: restores fanart when trailer ends naturally (not via Back)
                 threading.Thread(target=self._watch_trailer_end, daemon=True).start()
-                # Wait for YouTube plugin to register audio/subtitle tracks
-                for _ in range(50):
+                # Wait for the player to enumerate audio/subtitle tracks
+                # (fixed 5 s was often too early on slow devices → the language
+                # logic ran against an empty track list and did nothing).
+                for _ in range(80):   # up to 8 s
                     if self._close_requested:
                         return
+                    try:
+                        if self._player.getAvailableAudioStreams():
+                            break
+                    except Exception:
+                        pass
                     xbmc.sleep(100)
+                xbmc.sleep(500)   # small settle so set*Stream calls stick
                 if not self._close_requested:
-                    self._maybe_set_subtitles()
+                    self._maybe_set_subtitles(trailer_url)
         except Exception as exc:
             logger.error('[DetailWindow] trailer start: %s' % str(exc))
 
@@ -7313,22 +7342,44 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception as exc:
             logger.error('[DetailWindow] _watch_trailer_end: %s' % str(exc))
 
-    def _maybe_set_subtitles(self):
-        """Enable Italian subtitles only if the trailer audio is NOT already Italian."""
+    def _maybe_set_subtitles(self, trailer_url=''):
+        """Italian audio is ALWAYS the default: if the stream has an Italian
+        audio track, select it and keep subtitles off. Subtitles are enabled
+        only when no Italian audio is available."""
         try:
-            # Check current audio language via Kodi info label
-            audio_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage').lower()
-            # Common Italian identifiers: 'italian', 'italiano', 'ita', 'it'
-            is_italian_audio = (
-                'ital' in audio_lang
-                or audio_lang in ('it', 'ita', 'ita_it')
-                or audio_lang.startswith('it-')
-            )
-            if is_italian_audio:
-                # Audio is already Italian — no subtitles needed
+            def _is_it(s):
+                sl = (s or '').lower()
+                return ('ital' in sl or sl in ('it', 'ita', 'ita_it')
+                        or sl.startswith('it-') or sl.startswith('it_'))
+
+            # 1) Stream has an Italian audio track → make sure it's active.
+            try:
+                streams = self._player.getAvailableAudioStreams()
+            except Exception:
+                streams = []
+            it_idx = next((i for i, s in enumerate(streams) if _is_it(s)), None)
+            if it_idx is not None:
+                if not _is_it(xbmc.getInfoLabel('VideoPlayer.AudioLanguage')):
+                    self._player.setAudioStream(it_idx)
                 self._player.showSubtitles(False)
                 return
-            # Audio is foreign — look for Italian subtitle track
+
+            # 2) Single/unlabeled track already reporting Italian → no subs.
+            audio_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage')
+            if _is_it(audio_lang):
+                self._player.showSubtitles(False)
+                return
+
+            # 3) Unknown language — 'und'/empty is the norm for YouTube uploads
+            #    (an Italian trailer found via the "trailer italiano" queries
+            #    used to fall through here and get pointless Italian subs).
+            #    Trust the search-language hint recorded at fetch time.
+            if (not audio_lang or audio_lang.lower() == 'und') and \
+                    _hint_for_trailer_url(trailer_url) == 'it':
+                self._player.showSubtitles(False)
+                return
+
+            # 4) Audio is foreign — look for Italian subtitle track
             self._set_italian_subtitles()
         except Exception:
             pass
