@@ -1081,6 +1081,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             first_row_fid = ROW_WRAPLIST_BASE if cw_items else ROW_WRAPLIST_BASE + ROW_STEP
             self._update_hero(0 if cw_items else 1)
             self.setFocusId(first_row_fid)
+        try:
+            from platformcode import perf
+            perf.note('home.mem_mb', '%s (al paint)' % xbmc.getInfoLabel('System.Memory(used)'))
+        except Exception:
+            pass
         # Preload the DetailWindow fanart-slideshow backdrops for CW items (URLs +
         # Kodi texture cache) so opening a CW card shows them with no delay.
         if cw_items and self._alive:
@@ -1519,6 +1524,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # apertura dipinge subito con i poster TMDB HD corretti.
             if self._alive and not _shutdown_event.is_set():
                 self._write_home_snapshot()
+            try:
+                from platformcode import perf
+                perf.note('home.mem_mb', '%s (post-enrich)' % xbmc.getInfoLabel('System.Memory(used)'))
+            except Exception:
+                pass
         except Exception as exc:
             logger.error('[PrippiHome] _bg_enrich_inplace: %s' % str(exc))
 
@@ -1971,6 +1981,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         except Exception:
             pass
         try:
+            from platformcode import perf
+            _t0 = perf.mark('home.row_populate')
             wl = self.getControl(wl_id)
             # No reset() here: this is FIRST-TIME population — the wraplist is
             # already empty, so reset() + sleep would waste time and cause the
@@ -1978,6 +1990,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # RE-rendering an already-populated wraplist (done in _refresh_cw_row).
             wl.setVisible(True)
             wl.addItems([_item_to_li(it) for it in items])
+            perf.mark('home.row_populate_ms row=%d n=%d' % (i, len(items)), _t0)
         except Exception as exc:
             # Only allow retry for transient errors, NOT for missing XML controls.
             if 'Non-Existent Control' not in str(exc):
@@ -2011,7 +2024,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             if token != self._hero_nav_token or not self._alive:
                 return
             try:
+                from platformcode import perf
+                _t0 = perf.mark('home.hero')
                 self._update_hero(row_idx)
+                perf.mark('home.hero_ms', _t0)
             except Exception:
                 pass
 
