@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.5.5" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.5.6" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -36,11 +36,8 @@
       <screenshot>resources/media/screenshot-2.png</screenshot>
       <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Ricerca più intelligente: articoli e preposizioni non contano più ("della"/"di"…), trovi il titolo anche se è scritto in modo leggermente diverso.
-- Nuova fonte video per i film nella ricerca, con scelta automatica dell'edizione di qualità migliore quando ne esistono più versioni.
-- Serie Mediaset e Rai nella ricerca: una sola scheda per la serie con le stagioni vere e l'elenco puntate, invece di una scheda per ogni puntata.
-- Risolti gli episodi che non partivano (senza alcun errore) dopo una nuova ricerca fatta dalla barra interna.
-- Rimossa la scheda "Next Page" che compariva tra i risultati.
+      <news>- Download più affidabile: se interrompi uno scaricamento, riprende da dove si era fermato invece di ricominciare da capo.
+- "Invia Log allo Sviluppatore" (Impostazioni › Supporto) ora funziona: con un tasto il log arriva direttamente allo sviluppatore.
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]

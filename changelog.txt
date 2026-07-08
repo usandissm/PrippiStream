@@ -1,4 +1,4 @@
-## Prossima
+## 1.5.6
 - Download più affidabile: se interrompi uno scaricamento, riprende da dove si era fermato invece di ricominciare da capo.
 - "Invia Log allo Sviluppatore" (Impostazioni › Supporto) ora funziona: con un tasto il log arriva direttamente allo sviluppatore.
 
