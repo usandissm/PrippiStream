@@ -5495,14 +5495,34 @@ def _translate_to_it(text):
         return text
 
 
+_IT_STOPWORDS = (' il ', ' la ', ' di ', ' che ', ' un ', ' una ', ' della ',
+                 ' gli ', ' più ', ' è ', ' anche ', ' nel ', ' con ', ' per ')
+_EN_MARKERS = (' the ', ' and ', ' with ', ' his ', ' her ', ' they ')
+
+
+def _looks_italian(text):
+    """Euristica economica: True se *text* sembra italiano (>=2 stopword IT
+    distinte e nessun marker inglese forte). Conservativa: in dubbio -> False,
+    così il chiamante ricade sul confronto en-US come prima."""
+    try:
+        t = ' ' + text.lower() + ' '
+        hits = sum(1 for w in _IT_STOPWORDS if w in t)
+        if hits < 2:
+            return False
+        return not any(w in t for w in _EN_MARKERS)
+    except Exception:
+        return False
+
+
 def _get_it_overview(tmdb_id, ctype, it_data=None):
     """Return an Italian overview string for the given TMDB id.
 
     Strategy:
       1. Use it_data (already fetched it-IT response) if provided, else fetch it.
-      2. Fetch the en-US overview as reference.
-      3. If it-IT overview is empty OR identical to en-US (TMDB fallback):
-         translate the English text.
+      2. If the it-IT overview already LOOKS Italian, return it (v2 FASE 9b:
+         saves the en-US reference request — half the network per first focus).
+      3. Otherwise fetch en-US as reference; if it-IT is empty OR identical to
+         en-US (TMDB fallback): translate the English text.
       4. Return the best available Italian string (or '' on failure).
     """
     try:
@@ -5512,7 +5532,9 @@ def _get_it_overview(tmdb_id, ctype, it_data=None):
                       _tmdb_host, ctype, tmdb_id, _tmdb_api)
             it_data = _Tmdb.get_json(url_it) or {}
         it_ov = (it_data.get('overview') or '').strip()
-        # Always fetch en-US to detect TMDB fallback (it-IT == en-US means no Italian on TMDB)
+        if it_ov and _looks_italian(it_ov):
+            return it_ov
+        # Fetch en-US to detect TMDB fallback (it-IT == en-US means no Italian on TMDB)
         url_en = '%s/%s/%s?api_key=%s&language=en-US' % (
                   _tmdb_host, ctype, tmdb_id, _tmdb_api)
         en_data = _Tmdb.get_json(url_en) or {}
