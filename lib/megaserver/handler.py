@@ -48,10 +48,11 @@ class Handler(BaseHTTPRequestHandler):
 
         playlist +="NumberOfEntries=" + str(len(files))
         playlist +="Version=2"
+        data = playlist.encode('utf-8') if PY3 else playlist
         self.send_response(200, 'OK')
-        self.send_header("Content-Length", str(len(playlist)))
-        self.finish_header()
-        self.wfile.write(playlist)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def do_HEAD(self):
         url=urlparse.urlparse(self.path).path

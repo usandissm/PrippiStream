@@ -4,7 +4,7 @@
   Hero 279px | Rows area 438px | Card 160x210
 -->
 <window type="window">
-    <allowmouse>false</allowmouse>
+    <allowmouse>true</allowmouse>
     <animation type="WindowOpen" reversible="false">
         <effect type="fade" start="0" end="100" time="240" tween="sine"/>
     </animation>
@@ -251,6 +251,7 @@
                     <left>0</left><top>35</top>
                     <width>1280</width><height>168</height><orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4000</onleft><onright>4001</onright>
                 <itemlayout height="168" width="247">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -432,12 +433,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2010">
+                <control type="list" id="2010">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4010</onleft><onright>4011</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -621,6 +623,7 @@
                     <width>1280</width><height>300</height>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">80</scrolltime>
+                <onleft>4020</onleft><onright>4021</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -804,6 +807,7 @@
                     <width>1280</width><height>300</height>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">80</scrolltime>
+                <onleft>4030</onleft><onright>4031</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -982,12 +986,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2040">
+                <control type="list" id="2040">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4040</onleft><onright>4041</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -1166,12 +1171,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2050">
+                <control type="list" id="2050">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4050</onleft><onright>4051</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -1350,12 +1356,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2060">
+                <control type="list" id="2060">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4060</onleft><onright>4061</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -1534,12 +1541,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2070">
+                <control type="list" id="2070">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4070</onleft><onright>4071</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -1718,12 +1726,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2080">
+                <control type="list" id="2080">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4080</onleft><onright>4081</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -1902,12 +1911,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2090">
+                <control type="list" id="2090">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4090</onleft><onright>4091</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -2086,12 +2096,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2100">
+                <control type="list" id="2100">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4100</onleft><onright>4101</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -2270,12 +2281,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2110">
+                <control type="list" id="2110">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4110</onleft><onright>4111</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -2454,12 +2466,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2120">
+                <control type="list" id="2120">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4120</onleft><onright>4121</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -2638,12 +2651,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2130">
+                <control type="list" id="2130">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4130</onleft><onright>4131</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -2822,12 +2836,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2140">
+                <control type="list" id="2140">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4140</onleft><onright>4141</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3006,12 +3021,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2150">
+                <control type="list" id="2150">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4150</onleft><onright>4151</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3190,12 +3206,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2160">
+                <control type="list" id="2160">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4160</onleft><onright>4161</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3374,12 +3391,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2170">
+                <control type="list" id="2170">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4170</onleft><onright>4171</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3558,12 +3576,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2180">
+                <control type="list" id="2180">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4180</onleft><onright>4181</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3742,12 +3761,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2190">
+                <control type="list" id="2190">
                     <left>0</left><top>36</top>
                     <width>1280</width><height>300</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4190</onleft><onright>4191</onright>
                 <itemlayout height="300" width="185">
                     <control type="image">
                         <left>4</left><top>2</top>
@@ -3926,12 +3946,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2300">
+                <control type="list" id="2300">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4300</onleft><onright>4301</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -4107,12 +4128,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2310">
+                <control type="list" id="2310">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4310</onleft><onright>4311</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -4288,12 +4310,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2320">
+                <control type="list" id="2320">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4320</onleft><onright>4321</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -4469,12 +4492,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2330">
+                <control type="list" id="2330">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4330</onleft><onright>4331</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -4650,12 +4674,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2340">
+                <control type="list" id="2340">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4340</onleft><onright>4341</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -4831,12 +4856,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2350">
+                <control type="list" id="2350">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4350</onleft><onright>4351</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -5012,12 +5038,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2360">
+                <control type="list" id="2360">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4360</onleft><onright>4361</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -5193,12 +5220,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2370">
+                <control type="list" id="2370">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4370</onleft><onright>4371</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -5374,12 +5402,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2380">
+                <control type="list" id="2380">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4380</onleft><onright>4381</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
@@ -5555,12 +5584,13 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2390">
+                <control type="list" id="2390">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
                     <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
                     <scrolltime tween="cubic" easing="out">200</scrolltime>
+                <onleft>4390</onleft><onright>4391</onright>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>

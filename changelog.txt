@@ -1,3 +1,7 @@
+## Prossima
+- Download più affidabile: se interrompi uno scaricamento, riprende da dove si era fermato invece di ricominciare da capo.
+- "Invia Log allo Sviluppatore" (Impostazioni › Supporto) ora funziona: con un tasto il log arriva direttamente allo sviluppatore.
+
 ## 1.5.5
 - Ricerca più intelligente: articoli e preposizioni non contano più ("della"/"di"…), trovi il titolo anche se è scritto in modo leggermente diverso.
 - Nuova fonte video per i film nella ricerca, con scelta automatica dell'edizione di qualità migliore quando ne esistono più versioni.

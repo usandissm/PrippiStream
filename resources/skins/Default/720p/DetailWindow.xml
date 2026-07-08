@@ -45,12 +45,12 @@
                 <texture colordiffuse="A0000000">white.png</texture>
             </control>
 
-            <!-- Brand -->
-            <control type="label">
-                <left>28</left><top>12</top><width>300</width><height>24</height>
-                <font>font14</font><textcolor>FFFFFFFF</textcolor>
-                <shadowcolor>CC000000</shadowcolor>
-                <label>[B]PRIPPI[COLOR FFE50914]STREAM[/COLOR][/B]</label>
+            <!-- Brand (stessa immagine della home) -->
+            <control type="image">
+                <left>16</left><top>-11</top>
+                <width>337</width><height>70</height>
+                <texture>special://home/addons/plugin.video.prippistream/resources/media/logo_banner.png</texture>
+                <aspectratio>keep</aspectratio>
             </control>
 
             <!-- Red accent line -->

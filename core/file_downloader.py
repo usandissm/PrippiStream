@@ -48,12 +48,17 @@ def _open(url, headers, rng_from=0, timeout=30):
 
 
 def download_file(url, headers, out_path, progress_cb=None, cancel_evt=None,
-                  encrypt=None, timeout=30, chunk=1 << 20, http_get=None):
+                  encrypt=None, timeout=30, chunk=1 << 20, http_get=None,
+                  resume_key=None):
     """Stream *url* to *out_path*, encrypting on write. Returns bytes written.
 
     encrypt(data, byte_offset) -> bytes  (offset-keyed soft-DRM cipher; identity
     if None). progress_cb(done, total, nbytes) is called ~1x/s by the caller's
     throttling. Raises DownloadCancelled if cancel_evt is set.
+
+    resume_key: stable identity for resume matching. Sources whose media URL
+    changes between sessions (e.g. the local Mega proxy, whose port is random)
+    would otherwise never match the .dlmeta and restart from byte 0.
     """
     meta_path = out_path + '.dlmeta'
 
@@ -62,7 +67,9 @@ def download_file(url, headers, out_path, progress_cb=None, cancel_evt=None,
     if os.path.exists(out_path) and os.path.exists(meta_path):
         try:
             meta = json.load(open(meta_path, 'r'))
-            if meta.get('url') == url:
+            same = (meta.get('key') == resume_key) if (resume_key and meta.get('key')) \
+                else (meta.get('url') == url)
+            if same:
                 resume = int(os.path.getsize(out_path))
                 # never trust a written count past the actual file size
                 resume = min(resume, int(meta.get('written', resume)))
@@ -111,7 +118,8 @@ def download_file(url, headers, out_path, progress_cb=None, cancel_evt=None,
             f.write(data)
             offset += len(data)
             try:
-                json.dump({'url': url, 'written': offset}, open(meta_path, 'w'))
+                json.dump({'url': url, 'key': resume_key or url,
+                           'written': offset}, open(meta_path, 'w'))
             except Exception:
                 pass
             if progress_cb:

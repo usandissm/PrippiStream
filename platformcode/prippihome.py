@@ -60,6 +60,20 @@ _enrich_cache = {}
 # Never expires — trailer links are stable YouTube IDs.
 _trailer_cache = {}
 
+# Audio-language hint per YouTube video id: 'it' when the trailer was found via
+# an Italian-intent query (or TMDB language=it). Used to decide subtitles when
+# the stream reports no usable audio language ('und' is common on YT uploads).
+_trailer_lang_hint = {}
+
+
+def _hint_for_trailer_url(url):
+    """Return the recorded language hint ('it' or '') for a plugin://…video_id=X url."""
+    try:
+        m = re.search(r'video_id=([A-Za-z0-9_\-]+)', url or '')
+        return _trailer_lang_hint.get(m.group(1), '') if m else ''
+    except Exception:
+        return ''
+
 # Italian plot cache: tmdb_id -> Italian overview string.
 # Populated by _load_hd_fanart (DetailWindow) and home hero background fetch.
 # Persists across window opens so already-fetched plots are shown instantly.
@@ -389,8 +403,8 @@ ROW_WRAPLIST_BASE  = 2000
 ROW_LABEL_BASE     = 3000   # category label above each row
 ROW_LEFT_BASE      = 4000   # left arrow button per row
 ROW_RIGHT_BASE     = 4001   # right arrow button per row
-ROW_OVERLAY_BASE   = 5000   # transparent mouse-blocker overlay per row
-HOVER_BOX_BASE     = 6000   # hover-frame group per row (moved by setPosition)
+ROW_OVERLAY_BASE   = 5000   # ex overlay bloccamouse (ora disattivato: _disable_mouse_overlays)
+HOVER_BOX_BASE     = 6000   # ex finta cornice-hover (ora disattivata: _disable_mouse_overlays)
 ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
 ROW_STEP           = 10
 # SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
@@ -799,10 +813,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self._hero_nav_token = 0  # debounce token for deferred hero updates on keyboard nav
         self._load_full_w = 0     # cached loading-track width (resolution-independent bar)
         self._populated = set()  # track which row indices have had addItems() called
-        self._hover_slot = {}    # row_idx -> last slot (throttle guard)
-        self._hover_base = {}    # row_idx -> wraplist selectedPosition when mouse entered
-        self._hover_item = {}    # row_idx -> item index last hovered by mouse
-        self._hover_box_row = -1  # row whose hover-frame is currently visible
+        self._hover_last = (-1, -1)      # (riga, pos) dell'ultimo hero disegnato: throttle mouse/touch
+        self._mouse_overlays_off = False  # overlay bloccamouse già neutralizzati
         self._rows_lock = threading.Lock()  # protects rows_data + _num_rows extension
         # Cleared while a modal dialog is open — background thread must NOT modify the UI
         self._bg_ui_pause = threading.Event()
@@ -837,6 +849,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self.setCoordinateResolution(3)  # 1920x1080
         except Exception:
             pass
+        # Mouse/touch e frecce devono muovere la STESSA selezione: spegne il
+        # vecchio overlay bloccamouse + finta cornice-hover (vedi il metodo).
+        self._disable_mouse_overlays()
         # Reflect the real installed version into the read-only settings field, so
         # "Versione installata" in settings is always current (the release CI bumps
         # addon.xml automatically). Only write when it actually changed.
@@ -1953,20 +1968,63 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             t.start()
 
     def _row_from_fid(self, fid):
-        """Returns row index if fid is a wraplist or overlay for that row, else -1."""
+        """Indice della riga se fid è la sua lista, altrimenti -1."""
         for i in range(self._num_rows):
-            if fid in (ROW_WRAPLIST_BASE + i * ROW_STEP, ROW_OVERLAY_BASE + i * ROW_STEP):
+            if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
                 return i
         return -1
 
-    def _hide_hover_box(self, row_idx):
-        """Move hover-frame off-screen for the given row."""
-        try:
-            # ROW 00 (CW) uses wider cards (370px) → park further left
-            off_x = -400 if row_idx == 0 else -278
-            self.getControl(HOVER_BOX_BASE + row_idx * ROW_STEP).setPosition(off_x, 54)
-        except Exception:
-            pass
+    def _row_from_nav_fid(self, fid):
+        """Come _row_from_fid, ma riconosce anche i bottoni freccia < > della riga.
+
+        Col mouse fermo su una di quelle frecce il focus sta sul bottone (non
+        sulla lista) e l'XML non definisce <onup>/<ondown>: senza questo su/giù
+        resterebbero morti finché non si sposta il puntatore su una card.
+        """
+        i = self._row_from_fid(fid)
+        if i >= 0:
+            return i
+        for i in range(self._num_rows):
+            if fid in (ROW_LEFT_BASE + i * ROW_STEP, ROW_RIGHT_BASE + i * ROW_STEP):
+                return i
+        return -1
+
+    def _disable_mouse_overlays(self):
+        """Spegne il vecchio sistema di hover parallelo del mouse.
+
+        Prima c'erano DUE modelli di selezione indipendenti: la wraplist (mossa
+        dalle frecce, con la sua focusedlayout) e, sopra di essa, un bottone
+        trasparente "bloccamouse" (5000+) che intercettava il puntatore, più una
+        finta cornice-hover (6000+) spostata a mano. I due andavano fuori
+        sincrono (due riquadri accesi, hero e click sulla card sbagliata) perché
+        l'indice del mouse era `posizione_selezionata_all'ingresso + slot`, e la
+        posizione selezionata NON è l'indice della prima card visibile.
+
+        Rendendo invisibili quei controlli il mouse/tocco arriva direttamente
+        alla wraplist, che muove la SUA selezione: frecce, mouse e dito
+        condividono così un'unica sorgente di verità (getSelectedPosition).
+        """
+        if self._mouse_overlays_off:
+            return
+        self._mouse_overlays_off = True
+        for i in range(MAX_ROWS):
+            for base in (ROW_OVERLAY_BASE, HOVER_BOX_BASE):
+                try:
+                    c = self.getControl(base + i * ROW_STEP)
+                except Exception:
+                    continue   # riga non presente nello skin
+                try:
+                    c.setVisible(False)
+                except Exception:
+                    # fallback: parcheggia fuori schermo (vecchio comportamento)
+                    try:
+                        c.setPosition(-400, 54)
+                    except Exception:
+                        pass
+                try:
+                    c.setEnabled(False)
+                except Exception:
+                    pass
 
     def onFocus(self, control_id):
         """Fires when a control gains focus — always on the Kodi GUI thread."""
@@ -2008,40 +2066,31 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         i = self._row_from_fid(control_id)
         if i >= 0:
-            # Keyboard navigation to a different row: hide old hover frame
-            if self._hover_box_row >= 0 and self._hover_box_row != i:
-                self._hide_hover_box(self._hover_box_row)
-                self._hover_box_row = -1
             self._last_focused_row = i
             for j in range(max(0, i-1), min(self._num_rows, i+4)):
                 self._populate_single_row(j)
-            # Snapshot wraplist position when mouse enters this row overlay
-            if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
-                try:
-                    sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                    self._hover_base[i] = max(0, sel)
-                except Exception:
-                    self._hover_base[i] = 0
-                self._hover_slot[i] = -1
-                self._hover_item[i] = None
-            else:
-                # Wraplist focused by keyboard: clear mouse-hover state so
-                # _hero_item() uses wraplist selectedPosition instead.
-                self._hover_item[i] = None
-                self._hide_hover_box(i)
-                self._hover_box_row = -1
             self._schedule_hero(i)
-        else:
-            # Focus moved outside the rows (to hero buttons, EXIT…): hide hover frame
-            if self._hover_box_row >= 0:
-                self._hide_hover_box(self._hover_box_row)
-                self._hover_box_row = -1
 
     def onAction(self, action):
         aid = action.getId()
         if aid in (ACTION_EXIT, ACTION_BACK):
             self._alive = False
             self.close()
+            return
+
+        # PC con mouse: se all'apertura il puntatore è dentro la finestra su
+        # un'area non focusabile, Kodi (mouse-mode) lascia il focus a NESSUN
+        # controllo e le frecce non fanno nulla finché non si fa hover su una
+        # card. Prima freccia → aggancia la prima riga popolata, da lì la
+        # navigazione prosegue normale. Su TV senza mouse non scatta mai.
+        if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT) and not self.getFocusId():
+            cw_empty = not (self.rows_data and self.rows_data[0][1])
+            new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+            for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                self._populate_single_row(j)
+            self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+            self._last_focused_row = new_row
+            self._schedule_hero(new_row)
             return
 
         # Context menu (C / long-press) on a download tile → same Play/Delete menu
@@ -2116,7 +2165,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # Full remote-control navigation (onAction replaces XML nav entirely)
         if aid == ACTION_UP:
             fid = self.getFocusId()
-            i = self._row_from_fid(fid)
+            i = self._row_from_nav_fid(fid)
             if i >= 0:
                 if i > 0:
                     new_row = i - 1
@@ -2142,7 +2191,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         if aid == ACTION_DOWN:
             fid = self.getFocusId()
-            i = self._row_from_fid(fid)
+            i = self._row_from_nav_fid(fid)
             if i >= 0:
                 # Check both: more rows in data AND next XML slot actually exists
                 next_xml_exists = False
@@ -2204,65 +2253,55 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self._last_focused_row = new_row
                 self._schedule_hero(new_row)
                 return
-        # Mouse move: compute hovered card slot, update hero + hover frame
+        # Mouse/touch: Kodi muove GIÀ nativamente la selezione della riga sotto
+        # il puntatore/dito (l'overlay che glielo impediva è disattivato in
+        # _disable_mouse_overlays). Qui aggiorniamo solo l'hero, con throttle:
+        # l'evento arriva a raffica ma la card cambia di rado.
         if aid == ACTION_MOUSE_MOVE:
-            fid = self.getFocusId()
-            for i in range(self._num_rows):
-                if fid == ROW_OVERLAY_BASE + i * ROW_STEP:
-                    try:
-                        mx   = int(action.getAmount1())
-                        # action.getAmount1/2 returns physical screen pixels, not skin coords.
-                        # Convert to skin space (skin is 1920px wide for 1080i).
-                        try:
-                            screen_w = xbmcgui.getScreenWidth()
-                            skin_x = mx * 1920 // max(1, screen_w)
-                        except Exception:
-                            skin_x = mx
-                        slot = max(0, min(6, skin_x // 278))
-                        if slot != self._hover_slot.get(i, -1):
-                            self._hover_slot[i] = slot
-                            n_items = len(self.rows_data[i][1]) if i < len(self.rows_data) else 0
-                            if n_items > 0:
-                                base    = self._hover_base.get(i, 0)
-                                raw_idx = base + slot
-                                if raw_idx >= n_items:
-                                    # Ghost slot — hide hover box and do nothing else
-                                    self._hide_hover_box(i)
-                                    self._hover_box_row = -1
-                                    self._hover_item[i] = -1
-                                    return
-                                else:
-                                    new_idx = raw_idx % n_items
-                                    self._hover_item[i] = new_idx
-                                cur_sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                                # Move hover-frame to the correct card slot (y=42 = label_h)
-                                if self._hover_box_row >= 0 and self._hover_box_row != i:
-                                    self._hide_hover_box(self._hover_box_row)
-                                try:
-                                    self.getControl(HOVER_BOX_BASE + i * ROW_STEP).setPosition(slot * 278, 54)
-                                    self._hover_box_row = i
-                                except Exception:
-                                    pass
-                                # Update hero directly - wraplist NOT touched, no scroll
-                                self._update_hero(i, pos=new_idx)
-                    except Exception:
-                        pass
-                    return
+            i = self._row_from_fid(self.getFocusId())
+            if i < 0:
+                return
+            try:
+                pos = int(self.getControl(
+                    ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+            except Exception:
+                return
+            if (i, pos) != self._hover_last:
+                self._hover_last = (i, pos)
+                self._last_focused_row = i
+                self._update_hero(i, pos=pos)
             return
 
-        # LEFT/RIGHT on wraplist: native Kodi handles item selection; Python refreshes hero.
-        # On overlay (mouse parked): transfer focus to wraplist for next keypress.
-        # On hero buttons: XML <onleft>/<onright> already handles it — Python stays out.
+        # LEFT/RIGHT sulla riga: la selezione la muove Kodi, Python aggiorna l'hero.
+        # Sui bottoni hero ci pensa l'XML <onleft>/<onright> — Python resta fuori.
         if aid in (ACTION_LEFT, ACTION_RIGHT):
             fid = self.getFocusId()
-            for i in range(self._num_rows):
-                if fid == ROW_OVERLAY_BASE + i * ROW_STEP:
-                    self.setFocusId(ROW_WRAPLIST_BASE + i * ROW_STEP)
+            i = self._row_from_fid(fid)
+            if i < 0:
+                # BORDO RIGA. Le righe sono <list> (non più <wraplist>: quella teneva
+                # per forza l'elemento selezionato a focusposition=0, così il solo
+                # passaggio del mouse faceva scorrere il carosello). Una list, arrivata
+                # al capo, non muove la selezione: Kodi manda il focus al bottone
+                # freccia < o > della riga (<onleft>/<onright> nello skin). Da lì
+                # rientriamo dall'altro capo, ricreando il giro infinito di prima.
+                i = self._row_from_nav_fid(fid)
+                if i < 0:
                     return
-                if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
-                    self._last_focused_row = i
-                    self._schedule_hero(i)
+                items = self.rows_data[i][1] if i < len(self.rows_data) else []
+                if not items:
                     return
+                wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                try:
+                    # selectItem prima del focus: sulla lista non focalizzata la
+                    # posizione regge (stesso trucco dei bottoni freccia in onClick).
+                    self.getControl(wl_id).selectItem(
+                        len(items) - 1 if aid == ACTION_LEFT else 0)
+                    self.setFocusId(wl_id)
+                except Exception:
+                    return
+            self._last_focused_row = i
+            self._hover_last = (-1, -1)   # la selezione cambia: invalida il throttle
+            self._schedule_hero(i)
             return
 
     def _hero_item(self):
@@ -2273,18 +2312,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         _, items = self.rows_data[i]
         if not items:
             return None
-        # Mouse hover takes priority over wraplist keyboard selection.
-        # _hover_item[i] is set by ACTION_MOUSE_MOVE and reflects the card
-        # the user is actually looking at in the hero.
-        pos = self._hover_item.get(i)
-        if pos is None:
-            try:
-                pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                if pos < 0 or pos >= len(items):
-                    pos = 0
-            except Exception:
-                pos = 0
-        elif pos < 0 or pos >= len(items):
+        # Unica sorgente di verità: la selezione della riga, mossa indifferentemente
+        # da frecce, mouse o tocco.
+        try:
+            pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+        except Exception:
+            pos = 0
+        if pos < 0 or pos >= len(items):
             pos = 0
         return items[pos]
 
@@ -2387,25 +2421,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             _open_browse(parent_window=self)
             return
 
-        # ── Overlay button click (mouse click on card) → open detail window ──
-        for i in range(self._num_rows):
-            if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
-                try:
-                    item_idx = self._hover_item.get(i)
-                    if item_idx is None:
-                        item_idx = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                    items = self.rows_data[i][1]
-                    if 0 <= item_idx < len(items):
-                        _it = items[item_idx]
-                        if getattr(_it, 'is_live_channel', False):
-                            self._play_channel_stream(_it, i, item_idx)
-                        elif getattr(_it, 'is_download', False):
-                            self._show_download_menu(_it)
-                        else:
-                            self._open_detail(_it)
-                except Exception as exc:
-                    logger.error('[PrippiHome] overlay click row %d: %s' % (i, str(exc)))
-                return
+        # (Il click del mouse/tap su una card arriva ora direttamente alla riga:
+        #  lo gestisce il ramo "Wraplist item click" in fondo, con la stessa
+        #  posizione selezionata che vedono le frecce.)
 
         # ── Per-row left/right arrow buttons ──
         for i in range(self._num_rows):
@@ -5579,13 +5597,16 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
 
         for lang in ('it', 'en'):
             videos = _fetch(lang)
+            hint = 'it' if lang == 'it' else ''
             # Prefer Trailer type on YouTube
             for v in videos:
                 if v.get('site') == 'YouTube' and v.get('type') == 'Trailer':
+                    _trailer_lang_hint[v['key']] = hint
                     return v['key']
             # Accept any YouTube video from this language
             for v in videos:
                 if v.get('site') == 'YouTube':
+                    _trailer_lang_hint[v['key']] = hint
                     return v['key']
 
         return None
@@ -5691,22 +5712,26 @@ def _youtube_search_trailer(title, year='', kind=''):
             # Fallback: first result
             return videos[0][0] if videos else None
 
-        # Build the query list by content kind.
+        # Build the query list by content kind. Each query carries the audio
+        # language it implies: Italian-intent queries almost always land on an
+        # Italian-audio upload, which often reports language 'und' — the hint
+        # lets _maybe_set_subtitles skip the (redundant) Italian subtitles.
         if kind == 'anime':
-            queries = ['%s opening' % title, '%s sigla' % title,
-                       '%s anime opening' % title, '%s trailer' % title]
+            queries = [('%s opening' % title, ''), ('%s sigla' % title, ''),
+                       ('%s anime opening' % title, ''), ('%s trailer' % title, '')]
         elif kind == 'kdrama':
-            queries = ['%s trailer' % title, '%s kdrama trailer' % title,
-                       '%s korean drama trailer' % title]
+            queries = [('%s trailer' % title, ''), ('%s kdrama trailer' % title, ''),
+                       ('%s korean drama trailer' % title, '')]
         else:
             queries = [
-                ' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']),
-                '%s trailer italiano' % title,
-                '%s%s trailer official' % (title, (' ' + year) if year else ''),
+                (' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']), 'it'),
+                ('%s trailer italiano' % title, 'it'),
+                ('%s%s trailer official' % (title, (' ' + year) if year else ''), ''),
             ]
-        for i, q in enumerate(queries, 1):
+        for i, (q, hint) in enumerate(queries, 1):
             vid = _yt_search(q)
             if vid:
+                _trailer_lang_hint[vid] = hint
                 logger.info('[YTSearch] "%s" (%s) → q%d → %s' % (title, kind or 'std', i, vid))
                 return vid
         return None
@@ -6861,13 +6886,21 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 threading.Thread(target=self._enter_cinema_mode, daemon=True).start()
                 # Watcher: restores fanart when trailer ends naturally (not via Back)
                 threading.Thread(target=self._watch_trailer_end, daemon=True).start()
-                # Wait for YouTube plugin to register audio/subtitle tracks
-                for _ in range(50):
+                # Wait for the player to enumerate audio/subtitle tracks
+                # (fixed 5 s was often too early on slow devices → the language
+                # logic ran against an empty track list and did nothing).
+                for _ in range(80):   # up to 8 s
                     if self._close_requested:
                         return
+                    try:
+                        if self._player.getAvailableAudioStreams():
+                            break
+                    except Exception:
+                        pass
                     xbmc.sleep(100)
+                xbmc.sleep(500)   # small settle so set*Stream calls stick
                 if not self._close_requested:
-                    self._maybe_set_subtitles()
+                    self._maybe_set_subtitles(trailer_url)
         except Exception as exc:
             logger.error('[DetailWindow] trailer start: %s' % str(exc))
 
@@ -6905,22 +6938,44 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
         except Exception as exc:
             logger.error('[DetailWindow] _watch_trailer_end: %s' % str(exc))
 
-    def _maybe_set_subtitles(self):
-        """Enable Italian subtitles only if the trailer audio is NOT already Italian."""
+    def _maybe_set_subtitles(self, trailer_url=''):
+        """Italian audio is ALWAYS the default: if the stream has an Italian
+        audio track, select it and keep subtitles off. Subtitles are enabled
+        only when no Italian audio is available."""
         try:
-            # Check current audio language via Kodi info label
-            audio_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage').lower()
-            # Common Italian identifiers: 'italian', 'italiano', 'ita', 'it'
-            is_italian_audio = (
-                'ital' in audio_lang
-                or audio_lang in ('it', 'ita', 'ita_it')
-                or audio_lang.startswith('it-')
-            )
-            if is_italian_audio:
-                # Audio is already Italian — no subtitles needed
+            def _is_it(s):
+                sl = (s or '').lower()
+                return ('ital' in sl or sl in ('it', 'ita', 'ita_it')
+                        or sl.startswith('it-') or sl.startswith('it_'))
+
+            # 1) Stream has an Italian audio track → make sure it's active.
+            try:
+                streams = self._player.getAvailableAudioStreams()
+            except Exception:
+                streams = []
+            it_idx = next((i for i, s in enumerate(streams) if _is_it(s)), None)
+            if it_idx is not None:
+                if not _is_it(xbmc.getInfoLabel('VideoPlayer.AudioLanguage')):
+                    self._player.setAudioStream(it_idx)
                 self._player.showSubtitles(False)
                 return
-            # Audio is foreign — look for Italian subtitle track
+
+            # 2) Single/unlabeled track already reporting Italian → no subs.
+            audio_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage')
+            if _is_it(audio_lang):
+                self._player.showSubtitles(False)
+                return
+
+            # 3) Unknown language — 'und'/empty is the norm for YouTube uploads
+            #    (an Italian trailer found via the "trailer italiano" queries
+            #    used to fall through here and get pointless Italian subs).
+            #    Trust the search-language hint recorded at fetch time.
+            if (not audio_lang or audio_lang.lower() == 'und') and \
+                    _hint_for_trailer_url(trailer_url) == 'it':
+                self._player.showSubtitles(False)
+                return
+
+            # 4) Audio is foreign — look for Italian subtitle track
             self._set_italian_subtitles()
         except Exception:
             pass
