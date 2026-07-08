@@ -1,3 +1,8 @@
+## Prossima
+- Home più veloce e leggera, soprattutto sui dispositivi meno potenti.
+- Grafica della home rifinita: sfondo del riquadro in alto più pulito e migliore risalto del titolo selezionato.
+- Nuova opzione in Impostazioni › Personalizzazione: "Animazioni ridotte (per dispositivi lenti)".
+
 ## 1.5.3
 - Nuova opzione in Impostazioni › Personalizzazione: "Film in 4K: chiedi se riprodurre in 4K o Full HD" — se attiva, all'avvio di un film disponibile in 4K scegli tu la qualità.
 - Riproduzione 4K più affidabile: se il flusso 4K non parte, viene avviata automaticamente la versione Full HD.

@@ -219,7 +219,7 @@ _app_monitor = _AppShutdownMonitor()
 # ('show_adult_anime' only toggles the Browse HENTAI tab, which is read fresh on
 # every Browse open, so it needs no live re-render of the home.)
 _LIVE_SETTING_KEYS = ('show_sky_row', 'show_sport_row', 'show_tv_row',
-                      'show_downloads_row')
+                      'show_downloads_row', 'reduced_animations')
 
 
 class _SettingsWatchMonitor(xbmc.Monitor):
@@ -944,6 +944,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self._settings_monitor = _SettingsWatchMonitor(self)
         except Exception as exc:
             logger.error('[PrippiHome] settings monitor init: %s' % str(exc))
+        # "Animazioni ridotte": la condition delle animation zoom nello skin
+        # legge Window.Property(reduced_anim). Applicata FUORI dal blocco
+        # first-run: onInit ri-fires al ritorno dal playback e ri-applicarla
+        # è gratis e robusto.
+        self._apply_reduced_anim()
         # Loading overlay starts visible in XML — just start background fetch.
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
@@ -2544,6 +2549,22 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if changed:
             self._apply_live_settings(changed)
 
+    def _apply_reduced_anim(self):
+        """Setta/pulisce Window.Property(reduced_anim), letta dalla condition
+        delle animation zoom nello skin. Setting letto FRESCO con una nuova
+        istanza Addon (quella cachata in config è stale dopo openSettings su
+        Kodi 21 — regola live-settings del progetto)."""
+        try:
+            import xbmcaddon
+            on = xbmcaddon.Addon('plugin.video.prippistream').getSetting(
+                'reduced_animations') == 'true'
+            if on:
+                self.setProperty('reduced_anim', '1')
+            else:
+                self.clearProperty('reduced_anim')
+        except Exception:
+            pass
+
     def _apply_live_settings(self, changed):
         """Apply our own settings to the RUNNING home without an addon reload.
 
@@ -2556,6 +2577,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         (home_loop_rows is read live on navigation, so it needs no action.)
         """
         logger.info('[PrippiHome] applying live settings: %s' % sorted(changed))
+        if 'reduced_animations' in changed:
+            # Le animation dello skin rileggono la condition a ogni trigger:
+            # basta aggiornare la Window property, nessun re-render.
+            self._apply_reduced_anim()
         _row_keys = {'show_sky_row', 'show_sport_row', 'show_tv_row', 'show_downloads_row'}
         if changed & _row_keys and _cache['data']:
             try:

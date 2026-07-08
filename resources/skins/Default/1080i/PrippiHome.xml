@@ -38,11 +38,13 @@
             <aspectratio>scale</aspectratio>
         </control>
 
-        <!-- Hero overlay — single layer behind text panel -->
+        <!-- Hero overlay — horizontal gradient scrim (dark left, transparent right):
+             keeps title/plot readable on bright fanart with NO hard vertical edge -->
         <control type="image">
             <left>0</left><top>0</top>
-            <width>1050</width><height>486</height>
-            <texture colordiffuse="900D0D0D">white.png</texture>
+            <width>1250</width><height>486</height>
+            <texture>hgrad.png</texture>
+            <aspectratio>stretch</aspectratio>
         </control>
 
         <!-- __ Top bar __ -->
@@ -99,7 +101,7 @@
             <width>120</width><height>42</height>
             <texturefocus colordiffuse="60FFFFFF">white.png</texturefocus>
             <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B]SET[/B]</label>
+            <label>[B]OPZIONI[/B]</label>
             <font>font10</font>
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -115,7 +117,7 @@
             <width>120</width><height>42</height>
             <texturefocus colordiffuse="FFE50914">white.png</texturefocus>
             <texturenofocus colordiffuse="30FFFFFF">white.png</texturenofocus>
-            <label>[B]EXIT[/B]</label>
+            <label>[B]ESCI[/B]</label>
             <font>font10</font>
             <textcolor>FFAAAAAA</textcolor>
             <focusedcolor>FFFFFFFF</focusedcolor>
@@ -265,7 +267,7 @@
                     <control type="image">
                         <left>8</left><top>3</top>
                         <width>354</width><height>200</height>
-                        <texture>$INFO[ListItem.Property(fanart_image)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(fanart_image)]</texture>
                         <aspectratio>keep</aspectratio>
                     </control>
                     <control type="label">
@@ -320,8 +322,8 @@
                             <width>362</width><height>200</height>
                             <texture>$INFO[ListItem.Property(fanart_image)]</texture>
                             <aspectratio>keep</aspectratio>
-                            <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                            <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                            <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                            <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                         </control>
                         <control type="label">
                             <left>4</left><top>207</top>
@@ -433,7 +435,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -481,8 +483,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -598,7 +600,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -646,8 +648,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -763,7 +765,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -811,8 +813,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -929,7 +931,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -977,8 +979,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1095,7 +1097,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1143,8 +1145,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1261,7 +1263,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1309,8 +1311,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1427,7 +1429,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1475,8 +1477,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1593,7 +1595,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1641,8 +1643,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1759,7 +1761,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1807,8 +1809,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -1925,7 +1927,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -1973,8 +1975,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2091,7 +2093,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2139,8 +2141,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2257,7 +2259,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2305,8 +2307,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2423,7 +2425,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2471,8 +2473,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2589,7 +2591,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2637,8 +2639,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2755,7 +2757,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2803,8 +2805,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -2921,7 +2923,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -2969,8 +2971,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3087,7 +3089,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3135,8 +3137,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3253,7 +3255,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3301,8 +3303,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3419,7 +3421,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3467,8 +3469,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3585,7 +3587,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3632,8 +3634,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3750,7 +3752,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3797,8 +3799,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -3915,7 +3917,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -3962,8 +3964,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4080,7 +4082,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4127,8 +4129,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4245,7 +4247,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4292,8 +4294,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4410,7 +4412,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4457,8 +4459,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4575,7 +4577,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4622,8 +4624,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4740,7 +4742,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4787,8 +4789,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -4905,7 +4907,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -4952,8 +4954,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5070,7 +5072,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5117,8 +5119,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5235,7 +5237,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5281,8 +5283,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5398,7 +5400,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5444,8 +5446,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5561,7 +5563,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5607,8 +5609,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5724,7 +5726,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5770,8 +5772,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -5887,7 +5889,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -5933,8 +5935,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -6050,7 +6052,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6096,8 +6098,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -6213,7 +6215,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6259,8 +6261,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -6376,7 +6378,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6422,8 +6424,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -6539,7 +6541,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6585,8 +6587,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
@@ -6702,7 +6704,7 @@
                     <control type="image">
                         <left>8</left><top>4</top>
                         <width>262</width><height>330</height>
-                        <texture>$INFO[ListItem.Property(thumbnail)]</texture>
+                        <texture colordiffuse="E0FFFFFF">$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
                     </control>
                     <control type="label">
@@ -6748,8 +6750,8 @@
                         <width>268</width><height>330</height>
                         <texture>$INFO[ListItem.Property(thumbnail)]</texture>
                         <aspectratio>stretch</aspectratio>
-                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out">Focus</animation>
-                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in">Unfocus</animation>
+                        <animation effect="zoom" start="100" end="105" center="auto" time="150" tween="sine" easing="out" condition="String.IsEmpty(Window.Property(reduced_anim))">Focus</animation>
+                        <animation effect="zoom" start="105" end="100" center="auto" time="110" tween="sine" easing="in" condition="String.IsEmpty(Window.Property(reduced_anim))">Unfocus</animation>
                     </control>
                     <!-- selection frame ON TOP — visible on dark SKY/Sport posters, not hidden by the zoom -->
                     <control type="image"><left>2</left><top>0</top><width>274</width><height>4</height><texture colordiffuse="FFE50914">white.png</texture></control>
