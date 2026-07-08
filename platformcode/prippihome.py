@@ -200,9 +200,6 @@ class _AppShutdownMonitor(xbmc.Monitor):
 # Singleton registered at import time so it is always listening.
 _app_monitor = _AppShutdownMonitor()
 
-# SC rows cache: populated on first home load, reused on subsequent opens without refetch.
-_sc_rows_cache = None
-
 # Home settings we apply LIVE (no addon reload) when the user changes them.
 # ('show_adult_anime' only toggles the Browse HENTAI tab, which is read fresh on
 # every Browse open, so it needs no live re-render of the home.)
@@ -468,9 +465,11 @@ HOVER_BOX_BASE     = 6000   # hover-frame group per row (moved by setPosition)
 ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
 ROW_STEP           = 10
 # SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
-# MAX_ROWS: total wraplist slots in the XML (must match generator MAX_ROWS)
+# MAX_ROWS: total row slots STATICALLY defined in PrippiHome.xml (1080i):
+# wraplist/list id 2000-2390 step 10 = 40 slots. Must NEVER exceed the XML
+# count: row 40+ would getControl() non-existent ids and raise.
 SC_MAX_ROWS        = 30
-MAX_ROWS           = 50
+MAX_ROWS           = 40
 ARROW_PAGE_SIZE    = 1
 UPNEXT_COUNTDOWN   = 60   # seconds before episode end: show Up Next overlay
 
@@ -1153,8 +1152,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self._bg_load_lock.release()
 
     def _bg_load_inner(self):
-        global _sc_rows_cache, _cache
-
         from platformcode import perf
         _pt = perf.mark('home.load start')
 
@@ -1210,7 +1207,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if cache_fresh:
             # ---- FAST PATH: full cached rows (already enriched from prior run) ----
             sc_rows = _cache['data']
-            _sc_rows_cache = sc_rows
             logger.info('[PrippiHome] cache hit, %d rows' % len(sc_rows))
             if not self._alive:
                 return
@@ -1241,9 +1237,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             main_rows, host, homepage_data = [], '', None
         _pt = perf.mark('home.fetch_main (cold)', _pt)
 
-        if not main_rows and _sc_rows_cache:
+        if not main_rows and _cache['data']:
             # Network failed: fall back to whatever we showed last time.
-            main_rows = _sc_rows_cache
+            main_rows = _cache['data']
 
         if not self._alive:
             return
@@ -1319,9 +1315,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self._populate_single_row(j)
 
         # Cache the full assembled SC rows (main + archive) for fast re-open.
-        global _sc_rows_cache
         full = list(main_rows) + list(archive_rows)
-        _sc_rows_cache = full
         _cache['data'] = full
         _cache['ts'] = __import__('time').time()
 
@@ -1557,7 +1551,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         _cache + snapshot su disco; NON ridisegna le righe già a schermo (nessun
         flicker né spostamento di focus). Le righe fresche compaiono alla
         prossima apertura della home."""
-        global _sc_rows_cache
         try:
             if not self._alive or _shutdown_event.is_set():
                 return
@@ -1582,7 +1575,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         _it.infoLabels['_enr'] = 1
                 except Exception:
                     pass
-            _sc_rows_cache = full
             _cache['data'] = full
             _cache['ts'] = __import__('time').time()
             self._write_home_snapshot(host)
@@ -2550,9 +2542,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """
         logger.info('[PrippiHome] applying live settings: %s' % sorted(changed))
         _row_keys = {'show_sky_row', 'show_sport_row', 'show_tv_row', 'show_downloads_row'}
-        if changed & _row_keys and _sc_rows_cache:
+        if changed & _row_keys and _cache['data']:
             try:
-                self._assemble_initial(_sc_rows_cache)
+                self._assemble_initial(_cache['data'])
                 self._num_rows = min(len(self.rows_data), MAX_ROWS)
                 # Clean slate: empty every row wraplist + clear the populated flags
                 # (reset() on an empty wraplist is a no-op, so this is cheap).
@@ -5117,13 +5109,32 @@ def _nuke_all_vixcloud_bookmarks():
 
     We manage our own resume system (CW DB). Kodi's built-in bookmarks only
     cause stale "Resume from" dialogs when replaying or navigating episodes.
-    Called once at PrippiHome open time (fire-and-forget background thread)
-    to clean up any bookmarks left over from prior sessions.
+    Called at PrippiHome open time (fire-and-forget background thread), but
+    throttled to once per 24h via a marker file: it is SELECT+DELETE+commit on
+    Kodi's main MyVideos.db — flash I/O we should not pay at EVERY open. The
+    per-play cleanup (_clear_kodi_resume) still covers in-session bookmarks.
     """
     try:
         import glob as _glob
         import os   as _os
         import sqlite3 as _sqlite3
+        import time as _time
+
+        marker = _os.path.join(config.get_data_path(), '.vixnuke_last')
+        try:
+            if _os.path.exists(marker) and (_time.time() - _os.path.getmtime(marker)) < 86400:
+                logger.info('[CW] startup nuke: throttled (<24h), skipping')
+                return
+        except Exception:
+            pass
+
+        def _touch(path):
+            try:
+                with open(path, 'a'):
+                    pass
+                _os.utime(path, None)
+            except Exception:
+                pass
 
         db_dir = xbmc.translatePath('special://database/')
         dbs = _glob.glob(_os.path.join(db_dir, 'MyVideos*.db'))
@@ -5140,6 +5151,7 @@ def _nuke_all_vixcloud_bookmarks():
             ).fetchall()
             if not id_rows:
                 logger.info('[CW] startup nuke: no vixcloud files found, skipping')
+                _touch(marker)
                 return
             id_list = [r[0] for r in id_rows]
             placeholders = ','.join('?' * len(id_list))
@@ -5148,6 +5160,7 @@ def _nuke_all_vixcloud_bookmarks():
             conn.commit()
             logger.info('[CW] startup nuke: cleared vixcloud bookmarks=%d files=%d'
                         % (c1.rowcount, c2.rowcount))
+            _touch(marker)
         finally:
             conn.close()
     except Exception as exc:
@@ -6085,11 +6098,6 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
                 val = _trailer_cache.get(tid)
                 if val:
                     it.infoLabels['trailer'] = val
-
-
-def _fetch_videos_for_rows(_ignored):
-    """Deprecated stub — replaced by _fetch_trailers_small."""
-    pass
 
 
 def _row_content_type(label):
