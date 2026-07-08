@@ -116,6 +116,92 @@ def _update_channels_json():
         logger.error('[channels_update] errore aggiornamento channels.json: %s' % str(e))
 
 
+def _prune_tmdb_cache():
+    """Potatura giornaliera di db.sqlite (v2 FASE 9c): elimina le voci
+    tmdb_cache più vecchie di 30 giorni e compatta il file con VACUUM quando
+    lo spazio libero interno supera gli 8MB. Il DB era arrivato a ~100MB/18k
+    voci senza mai essere potato: su flash lenta ogni lettura lo paga.
+
+    Protezioni: marker file <24h = skip (schedule.every().day da solo non
+    scatterebbe mai su box spente la notte); attesa iniziale per non competere
+    col boot; rispetta tmdb_cache_expire==4 ('no expire' scelto dall'utente:
+    niente potatura, solo VACUUM); VACUUM tollerante a SQLITE_BUSY (riprova
+    domani). WAL (FASE 4) è compatibile con VACUUM senza transazioni concorrenti.
+    """
+    import time as _time
+
+    marker = os.path.join(config.get_data_path(), '.tmdb_prune_last')
+    try:
+        if os.path.exists(marker) and (_time.time() - os.path.getmtime(marker)) < 86400:
+            return
+    except Exception:
+        pass
+
+    # Non competere con il boot di Kodi/addon (fetch home, ecc.)
+    if xbmc.Monitor().waitForAbort(120):
+        return
+
+    pruned = 0
+    try:
+        no_expire = str(config.get_setting('tmdb_cache_expire', default=2)) == '4'
+        if not no_expire:
+            cutoff = datetime.datetime.now() - datetime.timedelta(days=30)
+            stale = []
+            n = 0
+            for k, v in db['tmdb_cache'].iteritems():
+                n += 1
+                if n % 500 == 0:
+                    xbmc.sleep(0)   # cortesia sul GIL per ARM
+                try:
+                    if isinstance(v, (list, tuple)) and len(v) > 1 and v[1] < cutoff:
+                        stale.append(k)
+                except Exception:
+                    continue
+            for k in stale:
+                try:
+                    del db['tmdb_cache'][k]
+                    pruned += 1
+                except Exception:
+                    pass
+                if pruned % 500 == 0:
+                    xbmc.sleep(0)
+        logger.info('[tmdb_prune] voci esaminate ok, potate %d (no_expire=%s)'
+                    % (pruned, no_expire))
+    except Exception:
+        logger.error('[tmdb_prune] potatura: ' + traceback.format_exc())
+
+    # VACUUM condizionale con connessione raw (fuori da SqliteDict)
+    try:
+        import sqlite3
+        from core import db_name as _db_path
+        conn = sqlite3.connect(_db_path, timeout=30)
+        conn.isolation_level = None
+        try:
+            conn.execute('PRAGMA busy_timeout=30000')
+            freelist = conn.execute('PRAGMA freelist_count').fetchone()[0]
+            page_size = conn.execute('PRAGMA page_size').fetchone()[0]
+            free_mb = freelist * page_size / (1024.0 * 1024.0)
+            if free_mb > 8:
+                size_before = os.path.getsize(_db_path)
+                conn.execute('VACUUM')
+                logger.info('[tmdb_prune] VACUUM: %.1fMB liberi recuperati, file %d -> %d byte'
+                            % (free_mb, size_before, os.path.getsize(_db_path)))
+            else:
+                logger.info('[tmdb_prune] VACUUM saltato (liberi %.1fMB <= 8MB)' % free_mb)
+        finally:
+            conn.close()
+    except Exception as exc:
+        # SQLITE_BUSY (home aperta che scrive) o altro: riprova domani
+        logger.info('[tmdb_prune] VACUUM rimandato: %s' % str(exc)[:120])
+
+    try:
+        with open(marker, 'a'):
+            pass
+        os.utime(marker, None)
+    except Exception:
+        pass
+
+
 class AddonMonitor(xbmc.Monitor):
     def __init__(self):
         self.settings_pre = config.get_all_settings_addon()
@@ -334,6 +420,11 @@ if __name__ == "__main__":
     schedule.every().day.do(run_threaded, _update_channels_json, ()).tag('channels_update')
     # Also run once at startup (in background, non-blocking)
     run_threaded(_update_channels_json, ())
+
+    # Potatura giornaliera db.sqlite (v2 FASE 9c); il marker interno fa da vero
+    # rate-limiter, la run al boot copre le box spente la notte.
+    schedule.every().day.do(run_threaded, _prune_tmdb_cache, ()).tag('tmdb_prune')
+    run_threaded(_prune_tmdb_cache, ())
 
     # ── Addon update notification ──
     # Show the CUMULATIVE release notes (every version the user hasn't seen yet,
