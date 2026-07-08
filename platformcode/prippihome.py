@@ -22,6 +22,18 @@ from platformcode import skyepg
 PY3 = sys.version_info[0] >= 3
 
 _cache = {'data': None, 'ts': 0}
+
+
+def _cache_put(d, key, val, cap=400):
+    """Scrittura con tetto per le cache module-level senza scadenza: con
+    reuselanguageinvoker (F6) il processo persiste tra i click e questi dict
+    crescerebbero all'infinito. Eviction FIFO (i dict Py3.7+ sono ordinati)."""
+    if key not in d and len(d) >= cap:
+        try:
+            d.pop(next(iter(d)))
+        except (StopIteration, KeyError):
+            pass
+    d[key] = val
 _CACHE_TTL = 1800   # 30 minutes
 
 # ── Snapshot su disco delle righe home (v2 FASE 3) ───────────────────────────
@@ -171,7 +183,7 @@ def _fetch_cw_backdrops(tmdb_id, ctype):
     except Exception as exc:
         logger.error('[CW preload] backdrops fetch %s: %s' % (tmdb_id, str(exc)[:80]))
     with _cw_backdrops_lock:
-        _cw_backdrops_cache[key] = urls
+        _cache_put(_cw_backdrops_cache, key, urls)
     return urls
 # Token counter used to cancel stale home-hero plot-fetch threads when focus moves fast.
 _hero_plot_token = 0
@@ -2146,14 +2158,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                             pass
                     return
                 # Reserve slot so parallel threads skip this item
-                _plot_it_cache[tid] = ''
+                _cache_put(_plot_it_cache, tid, '')
                 try:
                     it_ov = _get_it_overview(tid, ctype)
                     if not it_ov or _shutdown_event.is_set():
                         # Clear the sentinel so the next focus can retry
                         _plot_it_cache.pop(tid, None)
                         return
-                    _plot_it_cache[tid] = it_ov
+                    _cache_put(_plot_it_cache, tid, it_ov)
                     item.infoLabels['plot'] = it_ov
                     # Only update the hero control if this token is still current
                     if token == _hero_plot_token:
@@ -6088,7 +6100,7 @@ def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20):
 
     # Store results in module cache and apply to items
     for tid, val in results.items():
-        _trailer_cache[tid] = val
+        _cache_put(_trailer_cache, tid, val)
 
     found = sum(1 for v in results.values() if v)
     logger.info('[PrippiHome trailers] done: %d/%d got trailer (cache size: %d)'
@@ -7019,11 +7031,11 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             it_overview = _plot_it_cache.get(tmdb_id) or ''
             if not it_overview:
                 # Mark as in-progress to prevent duplicate fetches from parallel threads
-                _plot_it_cache[tmdb_id] = ''
+                _cache_put(_plot_it_cache, tmdb_id, '')
                 # Use _get_it_overview which detects TMDB English fallback and translates
                 it_overview = _get_it_overview(tmdb_id, ctype, it_data=data)
                 if it_overview:
-                    _plot_it_cache[tmdb_id] = it_overview
+                    _cache_put(_plot_it_cache, tmdb_id, it_overview)
             if it_overview and not self._close_requested:
                 # Persist Italian plot back to the item so home hero shows it after returning
                 try:
