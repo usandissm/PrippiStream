@@ -1024,34 +1024,37 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     pass
             return config.get_setting(key) is False
 
-        # Offline Downloads row — reserved right after CW so it always sits at a
-        # fixed, easy-to-find position. When empty it auto-collapses (hidden);
-        # _refresh_dl_row() reveals/updates it in place as downloads arrive.
+        # SLOT FISSI PER IDENTITÀ: le 5 righe speciali occupano SEMPRE gli slot
+        # 0-4 (CW=2000, Download=2010, SKY=2020, Sport=2030, TV=2040), anche
+        # quando spente da setting o vuote: restano in rows_data con [] (il
+        # gruppo si nasconde e lo spazio collassa), così le righe successive
+        # NON slittano e ogni riga mantiene il SUO controllo XML — i 5 slot
+        # sono tutti type="list" (non ciclici), le wraplist partono dallo slot 5.
         try:
-            if not _row_hidden('show_downloads_row'):
-                self.rows_data.append((_DL_ROW_LABEL, _build_dl_items()))
+            _dl_items = [] if _row_hidden('show_downloads_row') else (_build_dl_items() or [])
         except Exception as exc:
             logger.error('[PrippiHome] downloads row build: %s' % str(exc))
+            _dl_items = []
+        self.rows_data.append((_DL_ROW_LABEL, _dl_items))
 
-        # Live-channel rows (SKY, Sport Live, then TV) — right after CW.  Items play
-        # directly on click (handled in onClick), never opening DetailWindow.
-        # Each row can be hidden via settings; hidden rows are STILL probed in the
-        # background (_refresh_live_rows runs all three), so re-enabling one shows
-        # it instantly with channels already cached.
+        # Live-channel rows (SKY, Sport Live, then TV).  Items play directly on
+        # click (handled in onClick), never opening DetailWindow. Le righe spente
+        # restano comunque probate in background (_refresh_live_rows), così
+        # riattivarle le mostra all'istante con i canali già in cache.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
         for _row_key in ('sky', 'sport', 'tv'):
-            if _row_hidden(_row_toggle[_row_key]):
-                continue   # hidden by user (still loaded in background)
-            try:
-                _ch_items = sportchannels.build_items(_row_key)
-                # Always add the row (even if empty) so the label stays visible.
-                self.rows_data.append((sportchannels.row_label(_row_key), _ch_items or []))
-                # Prefetch "now on air" for any disk-cached online channels so the
-                # hero shows EPG immediately on first focus (refresh updates later).
-                if _ch_items:
-                    self._prefetch_live_epg(_ch_items)
-            except Exception as exc:
-                logger.error('[PrippiHome] %s row build: %s' % (_row_key, str(exc)))
+            _ch_items = []
+            if not _row_hidden(_row_toggle[_row_key]):
+                try:
+                    _ch_items = sportchannels.build_items(_row_key) or []
+                    # Prefetch "now on air" for any disk-cached online channels so
+                    # the hero shows EPG immediately on first focus.
+                    if _ch_items:
+                        self._prefetch_live_epg(_ch_items)
+                except Exception as exc:
+                    logger.error('[PrippiHome] %s row build: %s' % (_row_key, str(exc)))
+                    _ch_items = []
+            self.rows_data.append((sportchannels.row_label(_row_key), _ch_items))
 
         # Index right after the live block (SKY, Sport, TV) — the 4K row inserts
         # here so it never splits Sport from TV (TV must stay right after Sport).
@@ -1097,9 +1100,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             xbmc.sleep(80)
             for i in range(min(6, self._num_rows)):
                 self._populate_single_row(i)
-            first_row_fid = ROW_WRAPLIST_BASE if cw_items else ROW_WRAPLIST_BASE + ROW_STEP
-            self._update_hero(0 if cw_items else 1)
-            self.setFocusId(first_row_fid)
+            # Focus e hero sulla PRIMA riga non vuota: con gli slot riservati
+            # (CW/Download/SKY/Sport/TV sempre presenti, anche vuoti/nascosti)
+            # la riga 1 può essere un gruppo nascosto — mai focalizzarlo.
+            first_idx = 0
+            for n, (_lbl, _its) in enumerate(self.rows_data[:self._num_rows]):
+                if _its:
+                    first_idx = n
+                    break
+            self._update_hero(first_idx)
+            self.setFocusId(ROW_WRAPLIST_BASE + first_idx * ROW_STEP)
         try:
             from platformcode import perf
             perf.note('home.mem_mb', '%s (al paint)' % xbmc.getInfoLabel('System.Memory(used)'))
@@ -1712,6 +1722,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 sportchannels._mem_cache[row_key]['ts'] = time.time()
                 sportchannels._save_disk_cache(row_key, fresh)
                 logger.info('[Sport] %s list refreshed: %d channels' % (row_key, len(fresh)))
+            # Riga spenta dall'utente: le cache sopra restano aggiornate (per la
+            # riattivazione istantanea) ma la riga NON va rivelata a schermo.
+            # Lettura FRESCA del setting (regola live-settings Kodi 21).
+            try:
+                _tgl = {'sky': 'show_sky_row', 'sport': 'show_sport_row',
+                        'tv': 'show_tv_row'}[row_key]
+                if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool(_tgl) is False:
+                    return
+            except Exception:
+                pass
             label = sportchannels.row_label(row_key)
             idx = None
             with self._rows_lock:
@@ -2605,13 +2625,18 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 # Populate the first rows now; the rest fill on scroll, as at first paint.
                 for i in range(min(6, self._num_rows)):
                     self._populate_single_row(i)
-                has_cw = bool(self.rows_data and self.rows_data[0][1])
+                # Prima riga NON vuota (gli slot riservati possono essere nascosti).
+                first_idx = 0
+                for n, (_lbl, _its) in enumerate(self.rows_data[:self._num_rows]):
+                    if _its:
+                        first_idx = n
+                        break
                 # Only grab focus if the settings dialog is already closed, so we don't
                 # steal focus from it mid-edit; otherwise Kodi restores home focus on close.
                 if not xbmc.getCondVisibility('Window.IsActive(addonsettings)'):
                     try:
-                        self.setFocusId(ROW_WRAPLIST_BASE if has_cw else ROW_WRAPLIST_BASE + ROW_STEP)
-                        self._update_hero(0 if has_cw else 1)
+                        self.setFocusId(ROW_WRAPLIST_BASE + first_idx * ROW_STEP)
+                        self._update_hero(first_idx)
                     except Exception:
                         pass
                 logger.info('[PrippiHome] live re-render done: %d rows' % self._num_rows)
@@ -3501,6 +3526,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Rebuild the Downloads row in place (it is reserved after CW at load)."""
         try:
             dl_items = _build_dl_items()
+            # Riga spenta dal setting: resta al suo slot ma vuota/nascosta
+            # (lettura fresca, regola live-settings Kodi 21).
+            try:
+                if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool(
+                        'show_downloads_row') is False:
+                    dl_items = []
+            except Exception:
+                pass
             idx = None
             with self._rows_lock:
                 for i, (lbl, _items) in enumerate(self.rows_data):

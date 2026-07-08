@@ -819,12 +819,14 @@
                     <label></label>
                     <align>left</align>
                 </control>
-                <control type="wraplist" id="2040">
+                <!-- slot 4 = riga TV live (slot FISSI per identità: CW=2000, Download=2010,
+                     SKY=2020, Sport=2030, TV=2040 — sempre, anche se vuoti/nascosti).
+                     type=list non ciclica come SKY/Sport; le wraplist partono da 2050. -->
+                <control type="list" id="2040">
                     <left>0</left><top>54</top>
                     <width>1920</width><height>450</height>
-                    <viewtype>wrap</viewtype>
                     <orientation>horizontal</orientation>
-                    <scrolltime tween="cubic" easing="out">200</scrolltime>
+                    <scrolltime tween="cubic" easing="out">80</scrolltime>
                 <itemlayout height="450" width="278">
                     <control type="image">
                         <left>6</left><top>3</top>
