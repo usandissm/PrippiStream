@@ -1,4 +1,4 @@
-## Prossima
+## 1.5.7
 - Risolto il caricamento continuo (buffering) che poteva comparire quando partiva in automatico l'episodio successivo di una serie, su alcune TV box Android.
 - Risolta la lingua di audio e sottotitoli che, guardando più episodi di fila, dopo qualche episodio tornava a quella predefinita.
 - Piccole correzioni ai dettagli dei film (trama, anno, valutazione).
