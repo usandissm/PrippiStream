@@ -1,3 +1,8 @@
+## Prossima
+- Risolto il caricamento continuo (buffering) che poteva comparire quando partiva in automatico l'episodio successivo di una serie, su alcune TV box Android.
+- Risolta la lingua di audio e sottotitoli che, guardando più episodi di fila, dopo qualche episodio tornava a quella predefinita.
+- Piccole correzioni ai dettagli dei film (trama, anno, valutazione).
+
 ## 1.5.6
 - Download più affidabile: se interrompi uno scaricamento, riprende da dove si era fermato invece di ricominciare da capo.
 - "Invia Log allo Sviluppatore" (Impostazioni › Supporto) ora funziona: con un tasto il log arriva direttamente allo sviluppatore.

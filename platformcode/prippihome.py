@@ -211,7 +211,18 @@ class _LivePlayer(xbmc.Player):
         self.playback_error = True
 
 
-def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20):
+# Generation counter coordinating the per-play global-locale language override
+# across autoplay episode chains. Each _pre_play_set_lang that actually changes
+# the global locale bumps it; a restore thread only restores the ORIGINAL locale
+# if it is still the latest generation (i.e. no newer episode has taken over).
+# Without this, the restore thread of episode N fires at the N→N+1 autoplay
+# boundary (or attaches to N+1's playback and fires at its end) and clobbers the
+# next episode's language — the "audio reverts to default after 2-3 episodes" bug.
+_lang_gen = 0
+_lang_gen_lock = threading.Lock()
+
+
+def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20, gen=None):
     """Keep the temporary locale settings active for the ENTIRE playback duration,
     then restore the originals.
 
@@ -248,6 +259,18 @@ def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20):
 
     except Exception as exc:
         logger.error('[CW] _restore_lang_after_av_started (wait): %s' % str(exc))
+
+    # If a newer play/episode superseded us (autoplay chain), DO NOT restore:
+    # the newer _pre_play_set_lang now owns the global locale, and restoring the
+    # old default here would clobber the next episode's language — the exact
+    # "language reverts to default after a few episodes" bug. Only the latest
+    # generation (the episode the user actually stopped on) restores.
+    if gen is not None:
+        with _lang_gen_lock:
+            if gen != _lang_gen:
+                logger.info('[CW] lang restore skipped: superseded (gen %s != current %s)'
+                            % (gen, _lang_gen))
+                return
 
     # Restore global settings — always, outside the try so it's guaranteed
     try:
@@ -345,14 +368,59 @@ def _pre_play_set_lang(item):
             logger.info('[CW] pre-play sub: %s → %s' % (orig_sub, slang))
 
         if orig_audio is not None or orig_sub is not None:
+            # Claim the latest language generation so a restore thread from a
+            # previous (autoplay) episode sees a newer generation and skips its
+            # restore instead of clobbering this episode's language.
+            with _lang_gen_lock:
+                global _lang_gen
+                _lang_gen += 1
+                my_gen = _lang_gen
             t = threading.Thread(
                 target=_restore_lang_after_av_started,
-                args=(orig_audio, orig_sub))
+                args=(orig_audio, orig_sub),
+                kwargs={'gen': my_gen})
             t.daemon = True
             t.start()
 
     except Exception as exc:
         logger.error('[CW] _pre_play_set_lang: %s' % str(exc))
+
+
+def _await_player_teardown(player, settle_ms=2000, max_wait_ms=4000):
+    """Block until the current player has FULLY released its decoder before the
+    next (autoplay) episode is launched.
+
+    On weak Android/Amlogic boxes the hardware MediaCodec video instance is freed
+    ASYNCHRONOUSLY after stop()/playback end. Launching the next episode too soon
+    leaves the new decoder contending with the still-alive old instance
+    ("InstanceGuard locked" → could not open video codec), so the new stream
+    starts with a corrupted pipeline: persistent A/V desync + stalls that look
+    exactly like network buffering (the network is fine). A manual restart works
+    only because the user happened to wait long enough.
+
+    Poll until playback has stopped, then wait an extra settle window for the
+    codec/surface to be released. Costs ~1.5-2 s between episodes; removes the
+    back-to-back autoplay buffering. Only runs on the autoplay path — manual and
+    single plays are unaffected.
+    """
+    try:
+        if player.isPlaying():
+            try:
+                player.stop()
+            except Exception:
+                pass
+        waited = 0
+        while waited < max_wait_ms:
+            try:
+                if not player.isPlaying():
+                    break
+            except Exception:
+                break
+            xbmc.sleep(100)
+            waited += 100
+    except Exception:
+        pass
+    xbmc.sleep(settle_ms)
 
 
 # Label for the Continue Watching row (must match what _refresh_cw_row checks).
@@ -2935,12 +3003,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         if cw_key and total_time > 60:
                             watch_history.remove(cw_key)
                             cw_key = None
-                        try:
-                            if player.isPlaying():
-                                player.stop()
-                                xbmc.sleep(600)
-                        except Exception:
-                            pass
+                        # Fully release the old decoder before starting the next
+                        # episode (weak Android boxes buffer otherwise).
+                        _await_player_teardown(player)
                         _pre_play_set_lang(_overlay_np_item)
                         xbmc.executebuiltin(
                             'RunPlugin(plugin://plugin.video.prippistream/?%s)'
@@ -2972,12 +3037,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         if cw_key and total_time > 60:
                             watch_history.remove(cw_key)
                             cw_key = None
-                        try:
-                            if player.isPlaying():
-                                player.stop()
-                                xbmc.sleep(600)
-                        except Exception:
-                            pass
+                        # Fully release the old decoder before starting the next
+                        # episode (weak Android boxes buffer otherwise).
+                        _await_player_teardown(player)
                         _pre_play_set_lang(_overlay_np_item)
                         xbmc.executebuiltin(
                             'RunPlugin(plugin://plugin.video.prippistream/?%s)'
@@ -3013,7 +3075,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     cw_key = None
                 if not self._alive or monitor.abortRequested():
                     return
-                xbmc.sleep(800)
+                # Fully release the old decoder before starting the next episode
+                # (weak Android boxes buffer otherwise).
+                _await_player_teardown(player)
                 _pre_play_set_lang(_overlay_np_item)
                 xbmc.executebuiltin(
                     'RunPlugin(plugin://plugin.video.prippistream/?%s)'
@@ -3083,6 +3147,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     logger.error('[UpNext] fallback overlay: %s' % str(exc))
                     result = 'play'  # default to play on error
                 if result == 'play':
+                    # Fully release the old decoder before starting the next
+                    # episode (weak Android boxes buffer otherwise).
+                    _await_player_teardown(player)
                     _pre_play_set_lang(np_item)
                     xbmc.executebuiltin(
                         'RunPlugin(plugin://plugin.video.prippistream/?%s)'
@@ -5029,7 +5096,9 @@ def _item_to_li(item):
     li.setProperty('genre',        str(item.infoLabels.get('genre') or ''))
     # setInfo MUST run BEFORE setResumePoint: in Kodi 21 setInfo internally
     # re-initialises the VideoInfoTag, wiping any previously set resume point.
-    info_type = 'movie' if getattr(item, 'contentType', '') == 'movie' else 'video'
+    # The only valid types are video/music/pictures/game: anything else (e.g.
+    # 'movie') makes Kodi discard the whole call with a warning.
+    info_type = 'video'
     info_dict = {}
     for _k in ('title', 'year', 'plot', 'rating', 'votes', 'genre',
                'director', 'cast', 'runtime', 'season', 'episode', 'tvshowtitle'):
