@@ -26,18 +26,6 @@ android {
         // Chaquopy: ABI del telefono (Samsung A16 = arm64). Aggiungi armeabi-v7a
         // per device vecchi. NON usare x86 salvo emulatore.
         ndk { abiFilters += listOf("arm64-v8a") }
-
-        python {
-            // Deve combaciare con una versione supportata da Chaquopy (3.8–3.12).
-            version = "3.11"
-            pip {
-                // Dipendenze native/veloci prese da pip (Chaquopy ha i wheel):
-                install("requests")
-                install("pycryptodome")   // ← rende i download veloci (download_crypto lo preferisce)
-                // cloudscraper e altre le abbiamo già in engine/lib/, ma se preferisci pip:
-                // install("cloudscraper")
-            }
-        }
     }
 
     buildFeatures {
@@ -54,6 +42,17 @@ android {
     // Chaquopy prende automaticamente src/main/python come sorgente Python.
     packaging {
         resources.excludes += setOf("META-INF/*", "**/*.md", "**/*.txt")
+    }
+}
+
+// Config Chaquopy (Kotlin DSL): blocco separato, NON dentro android.defaultConfig.
+chaquopy {
+    defaultConfig {
+        version = "3.11"     // versione Python (supportata da Chaquopy)
+        pip {
+            install("requests")
+            install("pycryptodome")   // AES veloce -> download rapidi (download_crypto lo preferisce)
+        }
     }
 }
 
