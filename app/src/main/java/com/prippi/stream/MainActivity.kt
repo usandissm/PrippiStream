@@ -45,7 +45,14 @@ private fun Screen() {
     fun run(block: suspend () -> Unit) {
         scope.launch {
             loading = true; status = ""
-            try { block() } catch (e: Exception) { status = "Errore: ${e.message}" }
+            try {
+                block()
+            } catch (e: Exception) {
+                // Logga l'errore COMPLETO (con traceback Python di Chaquopy) in Logcat,
+                // tag "Prippi", così è visibile filtrando i log.
+                android.util.Log.e("Prippi", "errore chiamata motore", e)
+                status = "Errore: ${e.message}"
+            }
             loading = false
         }
     }
