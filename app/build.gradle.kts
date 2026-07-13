@@ -8,7 +8,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
     id("com.chaquo.python")
 }
 
@@ -39,6 +38,12 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 
+    // Compose compiler abbinato a Kotlin 1.9.24 (con Kotlin 1.9 si usa questo,
+    // non il plugin compose che serve solo a Kotlin 2.0).
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
+    }
+
     // Chaquopy prende automaticamente src/main/python come sorgente Python.
     packaging {
         resources.excludes += setOf("META-INF/*", "**/*.md", "**/*.txt")
@@ -57,7 +62,7 @@ chaquopy {
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.2")
