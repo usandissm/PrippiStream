@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema base: framework Android (nessuna dipendenza extra). La grafica vera
+         la fa Compose (MaterialTheme). NoActionBar per non avere doppia barra. -->
+    <style name="Theme.PrippiStream" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
