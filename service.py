@@ -345,6 +345,13 @@ if __name__ == "__main__":
             logpush.start()
         except Exception:
             logger.error('logpush: ' + traceback.format_exc())
+        # Probe della LINEA (latenza/DNS/velocita' su endpoint neutri) per
+        # distinguere nei log "rete lenta/bloccata" da "codice lento".
+        try:
+            from platformcode import netdiag
+            netdiag.start()
+        except Exception:
+            logger.error('netdiag: ' + traceback.format_exc())
 
     if config.get_setting('autostart'):
         xbmc.executebuiltin('RunAddon(plugin.video.' + config.PLUGIN_NAME + ')')
