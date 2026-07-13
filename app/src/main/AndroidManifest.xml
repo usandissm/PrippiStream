@@ -11,7 +11,7 @@
         android:label="PrippiStream"
         android:icon="@android:drawable/sym_def_app_icon"
         android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.Material3.DynamicColors.DayNight"
+        android:theme="@style/Theme.PrippiStream"
         android:supportsRtl="true">
 
         <activity
@@ -29,6 +29,6 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize"
             android:screenOrientation="sensorLandscape"
-            android:theme="@style/Theme.Material3.DynamicColors.DayNight" />
+            android:theme="@style/Theme.PrippiStream" />
     </application>
 </manifest>

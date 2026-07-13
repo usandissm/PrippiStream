@@ -12,8 +12,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // Wheel Python precompilati di Chaquopy (pycryptodome ecc.)
-        maven { url = uri("https://chaquo.com/pypi-13.1") }
     }
 }
 rootProject.name = "PrippiStreamApp"
