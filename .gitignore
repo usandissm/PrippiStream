@@ -1,0 +1,15 @@
+# Python runtime/data del test PC
+.appdata/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Android / Gradle
+.gradle/
+build/
+/local.properties
+/.idea/
+*.iml
+.cxx/
+/app/release/
+/captures/

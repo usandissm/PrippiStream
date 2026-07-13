@@ -1,0 +1,352 @@
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------
+# Canale per StreamingCommunity
+# ------------------------------------------------------------
+
+import json, re, sys
+PY3 = False
+if sys.version_info[0] >= 3: PY3 = True
+
+if PY3: import urllib.parse as urllib_parse
+else: import urlparse as urllib_parse
+
+from core import support, channeltools, httptools, jsontools
+from platformcode import logger, config
+
+if sys.version_info[0] >= 3:
+    from concurrent import futures
+else:
+    from concurrent_py2 import futures
+
+# streamingcommunity.codes blocca connessioni non-browser, redirect via JS puro.
+# Il dominio viene aggiornato automaticamente tramite daily sync di channels.json.
+host = config.get_channel_url()
+
+
+def findhost(url):
+    """Best-effort runtime re-discovery of the current SC domain.
+
+    Follows redirects from the seed URL (the old domain usually 301/302s to the
+    new one when SC moves). Returns scheme+host only; falls back to the seed
+    (never empty) so callers always get a usable host.
+    """
+    try:
+        resp = httptools.downloadpage(url, follow_redirects=True, verify=False)
+        final = (getattr(resp, 'url', '') or '').rstrip('/')
+        if final:
+            from core import scrapertools as _st
+            dom = _st.get_domain_from_url(final)
+            if dom:
+                return 'https://' + dom
+    except Exception:
+        pass
+    return url.rstrip('/')
+
+
+def _refresh_host():
+    """Re-discover the SC domain on a fetch failure and self-heal the module host.
+
+    Primary host stays the cron-updated `direct` value; this only kicks in when a
+    request comes back empty (domain moved between daily syncs). Mirrors the
+    AnimeUnity pattern. Returns True if the host changed.
+    """
+    global host
+    try:
+        new_host = config.get_channel_url(findhost, name='streamingcommunity',
+                                          forceFindhost=True)
+        if new_host and new_host.rstrip('/') != (host or '').rstrip('/'):
+            logger.info('[SC] host re-discovered: %s' % new_host)
+            host = new_host
+            return True
+    except Exception as exc:
+        logger.error('[SC] host refresh failed: %s' % str(exc))
+    return False
+
+# def getHeaders(forced=False):
+#     global headers
+#     global host
+#     if not headers:
+#         # try:
+#         headers = {'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.8.1.14) Gecko/20080404 Firefox/2.0.0.14'}
+#         response = httptools.downloadpage(host, headers=headers)
+#         # if not response.url.startswith(host):
+#         #     host = support.config.get_channel_url(findhost, forceFindhost=True)
+#         csrf_token = support.match(response.data, patron='name="csrf-token" content="([^"]+)"').match
+#         headers = {'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.8.1.14) Gecko/20080404 Firefox/2.0.0.14',
+#                     # 'content-type': 'application/json;charset=UTF-8',
+#                     'Referer': host,
+#                     'x-csrf-token': csrf_token,
+#                     'Cookie': '; '.join([x.name + '=' + x.value for x in response.cookies])}
+        # except:
+        #     host = support.config.get_channel_url(findhost, forceFindhost=True)
+        #     if not forced: getHeaders(True)
+
+# getHeaders()
+
+@support.menu
+def mainlist(item):
+    film=['/it/movies',
+          ('Aggiunti di recente',['/it/movies','peliculas',1]),
+          ('Top 10 film di oggi',['/it/movies','peliculas',2])]
+    tvshow=['/it/tv-shows',
+            ('Aggiunti di recente', ['/it/tv-shows', 'peliculas', 1]),
+            ('Top 10 serie TV di oggi', ['/it/tv-shows', 'peliculas', 2])]
+    generi = [('Generi', ['','genres'])]
+    menu = [
+        ('Archivio', ['/it/archive', 'peliculas', -1]),
+	('Archivio Film {submenu}', ['/it/archive?type=movie', 'peliculas', -1]),
+    ('Archivio Serie TV {submenu}', ['/it/archive?type=tv', 'peliculas', -1]),
+    ('Archivio per data aggiornamento {submenu}', ['/it/archive?sort=last_air_date', 'peliculas', -1]),
+	('Archivio per data aggiunta {submenu}', ['/it/archive?sort=created_at', 'peliculas', -1]),
+	('Archivio per valutazione {submenu}', ['/it/archive?sort=score', 'peliculas', -1]),
+	('Archivio per numero visioni {submenu}', ['/it/archive?sort=views', 'peliculas', -1]),
+	('Archivio per nome {submenu}', ['/it/archive?sort=name', 'peliculas', -1])
+    ]
+    search=''
+    return locals()
+
+
+def get_data(url):
+    raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
+    # Self-heal: empty page usually means the SC domain moved. Re-discover via
+    # findhost, rebuild the URL against the new host and retry once.
+    if not raw and _refresh_host():
+        try:
+            old_dom = support.scrapertools.get_domain_from_url(url)
+            new_dom = support.scrapertools.get_domain_from_url(host)
+            if old_dom and new_dom and old_dom != new_dom:
+                url = url.replace(old_dom, new_dom)
+        except Exception:
+            pass
+        raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
+    return jsontools.load(support.scrapertools.decodeHtmlentities(raw))
+
+
+def genres(item):
+    # getHeaders()
+    # logger.debug()
+    itemlist = []
+    data_page = get_data(item.url)
+    args = data_page['props']['genres']
+
+    for arg in args:
+        itemlist.append(item.clone(title=support.typo(arg['name'], 'bold'), url=host+'/it/archive?genre[]='+str(arg['id']), action='peliculas', genre=True))
+    support.thumb(itemlist, genre=True)
+    return itemlist
+
+
+def search(item, text):
+    logger.debug('search', text)
+    item.search = True
+    item.url = host + '/it/search?q=' + text
+
+    try:
+        return peliculas(item)
+    # Continua la ricerca in caso di errore
+    except:
+        import sys
+        for line in sys.exc_info():
+            logger.error(line)
+        return []
+
+
+def newest(category):
+    logger.debug(category)
+    itemlist = []
+    item = support.Item()
+    item.args = 1
+    item.newest = True
+    if category == 'peliculas':
+        item.contentType = 'movie'
+        item.url = host + '/it/movies'
+    else:
+        item.contentType = 'tvshow'
+        item.url = host + '/it/tv-shows'
+
+    try:
+        itemlist = peliculas(item)
+
+        if itemlist[-1].action == 'peliculas':
+            itemlist.pop()
+    # Continua la ricerca in caso di errore
+    except:
+        import sys
+        for line in sys.exc_info():
+            logger.error(line)
+        return []
+
+    return itemlist
+
+
+def peliculas(item):
+    logger.debug()
+    if item.mainThumb: item.thumbnail = item.mainThumb
+    global host
+    itemlist = []
+    items = []
+    recordlist = []
+    page = item.page if item.page else 0
+    data_page = get_data(item.url)
+
+    if item.records:
+        records = item.records
+    elif item.genre or item.search or (item.args and item.args == -1):
+        records = data_page['props']['titles']
+    else:
+        if not item.args:
+            item.args = 0
+        records = data_page['props']['sliders'][item.args]['titles']
+
+    if records and type(records[0]) == list:
+        js = []
+        for record in records:
+            js += record
+    else:
+        js = records
+
+    for i, it in enumerate(js):
+        if i < 20:
+            items.append(it)
+        else:
+            recordlist.append(it)
+
+    # itlist = [makeItem(i, it, item) for i, it in enumerate(items)]
+
+    with futures.ThreadPoolExecutor() as executor:
+        itlist = [executor.submit(makeItem, i, it, item) for i, it in enumerate(items)]
+        for res in futures.as_completed(itlist):
+            if res.result():
+                itemlist.append(res.result())
+
+    itemlist.sort(key=lambda item: item.n)
+    if not item.newest:
+        item.mainThumb = item.thumbnail
+        if recordlist:
+            itemlist.append(item.clone(action='peliculas',title=support.typo(support.config.get_localized_string(30992), 'color std bold'), thumbnail=support.thumb(), page=page, records=recordlist))
+        elif len(itemlist) >= 20:
+            itemlist.append(item.clone(action='peliculas',title=support.typo(support.config.get_localized_string(30992), 'color std bold'), thumbnail=support.thumb(), records=[], page=page + 1))
+
+    support.tmdb.set_infoLabels_itemlist(itemlist, seekTmdb=True)
+    support.check_trakt(itemlist)
+    return itemlist
+
+
+def makeItem(n, it, item):
+    logger.debug(it)
+    title = it['name']
+    lang = 'Sub-ITA' if it.get('sub_ita', 0) == 1 else 'ITA'
+    itm = item.clone(title=support.typo(title,'bold') + support.typo(lang,'_ [] color std bold'))
+    itm.contentType = it['type'].replace('tv', 'tvshow')
+    itm.language = lang
+    if it['last_air_date']:
+        itm.year = it['last_air_date'].split('-')[0]
+
+    if itm.contentType == 'movie':
+        # itm.contentType = 'movie'
+        itm.fulltitle = itm.show = itm.contentTitle = title
+        itm.action = 'findvideos'
+        itm.url = host + '/it/watch/%s' % it['id']
+
+    else:
+        # itm.contentType = 'tvshow'
+        itm.contentTitle = ''
+        itm.fulltitle = itm.show = itm.contentSerieName = title
+        itm.action = 'episodios'
+        itm.season_count = it['seasons_count']
+        itm.url = host + '/it/titles/%s-%s' % (it['id'], it['slug'])
+    itm.n = n
+    return itm
+
+
+# South Korea country id in the SC archive (used by the K-Drama category).
+KOREA_COUNTRY_ID = 118
+
+
+def archive_total(url):
+    """Return the total title count for an archive URL (filters in the URL).
+    One lightweight page-1 fetch; no item building / TMDB enrichment."""
+    try:
+        sep = '&' if '?' in url else '?'
+        dp = get_data('%s%spage=1' % (url, sep))
+        return int(((dp or {}).get('props', {}) or {}).get('totalCount', 0) or 0)
+    except Exception as exc:
+        logger.error('[SC] archive_total: %s' % str(exc)[:120])
+        return 0
+
+
+def browse(item):
+    """Archive pagination for the category browser.
+
+    item.url already carries the filters (type, genre[], country[]); item.page is
+    1-based. SC serves 60 titles/page sorted by release_date (newest first).
+    Returns (itemlist_enriched, total_count). Reuses makeItem + TMDB enrichment so
+    items behave exactly like normal SC results (play/detail unchanged).
+    """
+    page = item.page if item.page else 1
+    sep = '&' if '?' in item.url else '?'
+    data_page = get_data('%s%spage=%d' % (item.url, sep, page))
+    props = (data_page or {}).get('props', {}) if isinstance(data_page, dict) else {}
+    records = props.get('titles', []) or []
+    try:
+        total = int(props.get('totalCount', 0) or 0)
+    except Exception:
+        total = 0
+    seed = item.clone(records=[], page=0)   # clean seed for makeItem clones
+    itemlist = []
+    with futures.ThreadPoolExecutor() as executor:
+        futs = [executor.submit(makeItem, i, it, seed) for i, it in enumerate(records)]
+        for res in futures.as_completed(futs):
+            if res.result():
+                itemlist.append(res.result())
+    itemlist.sort(key=lambda x: x.n)
+    if itemlist:
+        support.tmdb.set_infoLabels_itemlist(itemlist, seekTmdb=True)
+    return itemlist, total
+
+
+def episodios(item):
+    # getHeaders()
+    logger.debug()
+    itemlist = []
+
+    data_page = get_data(item.url)    
+    seasons = data_page['props']['title']['seasons']
+    # episodes = data_page['props']['loadedSeason']['episodes']
+    # support.dbg()
+
+    for se in seasons:
+        data_page = get_data(item.url + '/season-' + str(se['number']))
+        episodes = data_page['props']['loadedSeason']['episodes']
+
+        for ep in episodes:
+            itemlist.append(
+                item.clone(title=support.typo(str(se['number']) + 'x' + str(ep['number']).zfill(2) + ' - ' + support.cleantitle(ep['name']), 'bold'),
+                           episode=ep['number'],
+                           season=se['number'],
+                           contentSeason=se['number'],
+                           contentEpisodeNumber=ep['number'],
+                           thumbnail=ep['images'][0].get('original_url', item.thumbnail) if ep['images'] else item.thumbnail,
+                           contentThumbnail=item.thumbnail,
+                           fanart=item.fanart,
+                           contentFanart=item.fanart,
+                           plot=ep['plot'],
+                           action='findvideos',
+                           contentType='episode',
+                           contentSerieName=item.fulltitle,
+                           url='{}/it/iframe/{}?episode_id={}'.format(host, se['title_id'], ep['id'])))
+
+    if config.get_setting('episode_info') and not support.stackCheck(['add_tvshow', 'get_newest']):
+        support.tmdb.set_infoLabels_itemlist(itemlist, seekTmdb=True)
+    support.check_trakt(itemlist)
+    support.videolibrary(itemlist, item)
+    #support.download(itemlist, item)
+    return itemlist
+
+
+def findvideos(item):
+    support.callAds('https://thaudray.com/5/3523301', host)
+
+    itemlist = [item.clone(title=channeltools.get_channel_parameters(item.channel)['title'],
+                           url=item.url.replace('/watch/', '/iframe/'), server='streamingcommunityws')]
+    return support.server(item, itemlist=itemlist, referer=False)
+
