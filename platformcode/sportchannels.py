@@ -478,11 +478,35 @@ def _mandra_ua():
     return "MandraKodi2@@%s@@@@%s" % (_MANDRA_VERSION, _device_id())
 
 
+def _urlopen_lax(req, timeout=15):
+    """urlopen che RITENTA senza verifica del certificato se le CA di SISTEMA
+    non bastano.
+
+    I box Android datati hanno un trust store vecchio e falliscono con
+    CERTIFICATE_VERIFY_FAILED sulle catene recenti. Sulla box di test questo
+    rendeva offline TUTTI i canali daddy (e diversi SKY), mentre il resto
+    dell'addon funzionava: le altre richieste passano da httptools/requests,
+    che usa il bundle certifi IMPACCHETTATO NELL'ADDON invece delle CA di
+    sistema. Qui si scaricano manifest pubblici: non c'e' nulla da proteggere.
+    """
+    try:
+        return urlopen(req, timeout=timeout)
+    except Exception as exc:
+        if 'CERTIFICATE_VERIFY_FAILED' not in str(exc):
+            raise
+        import ssl
+        logger.info('[Sport] CA di sistema obsolete: ritento senza verifica (%s)'
+                    % getattr(req, 'full_url', '')[:80])
+        return urlopen(req, timeout=timeout, context=ssl._create_unverified_context())
+
+
 def _http_get(url, headers=None, timeout=15):
     try:
-        resp = urlopen(Request(url, headers=headers or {}), timeout=timeout)
-        data = resp.read()
-        resp.close()
+        resp = _urlopen_lax(Request(url, headers=headers or {}), timeout=timeout)
+        try:
+            data = resp.read()
+        finally:
+            resp.close()
         if isinstance(data, bytes):
             data = data.decode('utf-8', 'replace')
         return data
@@ -699,7 +723,7 @@ def _hls_playable(url, headers, timeout=6):
     try:
         h = dict(headers or {})
         h['Range'] = 'bytes=0-1'
-        resp = urlopen(Request(seg, headers=h), timeout=timeout)
+        resp = _urlopen_lax(Request(seg, headers=h), timeout=timeout)
         code = resp.getcode()
         resp.read(2)
         resp.close()
@@ -1005,7 +1029,7 @@ def _keepalive_loop(stop_event):
     base = _BACKEND.rsplit('/filter.php', 1)[0] + '/'
     while not stop_event.wait(timeout=_KEEPALIVE_INTERVAL):
         try:
-            resp = urlopen(Request(base, headers={'User-Agent': _mandra_ua()}), timeout=10)
+            resp = _urlopen_lax(Request(base, headers={'User-Agent': _mandra_ua()}), timeout=10)
             resp.close()
             logger.debug('[Sport] keepalive ping OK')
         except Exception as exc:
@@ -1129,8 +1153,8 @@ def _mpd_alive(man):
     whole UI (the 'crash' the user saw).  A short HEAD-like GET catches it so we
     can fail fast / fall back instead."""
     try:
-        resp = urlopen(Request(man, headers={'User-Agent': _NOWTV_UA,
-                                             'Referer': _NOWTV_HOST + '/'}), timeout=6)
+        resp = _urlopen_lax(Request(man, headers={'User-Agent': _NOWTV_UA,
+                                                  'Referer': _NOWTV_HOST + '/'}), timeout=6)
         code = resp.getcode()
         resp.close()
         return code == 200
