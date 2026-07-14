@@ -1,41 +1,15 @@
+# PrippiStream: il supporto ES6 di js2py (babel.py, ~3.8 MB di transpiler
+# Babel incorporato) e' stato rimosso per alleggerire l'addon. Nessun
+# canale/server usa eval_js6/translate_js6 (solo eval_js/EvalJs ES5).
+# Per ripristinarlo: recuperare js2py/es6/babel.py dal pacchetto js2py
+# upstream e ripristinare questo file.
+
 INITIALISED = False
 babel = None
 babelPresetEs2015 = None
 
 
 def js6_to_js5(code):
-    global INITIALISED, babel, babelPresetEs2015
-    if not INITIALISED:
-        import signal, warnings, time
-        warnings.warn(
-            '\nImporting babel.py for the first time - this can take some time. \nPlease note that currently Javascript 6 in Js2Py is unstable and slow. Use only for tiny scripts!'
-        )
-
-        from .babel import babel as _babel
-        babel = _babel.Object.babel
-        babelPresetEs2015 = _babel.Object.babelPresetEs2015
-
-        # very weird hack. Somehow this helps babel to initialise properly!
-        try:
-            babel.transform('warmup', {'presets': {}})
-            signal.alarm(2)
-
-            def kill_it(a, b):
-                raise KeyboardInterrupt('Better work next time!')
-
-            signal.signal(signal.SIGALRM, kill_it)
-            babel.transform('stuckInALoop', {
-                'presets': babelPresetEs2015
-            }).code
-            for n in range(3):
-                time.sleep(1)
-        except:
-            print("Initialised babel!")
-        INITIALISED = True
-    return babel.transform(code, {'presets': babelPresetEs2015}).code
-
-
-if __name__ == '__main__':
-    print(js6_to_js5('obj={}; obj.x = function() {return () => this}'))
-    print()
-    print(js6_to_js5('const a = 1;'))
+    raise NotImplementedError(
+        'js2py ES6/babel support was removed from PrippiStream to reduce addon size. '
+        'Restore lib/js2py/es6/babel.py from upstream js2py if needed.')

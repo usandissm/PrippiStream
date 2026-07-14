@@ -557,8 +557,8 @@ ROW_WRAPLIST_BASE  = 2000
 ROW_LABEL_BASE     = 3000   # category label above each row
 ROW_LEFT_BASE      = 4000   # left arrow button per row
 ROW_RIGHT_BASE     = 4001   # right arrow button per row
-ROW_OVERLAY_BASE   = 5000   # transparent mouse-blocker overlay per row
-HOVER_BOX_BASE     = 6000   # hover-frame group per row (moved by setPosition)
+ROW_OVERLAY_BASE   = 5000   # ex overlay bloccamouse (ora disattivato: _disable_mouse_overlays)
+HOVER_BOX_BASE     = 6000   # ex finta cornice-hover (ora disattivata: _disable_mouse_overlays)
 ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
 ROW_STEP           = 10
 # SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
@@ -608,6 +608,53 @@ ACTION_WHEEL_UP     = 104
 ACTION_WHEEL_DOWN   = 105
 ACTION_MOUSE_MOVE   = 107
 ACTION_CONTEXT_MENU = 117
+
+# ── Touch (telefono/tablet) ──────────────────────────────────
+# Id azione che nascono SOLO da un touchscreen: tap/long-press diretti (4xx)
+# e gesti del recognizer (5xx: begin/pan/swipe/end). Mouse e telecomando non
+# li generano mai, quindi il primo che arriva marchia il dispositivo come
+# touch — persistito, perché al riavvio il long-press può essere il PRIMO
+# evento ricevuto e la protezione deve già essere attiva.
+# Id verificati sul campo con [TouchProbe] (telefono, Kodi 21): gli swipe sono
+# 511/521/531/541 (NON 511-514); il pan 504 arriva a onAction con le
+# COORDINATE ASSOLUTE del dito in spazio skin, begin=501, end=599 (amt 0,0).
+ACTION_TOUCH_TAP           = 401
+ACTION_TOUCH_LONGPRESS     = 411
+ACTION_GESTURE_BEGIN       = 501
+ACTION_GESTURE_PAN         = 504
+ACTION_GESTURE_SWIPE_LEFT  = 511
+ACTION_GESTURE_SWIPE_RIGHT = 521
+ACTION_GESTURE_SWIPE_UP    = 531
+ACTION_GESTURE_SWIPE_DOWN  = 541
+ACTION_GESTURE_END         = 599
+_TOUCH_ACTION_IDS = frozenset(range(400, 420)) | frozenset(range(500, 600))
+
+# Pan verticale: pixel di corsa del dito per uno scatto di riga. Le righe sono
+# alte 320/522 in spazio skin 1080: ~190px = segue il dito senza sembrare nervoso.
+_PAN_ROW_STEP_PX = 190
+
+_touch_mode_cache = [None]   # None = non ancora letto dal setting
+
+
+def _is_touch_mode():
+    if _touch_mode_cache[0] is None:
+        try:
+            _touch_mode_cache[0] = bool(config.get_setting('touch_device', default=False))
+        except Exception:
+            _touch_mode_cache[0] = False
+    return _touch_mode_cache[0]
+
+
+def _note_touch_action(aid):
+    """Da chiamare a inizio onAction: al primo id touch attiva (e persiste)
+    la modalità touch. Costo per azione: un lookup in frozenset."""
+    if aid in _TOUCH_ACTION_IDS and not _is_touch_mode():
+        _touch_mode_cache[0] = True
+        try:
+            config.set_setting('touch_device', True)
+            logger.info('[Touch] touchscreen rilevato: modalità touch attiva (persistita)')
+        except Exception:
+            pass
 
 # ── Search window control IDs ────────────────────────────────
 SEARCH_BTN_HOME     = 109   # search button in PrippiHome top bar
@@ -969,11 +1016,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self._hero_nav_token = 0  # debounce token for deferred hero updates on keyboard nav
         self._load_full_w = 0     # cached loading-track width (resolution-independent bar)
         self._populated = set()  # track which row indices have had addItems() called
-        self._hover_slot = {}    # row_idx -> last slot (throttle guard)
-        self._hover_base = {}    # row_idx -> wraplist selectedPosition when mouse entered
-        self._hover_item = {}    # row_idx -> item index last hovered by mouse
-        self._hover_box_row = -1  # row whose hover-frame is currently visible
+        self._hover_last = (-1, -1)      # (riga, pos) dell'ultimo hero disegnato: throttle mouse/touch
+        self._mouse_overlays_off = False  # overlay bloccamouse già neutralizzati
         self._rows_lock = threading.Lock()  # protects rows_data + _num_rows extension
+        # Rende atomico il check+add di _populated (onFocus vs populater bg).
+        self._populate_lock = threading.Lock()
+        # Sonda azioni touch nel log (vedi onAction) — attiva solo nelle build
+        # di test insieme al resto della diagnostica (setting perf_log).
+        self._probe = bool(config.get_setting('perf_log', default=False))
+        self._probe_n = 0
+        # Pan-tracking touch: [x0, y0, y dell'ultimo scatto, asse 'v'/'h'/None]
+        self._pan_state = None
         # Cleared while a modal dialog is open — background thread must NOT modify the UI
         self._bg_ui_pause = threading.Event()
         self._bg_ui_pause.set()   # initially NOT paused
@@ -1015,6 +1068,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self.setCoordinateResolution(3)  # 1920x1080
         except Exception:
             pass
+        # Mouse/touch e frecce devono muovere la STESSA selezione: spegne il
+        # vecchio overlay bloccamouse + finta cornice-hover (vedi il metodo).
+        self._disable_mouse_overlays()
         # Reflect the real installed version into the read-only settings field, so
         # "Versione installata" in settings is always current (the release CI bumps
         # addon.xml automatically). Only write when it actually changed.
@@ -1211,6 +1267,12 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             perf.note('home.mem_mb', '%s (al paint)' % xbmc.getInfoLabel('System.Memory(used)'))
         except Exception:
             pass
+        # Touch: riempi il resto delle righe nei momenti di quiete, altrimenti
+        # scorrendo col dito (che NON sposta il focus) si trovano righe nere.
+        if self._alive:
+            _tpop = threading.Thread(target=self._bg_populate_all_rows)
+            _tpop.daemon = True
+            _tpop.start()
         # Preload the DetailWindow fanart-slideshow backdrops for CW items (URLs +
         # Kodi texture cache) so opening a CW card shows them with no delay.
         if cw_items and self._alive:
@@ -2084,8 +2146,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def _populate_single_row(self, i):
         """Populate wraplist for row i. Safe to call multiple times (no-op if already done)."""
-        if i in self._populated or i >= len(self.rows_data):
-            return
+        # check+add atomici: il populater in background (_bg_populate_all_rows)
+        # può correre in parallelo a onFocus sulla stessa riga; senza lock la
+        # wraplist riceverebbe addItems due volte (tile duplicate).
+        with self._populate_lock:
+            if i in self._populated or i >= len(self.rows_data):
+                return
+            self._populated.add(i)
         wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
         lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
         cat_name, items = self.rows_data[i]
@@ -2103,11 +2170,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     self.getControl(lbl_id).setVisible(False)
                 except Exception:
                     pass
-            self._populated.add(i)
             return
-        # Mark populated BEFORE addItems so that onFocus re-entrant calls
-        # see this row as already done and skip it.
-        self._populated.add(i)
         try:
             logger.info('[PrippiHome] populate row %d "%s": %d items, first=%s' % (
                 i, cat_name, len(items), (items[0].fulltitle if items else '-')))
@@ -2135,6 +2198,61 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             lbl.setLabel('[B]%s[/B]' % cat_name.upper())
         except Exception as exc:
             logger.error('[PrippiHome] populate row %d label: %s' % (i, str(exc)))
+
+    def _bg_populate_all_rows(self):
+        """Riempie TUTTE le righe in background dopo il primo paint.
+
+        Sul touch la grouplist scorre col dito SENZA spostare il focus, quindi
+        il lazy-populate di onFocus non scatta mai per le righe più sotto: si
+        vedeva solo sfondo nero finché non si toccava una riga (bug telefono).
+        Priorità alle righe VICINE alla vista (riordino ogni 6 righe), pausa
+        breve se l'utente sta navigando (0,7s max: meglio una riga popolata
+        durante lo scroll che una riga nera), mai durante play/dialoghi.
+        Esce quando tutte le righe sono piene e stabili (archive+anime arrivati).
+        """
+        xbmc.sleep(400)           # respiro minimo dopo il primo paint
+        stable = 0
+        while self._alive and not _shutdown_event.is_set():
+            missing = [i for i in range(self._num_rows)
+                       if i not in self._populated]
+            if not missing:
+                stable += 1
+                if stable >= 15:  # nessuna riga nuova da ~30s → build completa
+                    logger.info('[PrippiHome] bg populate: all %d rows done'
+                                % self._num_rows)
+                    return
+                xbmc.sleep(2000)
+                continue
+            stable = 0
+            missing.sort(key=lambda i: abs(i - self._last_focused_row))
+            for i in missing[:6]:     # max 6 per giro, poi ri-prioritizza
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                self._bg_ui_pause.wait(timeout=10)  # mai durante play/dialoghi
+                self._nav_idle.wait(timeout=0.7)    # pausa BREVE se si naviga
+                self._populate_single_row(i)
+                xbmc.sleep(25)
+
+    def _touch_row_step(self, delta):
+        """Scatto di UNA riga dal touch (pan-tracking o flick): come la rotella
+        ma senza loop-back — col dito, al bordo ci si aspetta che si fermi.
+        Skippa le righe vuote/nascoste nella direzione del movimento."""
+        step = 1 if delta > 0 else -1
+        new_row = self._last_focused_row + step
+        while (0 <= new_row < min(self._num_rows, len(self.rows_data)) and
+               not self.rows_data[new_row][1]):
+            new_row += step
+        if not (0 <= new_row < self._num_rows and new_row < len(self.rows_data)):
+            return                    # bordo raggiunto
+        wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+        try:
+            self.getControl(wl_id)
+        except Exception:
+            return                    # slot XML inesistente
+        self._populate_single_row(new_row)
+        self.setFocusId(wl_id)
+        self._last_focused_row = new_row
+        self._schedule_hero(new_row)
 
     def _schedule_hero(self, row_idx):
         """Defer the hero refresh until Kodi has settled the wraplist selection.
@@ -2309,20 +2427,63 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             t.start()
 
     def _row_from_fid(self, fid):
-        """Returns row index if fid is a wraplist or overlay for that row, else -1."""
+        """Indice della riga se fid è la sua lista, altrimenti -1."""
         for i in range(self._num_rows):
-            if fid in (ROW_WRAPLIST_BASE + i * ROW_STEP, ROW_OVERLAY_BASE + i * ROW_STEP):
+            if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
                 return i
         return -1
 
-    def _hide_hover_box(self, row_idx):
-        """Move hover-frame off-screen for the given row."""
-        try:
-            # ROW 00 (CW) uses wider cards (370px) → park further left
-            off_x = -400 if row_idx == 0 else -278
-            self.getControl(HOVER_BOX_BASE + row_idx * ROW_STEP).setPosition(off_x, 54)
-        except Exception:
-            pass
+    def _row_from_nav_fid(self, fid):
+        """Come _row_from_fid, ma riconosce anche i bottoni freccia < > della riga.
+
+        Col mouse fermo su una di quelle frecce il focus sta sul bottone (non
+        sulla lista) e l'XML non definisce <onup>/<ondown>: senza questo su/giù
+        resterebbero morti finché non si sposta il puntatore su una card.
+        """
+        i = self._row_from_fid(fid)
+        if i >= 0:
+            return i
+        for i in range(self._num_rows):
+            if fid in (ROW_LEFT_BASE + i * ROW_STEP, ROW_RIGHT_BASE + i * ROW_STEP):
+                return i
+        return -1
+
+    def _disable_mouse_overlays(self):
+        """Spegne il vecchio sistema di hover parallelo del mouse.
+
+        Prima c'erano DUE modelli di selezione indipendenti: la wraplist (mossa
+        dalle frecce, con la sua focusedlayout) e, sopra di essa, un bottone
+        trasparente "bloccamouse" (5000+) che intercettava il puntatore, più una
+        finta cornice-hover (6000+) spostata a mano. I due andavano fuori
+        sincrono (due riquadri accesi, hero e click sulla card sbagliata) perché
+        l'indice del mouse era `posizione_selezionata_all'ingresso + slot`, e la
+        posizione selezionata NON è l'indice della prima card visibile.
+
+        Rendendo invisibili quei controlli il mouse/tocco arriva direttamente
+        alla wraplist, che muove la SUA selezione: frecce, mouse e dito
+        condividono così un'unica sorgente di verità (getSelectedPosition).
+        """
+        if self._mouse_overlays_off:
+            return
+        self._mouse_overlays_off = True
+        for i in range(MAX_ROWS):
+            for base in (ROW_OVERLAY_BASE, HOVER_BOX_BASE):
+                try:
+                    c = self.getControl(base + i * ROW_STEP)
+                except Exception:
+                    continue   # riga non presente nello skin
+                try:
+                    c.setVisible(False)
+                except Exception:
+                    # fallback: parcheggia fuori schermo (vecchio comportamento)
+                    try:
+                        c.setPosition(-400, 54)
+                    except Exception:
+                        pass
+                try:
+                    c.setEnabled(False)
+                except Exception:
+                    pass
 
     def onFocus(self, control_id):
         """Fires when a control gains focus — always on the Kodi GUI thread."""
@@ -2365,42 +2526,109 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         i = self._row_from_fid(control_id)
         if i >= 0:
-            # Keyboard navigation to a different row: hide old hover frame
-            if self._hover_box_row >= 0 and self._hover_box_row != i:
-                self._hide_hover_box(self._hover_box_row)
-                self._hover_box_row = -1
             self._last_focused_row = i
             for j in range(max(0, i-1), min(self._num_rows, i+4)):
                 self._populate_single_row(j)
-            # Snapshot wraplist position when mouse enters this row overlay
-            if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
-                try:
-                    sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                    self._hover_base[i] = max(0, sel)
-                except Exception:
-                    self._hover_base[i] = 0
-                self._hover_slot[i] = -1
-                self._hover_item[i] = None
-            else:
-                # Wraplist focused by keyboard: clear mouse-hover state so
-                # _hero_item() uses wraplist selectedPosition instead.
-                self._hover_item[i] = None
-                self._hide_hover_box(i)
-                self._hover_box_row = -1
             self._schedule_hero(i)
-        else:
-            # Focus moved outside the rows (to hero buttons, EXIT…): hide hover frame
-            if self._hover_box_row >= 0:
-                self._hide_hover_box(self._hover_box_row)
-                self._hover_box_row = -1
 
     def onAction(self, action):
         aid = action.getId()
+        _note_touch_action(aid)
+        # Sonda diagnostica touch (solo build di test, setting perf_log): logga
+        # ogni azione NON-mouse-move per capire cosa genera davvero il telefono
+        # (long-press, swipe sui poster, ...). Da spegnere col revert diagnostica.
+        # I pan (504) arrivano a raffica (~60/s): campionati 1 su 20.
+        if self._probe and aid != ACTION_MOUSE_MOVE:
+            self._probe_n += 1
+            if aid != ACTION_GESTURE_PAN or self._probe_n % 20 == 0:
+                try:
+                    logger.info('[TouchProbe] aid=%d amt=(%.0f,%.0f) fid=%s'
+                                % (aid, action.getAmount1(), action.getAmount2(),
+                                   self.getFocusId()))
+                except Exception:
+                    pass
+
+        # ── Touch: pan-tracking, il dito guida le righe ──────────────────
+        # Il pan (504) arriva a onAction con le coordinate assolute del dito
+        # ANCHE quando il gesto parte sopra una wraplist (che nativamente ne
+        # consuma solo l'asse orizzontale). Qui l'asse dominante del gesto
+        # decide: verticale → uno scatto di riga ogni _PAN_ROW_STEP_PX di
+        # corsa, DURANTE il trascinamento (animazione grouplist 220ms);
+        # orizzontale → non si interferisce col pan nativo pixel-perfetto
+        # della riga. Costo per evento: due float e un confronto.
+        if aid == ACTION_GESTURE_PAN:
+            self._mark_nav()
+            st = self._pan_state
+            if st is None:
+                # begin perso (finestra appena aperta): aggancia da qui
+                st = self._pan_state = [action.getAmount1(), action.getAmount2(),
+                                        action.getAmount2(), None]
+                return
+            x, y = action.getAmount1(), action.getAmount2()
+            if st[3] is None:
+                dx0, dy0 = abs(x - st[0]), abs(y - st[1])
+                if max(dx0, dy0) >= 40:          # asse deciso dopo 40px di corsa
+                    st[3] = 'v' if dy0 > dx0 else 'h'
+            if st[3] == 'v':
+                dy = y - st[2]
+                if abs(dy) >= _PAN_ROW_STEP_PX:
+                    st[2] = y
+                    # dito verso il basso = righe precedenti (contenuto scende)
+                    self._touch_row_step(-1 if dy > 0 else +1)
+            return
+        if aid == ACTION_GESTURE_BEGIN:
+            self._mark_nav()
+            self._pan_state = [action.getAmount1(), action.getAmount2(),
+                               action.getAmount2(), None]
+            return
+        if aid == ACTION_GESTURE_END:
+            self._pan_state = None
+            return
+        # Flick rapido: Kodi manda lo swipe a fine gesto. Per i gesti corti è
+        # l'unico segnale (il pan non ha superato la soglia); per i lunghi fa
+        # da inerzia (+1 riga). Orizzontali: pan nativo già al lavoro, ignora.
+        if aid == ACTION_GESTURE_SWIPE_UP:
+            self._touch_row_step(+1)
+            return
+        if aid == ACTION_GESTURE_SWIPE_DOWN:
+            self._touch_row_step(-1)
+            return
+        # Long-press su una card (e tap a 2 dita): la keymap touch di Kodi li
+        # emula come CLICK DESTRO, e il click destro non gestito viene tradotto
+        # dal motore GUI in PREVIOUS_MENU (10) → la home si chiudeva ("l'addon
+        # crasha" dal telefono). Sul touch il Back vero è ACTION_BACK (92:
+        # tasto/gesture di sistema Android); il 10 diventa context-menu, che
+        # sui tile Download apre il menu Play/Elimina e altrove non fa nulla.
+        if aid == ACTION_EXIT and _is_touch_mode():
+            aid = ACTION_CONTEXT_MENU
         if aid in (ACTION_EXIT, ACTION_BACK):
             self._alive = False
             self.close()
             return
         self._mark_nav()   # Tier-3: pausa i lavori bg mentre si naviga
+
+        # Altri eventi touch (long-press diretto, swipe orizzontali, gesti
+        # residui): il long-press diventa context-menu, il resto non deve
+        # cadere nei rami successivi.
+        if aid == ACTION_TOUCH_LONGPRESS:
+            aid = ACTION_CONTEXT_MENU
+        elif aid in _TOUCH_ACTION_IDS and aid != ACTION_TOUCH_TAP:
+            return
+
+        # PC con mouse: se all'apertura il puntatore è dentro la finestra su
+        # un'area non focusabile, Kodi (mouse-mode) lascia il focus a NESSUN
+        # controllo e le frecce non fanno nulla finché non si fa hover su una
+        # card. Prima freccia → aggancia la prima riga popolata, da lì la
+        # navigazione prosegue normale. Su TV senza mouse non scatta mai.
+        if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT) and not self.getFocusId():
+            cw_empty = not (self.rows_data and self.rows_data[0][1])
+            new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+            for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                self._populate_single_row(j)
+            self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+            self._last_focused_row = new_row
+            self._schedule_hero(new_row)
+            return
 
         # Context menu (C / long-press) on a download tile → same Play/Delete menu
         # as a left-click (see _show_download_menu).
@@ -2474,7 +2702,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # Full remote-control navigation (onAction replaces XML nav entirely)
         if aid == ACTION_UP:
             fid = self.getFocusId()
-            i = self._row_from_fid(fid)
+            i = self._row_from_nav_fid(fid)
             if i >= 0:
                 if i > 0:
                     new_row = i - 1
@@ -2500,7 +2728,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         if aid == ACTION_DOWN:
             fid = self.getFocusId()
-            i = self._row_from_fid(fid)
+            i = self._row_from_nav_fid(fid)
             if i >= 0:
                 # Check both: more rows in data AND next XML slot actually exists
                 next_xml_exists = False
@@ -2562,65 +2790,55 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self._last_focused_row = new_row
                 self._schedule_hero(new_row)
                 return
-        # Mouse move: compute hovered card slot, update hero + hover frame
+        # Mouse/touch: Kodi muove GIÀ nativamente la selezione della riga sotto
+        # il puntatore/dito (l'overlay che glielo impediva è disattivato in
+        # _disable_mouse_overlays). Qui aggiorniamo solo l'hero, con throttle:
+        # l'evento arriva a raffica ma la card cambia di rado.
         if aid == ACTION_MOUSE_MOVE:
-            fid = self.getFocusId()
-            for i in range(self._num_rows):
-                if fid == ROW_OVERLAY_BASE + i * ROW_STEP:
-                    try:
-                        mx   = int(action.getAmount1())
-                        # action.getAmount1/2 returns physical screen pixels, not skin coords.
-                        # Convert to skin space (skin is 1920px wide for 1080i).
-                        try:
-                            screen_w = xbmcgui.getScreenWidth()
-                            skin_x = mx * 1920 // max(1, screen_w)
-                        except Exception:
-                            skin_x = mx
-                        slot = max(0, min(6, skin_x // 278))
-                        if slot != self._hover_slot.get(i, -1):
-                            self._hover_slot[i] = slot
-                            n_items = len(self.rows_data[i][1]) if i < len(self.rows_data) else 0
-                            if n_items > 0:
-                                base    = self._hover_base.get(i, 0)
-                                raw_idx = base + slot
-                                if raw_idx >= n_items:
-                                    # Ghost slot — hide hover box and do nothing else
-                                    self._hide_hover_box(i)
-                                    self._hover_box_row = -1
-                                    self._hover_item[i] = -1
-                                    return
-                                else:
-                                    new_idx = raw_idx % n_items
-                                    self._hover_item[i] = new_idx
-                                cur_sel = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                                # Move hover-frame to the correct card slot (y=42 = label_h)
-                                if self._hover_box_row >= 0 and self._hover_box_row != i:
-                                    self._hide_hover_box(self._hover_box_row)
-                                try:
-                                    self.getControl(HOVER_BOX_BASE + i * ROW_STEP).setPosition(slot * 278, 54)
-                                    self._hover_box_row = i
-                                except Exception:
-                                    pass
-                                # Update hero directly - wraplist NOT touched, no scroll
-                                self._update_hero(i, pos=new_idx)
-                    except Exception:
-                        pass
-                    return
+            i = self._row_from_fid(self.getFocusId())
+            if i < 0:
+                return
+            try:
+                pos = int(self.getControl(
+                    ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+            except Exception:
+                return
+            if (i, pos) != self._hover_last:
+                self._hover_last = (i, pos)
+                self._last_focused_row = i
+                self._update_hero(i, pos=pos)
             return
 
-        # LEFT/RIGHT on wraplist: native Kodi handles item selection; Python refreshes hero.
-        # On overlay (mouse parked): transfer focus to wraplist for next keypress.
-        # On hero buttons: XML <onleft>/<onright> already handles it — Python stays out.
+        # LEFT/RIGHT sulla riga: la selezione la muove Kodi, Python aggiorna l'hero.
+        # Sui bottoni hero ci pensa l'XML <onleft>/<onright> — Python resta fuori.
         if aid in (ACTION_LEFT, ACTION_RIGHT):
             fid = self.getFocusId()
-            for i in range(self._num_rows):
-                if fid == ROW_OVERLAY_BASE + i * ROW_STEP:
-                    self.setFocusId(ROW_WRAPLIST_BASE + i * ROW_STEP)
+            i = self._row_from_fid(fid)
+            if i < 0:
+                # BORDO RIGA. Le righe sono <list> (non più <wraplist>: quella teneva
+                # per forza l'elemento selezionato a focusposition=0, così il solo
+                # passaggio del mouse faceva scorrere il carosello). Una list, arrivata
+                # al capo, non muove la selezione: Kodi manda il focus al bottone
+                # freccia < o > della riga (<onleft>/<onright> nello skin). Da lì
+                # rientriamo dall'altro capo, ricreando il giro infinito di prima.
+                i = self._row_from_nav_fid(fid)
+                if i < 0:
                     return
-                if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
-                    self._last_focused_row = i
-                    self._schedule_hero(i)
+                items = self.rows_data[i][1] if i < len(self.rows_data) else []
+                if not items:
                     return
+                wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                try:
+                    # selectItem prima del focus: sulla lista non focalizzata la
+                    # posizione regge (stesso trucco dei bottoni freccia in onClick).
+                    self.getControl(wl_id).selectItem(
+                        len(items) - 1 if aid == ACTION_LEFT else 0)
+                    self.setFocusId(wl_id)
+                except Exception:
+                    return
+            self._last_focused_row = i
+            self._hover_last = (-1, -1)   # la selezione cambia: invalida il throttle
+            self._schedule_hero(i)
             return
 
     def _hero_item(self):
@@ -2631,18 +2849,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         _, items = self.rows_data[i]
         if not items:
             return None
-        # Mouse hover takes priority over wraplist keyboard selection.
-        # _hover_item[i] is set by ACTION_MOUSE_MOVE and reflects the card
-        # the user is actually looking at in the hero.
-        pos = self._hover_item.get(i)
-        if pos is None:
-            try:
-                pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                if pos < 0 or pos >= len(items):
-                    pos = 0
-            except Exception:
-                pos = 0
-        elif pos < 0 or pos >= len(items):
+        # Unica sorgente di verità: la selezione della riga, mossa indifferentemente
+        # da frecce, mouse o tocco.
+        try:
+            pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+        except Exception:
+            pos = 0
+        if pos < 0 or pos >= len(items):
             pos = 0
         return items[pos]
 
@@ -2806,25 +3019,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             _open_browse(parent_window=self)
             return
 
-        # ── Overlay button click (mouse click on card) → open detail window ──
-        for i in range(self._num_rows):
-            if control_id == ROW_OVERLAY_BASE + i * ROW_STEP:
-                try:
-                    item_idx = self._hover_item.get(i)
-                    if item_idx is None:
-                        item_idx = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
-                    items = self.rows_data[i][1]
-                    if 0 <= item_idx < len(items):
-                        _it = items[item_idx]
-                        if getattr(_it, 'is_live_channel', False):
-                            self._play_channel_stream(_it, i, item_idx)
-                        elif getattr(_it, 'is_download', False):
-                            self._show_download_menu(_it)
-                        else:
-                            self._open_detail(_it)
-                except Exception as exc:
-                    logger.error('[PrippiHome] overlay click row %d: %s' % (i, str(exc)))
-                return
+        # (Il click del mouse/tap su una card arriva ora direttamente alla riga:
+        #  lo gestisce il ramo "Wraplist item click" in fondo, con la stessa
+        #  posizione selezionata che vedono le frecce.)
 
         # ── Per-row left/right arrow buttons ──
         for i in range(self._num_rows):
@@ -5476,7 +5673,9 @@ def _item_to_li(item):
     li.setProperty('genre',        str(item.infoLabels.get('genre') or ''))
     # setInfo MUST run BEFORE setResumePoint: in Kodi 21 setInfo internally
     # re-initialises the VideoInfoTag, wiping any previously set resume point.
-    info_type = 'movie' if getattr(item, 'contentType', '') == 'movie' else 'video'
+    # The only valid types are video/music/pictures/game: anything else (e.g.
+    # 'movie') makes Kodi discard the whole call with a warning.
+    info_type = 'video'
     info_dict = {}
     for _k in ('title', 'year', 'plot', 'rating', 'votes', 'genre',
                'director', 'cast', 'runtime', 'season', 'episode', 'tvshowtitle'):
@@ -6878,6 +7077,9 @@ class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
 
     def onAction(self, action):
         aid = action.getId()
+        _note_touch_action(aid)
+        if aid == 10 and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
         if aid in (92, 10, xbmcgui.ACTION_STOP,
                    xbmcgui.ACTION_BACKSPACE, xbmcgui.ACTION_PREVIOUS_MENU):
             self._result = 'cancel'
@@ -7927,6 +8129,9 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 # so this first press doesn't also trigger PLAY.
                 self._consume_next_click = True
             return
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._initiate_close()
 
@@ -8301,6 +8506,9 @@ class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
             logger.error('[EpisodePicker] _load_episodes: %s' % str(exc))
 
     def onAction(self, action):
+        _note_touch_action(action.getId())
+        if action.getId() == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
         if action.getId() in (self.ACTION_EXIT, self.ACTION_BACK):
             # Back first closes the open dropdown, only then the whole dialog.
             if self._dd_open:
@@ -8578,6 +8786,9 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
 
     def onAction(self, action):
         aid = action.getId()
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._alive = False
             self._cancelled.set()
@@ -10147,6 +10358,9 @@ class PrippiBrowseWindow(xbmcgui.WindowXML):
 
     def onAction(self, action):
         aid = action.getId()
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
         if aid in (self.ACTION_EXIT, self.ACTION_BACK):
             self._alive = False
             self._cancelled.set()

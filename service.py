@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import ast
 import datetime
 import math
@@ -312,6 +312,47 @@ if __name__ == "__main__":
     except:
         logger.error('Could not install keymap: ' + traceback.format_exc())
 
+    # Archivio log a generazioni: Kodi conserva UNA sola sessione precedente
+    # (kodi.old.log, sovrascritto a ogni avvio). Dopo un crash l'utente spesso
+    # riapre Kodi più di una volta prima di premere "Invia Log" e la sessione
+    # del crash è persa per sempre (successo col crash long-press dal cell).
+    # A ogni avvio salviamo la coda di kodi.old.log in userdata/oldlogs (ring
+    # di 3 sessioni); "Invia Log" le allega al bundle. Costo: una copia ≤1MB
+    # per avvio di Kodi, con dedup se il service riparte senza riavvio.
+    try:
+        _ring_dir = filetools.join(config.get_data_path(), 'oldlogs')
+        if not filetools.isdir(_ring_dir):
+            filetools.mkdir(_ring_dir)
+        _old_src = xbmc.translatePath('special://logpath/kodi.old.log')
+        if filetools.isfile(_old_src):
+            with open(_old_src, 'rb') as _f:
+                _f.seek(0, 2)
+                _sz = _f.tell()
+                _f.seek(max(0, _sz - 1024 * 1024))   # ultimo MB: più che basta
+                _data = _f.read()
+            _ring = lambda n: filetools.join(_ring_dir, 'oldlog_%d.log' % n)
+            # Dedup: il service riparte anche su update addon senza riavvio di
+            # Kodi — stesso old.log, non ri-archiviarlo. Fingerprint = ultimi
+            # 256 byte (la coda è invariante rispetto a quanto si taglia in testa).
+            _dup = False
+            if filetools.isfile(_ring(1)):
+                with open(_ring(1), 'rb') as _f:
+                    _f.seek(0, 2)
+                    _f.seek(max(0, _f.tell() - 256))
+                    _dup = _f.read() == _data[-256:]
+            if _data and not _dup:
+                for _n in (3, 2):    # ruota 2→3, 1→2 (la 3 più vecchia cade)
+                    if filetools.isfile(_ring(_n - 1)):
+                        if filetools.isfile(_ring(_n)):
+                            filetools.remove(_ring(_n))
+                        filetools.rename(_ring(_n - 1), 'oldlog_%d.log' % _n)
+                with open(_ring(1), 'wb') as _f:
+                    _f.write(_data)
+                logger.info('[oldlog ring] sessione precedente archiviata (%d KB)'
+                            % (len(_data) // 1024))
+    except Exception:
+        logger.error('[oldlog ring] ' + traceback.format_exc())
+
     # Force mandatory settings on every startup (new install, update, or existing).
     # These are always overwritten so the user never has to set them manually.
     config.set_setting('autostart', True)       # launch at Kodi start
@@ -345,8 +386,6 @@ if __name__ == "__main__":
             logpush.start()
         except Exception:
             logger.error('logpush: ' + traceback.format_exc())
-        # Probe della LINEA (latenza/DNS/velocita' su endpoint neutri) per
-        # distinguere nei log "rete lenta/bloccata" da "codice lento".
         try:
             from platformcode import netdiag
             netdiag.start()

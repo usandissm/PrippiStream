@@ -42,16 +42,9 @@ cf_proxy_list = [{'url': 'quiet-base-584a.ifewfijdqwji.workers.dev', 'token': 'c
 
 # direct IP access for some hosts
 directIP = {
-    'akki.monster': '31.220.1.77',
-    'akvi.club': '31.220.1.77',
-    'akvi.icu': '31.220.1.77',
-    'akvideo.stream': '31.220.1.77',
     'vcrypt.net': '31.220.1.77',
     'vcrypt.pw': '31.220.1.77',
-    # 'vidtome.host': '94.75.219.1',
     'nored.icu': '31.220.1.77',
-    'wstream.icu': '31.220.1.77',
-    'wstream.video': '31.220.1.77',
     'krask.xyz': '31.220.1.77',
 }
 

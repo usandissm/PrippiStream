@@ -245,8 +245,15 @@ def run(item=None):
             else:
                 platformtools.dialog_ok(config.get_localized_string(60087) % Channel, config.get_localized_string(60014))
         else:
-            if platformtools.dialog_yesno(config.get_localized_string(60038), config.get_localized_string(60015)):
-                platformtools.itemlist_update(Item(channel='setting', action='report_menu'), True)
+            # Errore inatteso: offri l'invio diretto del log via Telegram
+            # (il vecchio flusso report_menu/pastebin è stato rimosso).
+            if platformtools.dialog_yesno(config.get_localized_string(60038),
+                    'Errore inatteso. Vuoi inviare il log allo sviluppatore?'):
+                try:
+                    from specials import setting
+                    setting.send_log_to_dev(item)
+                except Exception:
+                    logger.error(traceback.format_exc())
     finally:
         perf.mark('launcher.run done (%s/%s)' % (item.channel, item.action), _pt)
         # db need to be closed when not used, it will cause freezes
