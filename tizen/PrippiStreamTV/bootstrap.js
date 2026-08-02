@@ -38,11 +38,11 @@
   }
 
   /* SHA-256 sincrono ES5: evita dipendenze da SubtleCrypto sui vecchi TV. */
-  function sha256(text) {
+  function sha256Legacy(text) {
     var ascii = unescape(encodeURIComponent(text));
     var maxWord = Math.pow(2, 32), lengthProperty = 'length', i, j;
     var result = '', words = [], asciiBitLength = ascii[lengthProperty] * 8;
-    var hash = sha256.h = sha256.h || [], k = sha256.k = sha256.k || [];
+    var hash = sha256Legacy.h = sha256Legacy.h || [], k = sha256Legacy.k = sha256Legacy.k || [];
     var primeCounter = k[lengthProperty], isComposite = {};
     for (var candidate = 2; primeCounter < 64; candidate++) {
       if (!isComposite[candidate]) {
@@ -88,6 +88,17 @@
     return result;
   }
 
+  function sha256(text) {
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      return window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buffer) {
+        return Array.prototype.map.call(new Uint8Array(buffer), function (value) {
+          return (value < 16 ? '0' : '') + value.toString(16);
+        }).join('');
+      });
+    }
+    return Promise.resolve(sha256Legacy(text));
+  }
+
   function assetUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
     return MANIFEST_URL.replace(/[^/?#]+(?:[?#].*)?$/, '') + path;
@@ -106,10 +117,12 @@
     return Promise.all(names.map(function (name) {
       var file = manifest.files[name];
       return fetchText(assetUrl(file.url), CHECK_TIMEOUT).then(function (content) {
-        if (sha256(content).toLowerCase() !== String(file.sha256).toLowerCase()) {
-          throw new Error('Firma SHA-256 non valida: ' + name);
-        }
-        return content;
+        return sha256(content).then(function (digest) {
+          if (digest.toLowerCase() !== String(file.sha256).toLowerCase()) {
+            throw new Error('Firma SHA-256 non valida: ' + name);
+          }
+          return content;
+        });
       });
     })).then(function (contents) {
       return {manifest: manifest, html: contents[0], css: contents[1], js: contents[2]};
