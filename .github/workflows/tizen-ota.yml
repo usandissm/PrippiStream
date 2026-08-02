@@ -1,0 +1,34 @@
+name: Publish Tizen OTA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "tizen/PrippiStreamTV/index.html"
+      - "tizen/PrippiStreamTV/main.js"
+      - "tizen/PrippiStreamTV/css/**"
+      - "tizen/PrippiStreamTV/ota-version.json"
+      - "tools/publish_tizen_ota.py"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Build signed OTA manifest
+        run: python tools/publish_tizen_ota.py
+      - name: Publish channel
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/tizen/app
+          git diff --staged --quiet && exit 0
+          git commit -m "Publish Tizen OTA [skip ci]"
+          git push

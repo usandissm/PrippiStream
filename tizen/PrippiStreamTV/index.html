@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920,height=1080,initial-scale=1">
+  <title>PrippiStream</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .brand{display:none}.header{position:relative}.header-logo{position:absolute;left:50%;top:20px;transform:translateX(-50%);width:390px;height:auto;z-index:2}
+    .catalog{grid-template-columns:repeat(6,minmax(0,1fr))}.catalog .card{width:100%!important;min-width:0;min-height:0}.catalog .poster{width:100%;height:auto;aspect-ratio:2/3;background-size:cover}
+    .main{position:fixed;top:0;right:0;bottom:0;left:var(--rail);height:auto}.content{position:relative}.hero{position:sticky;top:0;z-index:8;box-shadow:0 18px 40px rgba(7,17,31,.82)}.card{scroll-margin-top:315px}
+    #html-player{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}.player-ui{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:1;transition:opacity .22s;background:linear-gradient(180deg,rgba(0,0,0,.66) 0,transparent 24%,transparent 55%,rgba(0,0,0,.9) 100%)}.player-ui.hidden{opacity:0}.player-ui.hidden>*{pointer-events:none}.player-ui>*{pointer-events:auto}.player-top{position:absolute;top:32px;left:48px;right:48px;display:flex;align-items:center;justify-content:space-between}.player-top img{width:225px;height:auto}.player-exit{background:rgba(18,27,39,.82)!important;color:#fff!important}.player-controls{position:absolute;left:56px;right:56px;bottom:38px;display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:'buttons meta hint' 'timeline timeline timeline';align-items:center;gap:20px 28px}.player-buttons{grid-area:buttons;display:flex;gap:12px}.player-controls button{min-width:72px;padding:13px 18px;border:3px solid transparent;border-radius:50px;background:rgba(235,243,250,.95);color:#08121f;font-size:20px;font-weight:bold}.player-controls button:focus{border-color:#43d5b8;transform:scale(1.08)}.player-meta-new{grid-area:meta}.player-controls h2{margin:0;font-size:31px}.player-controls p{margin:5px 0 0;color:#d4e0f0;font-size:17px}.player-hint{grid-area:hint;color:#d4e0f0;font-size:16px}.timeline-wrap{grid-area:timeline;display:flex;align-items:center;gap:15px;color:#d4e0f0;font-size:16px}.timeline{height:7px;flex:1;border-radius:5px;background:rgba(184,198,214,.42);overflow:hidden}.timeline span{display:block;width:0;height:100%;background:#43d5b8}
+  </style>
+  <style>.player-ui>.player-controls:not(.player-controls-new){display:none}</style>
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+  <script defer src="bootstrap.js"></script>
+</head>
+<body>
+  <div id="shell">
+    <aside class="rail" aria-label="Navigazione principale">
+      <div class="brand"><img class="brand-logo" src="assets/prippistream_logo_banner.png" alt="PrippiStream"></div>
+      <nav id="navigation">
+        <button data-nav="home" data-focusable>⌂<em>Home</em></button>
+        <button data-nav="search" data-focusable>⌕<em>Cerca</em></button>
+        <button data-nav="browse" data-focusable>▦<em>Sfoglia</em></button>
+        <button data-nav="live" data-focusable>●<em>Live</em></button>
+        <button data-nav="downloads" data-focusable>↓<em>Download</em></button>
+      </nav>
+      <button class="rail-settings" data-nav="settings" data-focusable>⚙<em>Impostazioni</em></button>
+    </aside>
+    <main class="main">
+      <header class="header"><h1 id="page-title">Home</h1><img class="header-logo" src="assets/prippistream_logo_banner.png" alt="PrippiStream"><div id="connection">● Collegamento…</div></header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+  <section id="detail" class="overlay hidden"></section>
+  <section id="player" class="player hidden">
+    <video id="html-player" playsinline></video><object id="avplay" type="application/avplayer"></object><div class="player-shade"></div>
+    <div id="player-ui" class="player-ui">
+      <div class="player-top"><img src="assets/prippistream_logo_banner.png" alt="PrippiStream"><button id="player-exit" class="player-exit" data-focusable>← Esci</button></div>
+      <div class="player-controls player-controls-new"><div class="player-buttons"><button id="player-rewind" data-focusable>−10</button><button id="player-toggle-new" data-focusable>Ⅱ</button><button id="player-forward" data-focusable>+10</button></div><div class="player-meta-new"><h2 id="player-title-new"></h2><p id="player-subtitle-new"></p></div><span class="player-hint"><kbd>OK</kbd> pausa · <kbd>← →</kbd> cerca · <kbd>RETURN</kbd> esci</span><div class="timeline-wrap"><div class="timeline"><span id="player-progress-new"></span></div><span id="player-time-new">LIVE</span></div></div>
+      <div class="player-controls"><div class="timeline-wrap"><div class="timeline"><span id="player-progress"></span></div><span id="player-time">LIVE</span></div><button id="player-toggle" data-focusable>Ⅱ Pausa</button><div><h2 id="player-title"></h2><p id="player-subtitle"></p></div><small><kbd>OK</kbd> pausa/riprendi &nbsp; <kbd>RETURN</kbd> esci</small></div>
+    </div>
+  </section>
+  <div id="toast" role="status"></div>
+</body>
+</html>

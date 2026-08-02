@@ -1,0 +1,27 @@
+<div id="shell">
+    <aside class="rail" aria-label="Navigazione principale">
+      <div class="brand"><img class="brand-logo" src="assets/prippistream_logo_banner.png" alt="PrippiStream"></div>
+      <nav id="navigation">
+        <button data-nav="home" data-focusable>⌂<em>Home</em></button>
+        <button data-nav="search" data-focusable>⌕<em>Cerca</em></button>
+        <button data-nav="browse" data-focusable>▦<em>Sfoglia</em></button>
+        <button data-nav="live" data-focusable>●<em>Live</em></button>
+        <button data-nav="downloads" data-focusable>↓<em>Download</em></button>
+      </nav>
+      <button class="rail-settings" data-nav="settings" data-focusable>⚙<em>Impostazioni</em></button>
+    </aside>
+    <main class="main">
+      <header class="header"><h1 id="page-title">Home</h1><img class="header-logo" src="assets/prippistream_logo_banner.png" alt="PrippiStream"><div id="connection">● Collegamento…</div></header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+  <section id="detail" class="overlay hidden"></section>
+  <section id="player" class="player hidden">
+    <video id="html-player" playsinline></video><object id="avplay" type="application/avplayer"></object><div class="player-shade"></div>
+    <div id="player-ui" class="player-ui">
+      <div class="player-top"><img src="assets/prippistream_logo_banner.png" alt="PrippiStream"><button id="player-exit" class="player-exit" data-focusable>← Esci</button></div>
+      <div class="player-controls player-controls-new"><div class="player-buttons"><button id="player-rewind" data-focusable>−10</button><button id="player-toggle-new" data-focusable>Ⅱ</button><button id="player-forward" data-focusable>+10</button></div><div class="player-meta-new"><h2 id="player-title-new"></h2><p id="player-subtitle-new"></p></div><span class="player-hint"><kbd>OK</kbd> pausa · <kbd>← →</kbd> cerca · <kbd>RETURN</kbd> esci</span><div class="timeline-wrap"><div class="timeline"><span id="player-progress-new"></span></div><span id="player-time-new">LIVE</span></div></div>
+      <div class="player-controls"><div class="timeline-wrap"><div class="timeline"><span id="player-progress"></span></div><span id="player-time">LIVE</span></div><button id="player-toggle" data-focusable>Ⅱ Pausa</button><div><h2 id="player-title"></h2><p id="player-subtitle"></p></div><small><kbd>OK</kbd> pausa/riprendi &nbsp; <kbd>RETURN</kbd> esci</small></div>
+    </div>
+  </section>
+  <div id="toast" role="status"></div>
