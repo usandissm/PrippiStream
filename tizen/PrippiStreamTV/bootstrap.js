@@ -3,8 +3,9 @@
 
   var SHELL_VERSION = '0.3.0';
   var LOCAL_REVISION = 0;
+  var REPO_CONTENTS = 'https://api.github.com/repos/usandissm/PrippiStream/contents/docs/tizen/app/';
   var MANIFEST_URL = localStorage.getItem('prippi.tizen.ota.manifest') ||
-    'https://raw.githubusercontent.com/usandissm/PrippiStream/main/docs/tizen/app/manifest.json';
+    REPO_CONTENTS + 'manifest.json?ref=main';
   var CACHE_KEY = 'prippi.tizen.ota.bundle.v1';
   var ACTIVE_KEY = 'prippi.tizen.ota.active';
   var CHECK_TIMEOUT = 8000;
@@ -34,6 +35,26 @@
         clearTimeout(timer);
         reject(error);
       });
+    });
+  }
+
+  function decodeBase64Utf8(value) {
+    var binary = atob(String(value || '').replace(/\s/g, ''));
+    if (window.TextDecoder) {
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    return decodeURIComponent(escape(binary));
+  }
+
+  function fetchRepositoryText(url, timeout) {
+    return fetchText(url, timeout).then(function (text) {
+      if (url.indexOf('https://api.github.com/repos/') !== 0) return text;
+      var response = JSON.parse(text);
+      if (response.content) return decodeBase64Utf8(response.content);
+      if (response.download_url) return fetchText(response.download_url + '?_=' + Date.now(), timeout);
+      throw new Error('Contenuto GitHub non disponibile');
     });
   }
 
@@ -101,7 +122,7 @@
 
   function assetUrl(path) {
     if (/^https?:\/\//i.test(path)) return path;
-    return MANIFEST_URL.replace(/[^/?#]+(?:[?#].*)?$/, '') + path;
+    return REPO_CONTENTS + path + '?ref=main';
   }
 
   function validateManifest(manifest) {
@@ -116,7 +137,7 @@
     var names = ['html', 'css', 'js'];
     return Promise.all(names.map(function (name) {
       var file = manifest.files[name];
-      return fetchText(assetUrl(file.url), CHECK_TIMEOUT).then(function (content) {
+      return fetchRepositoryText(assetUrl(file.url), CHECK_TIMEOUT).then(function (content) {
         return sha256(content).then(function (digest) {
           if (digest.toLowerCase() !== String(file.sha256).toLowerCase()) {
             throw new Error('Firma SHA-256 non valida: ' + name);
@@ -185,7 +206,7 @@
 
   function fetchManifest() {
     var separator = MANIFEST_URL.indexOf('?') >= 0 ? '&' : '?';
-    return fetchText(MANIFEST_URL + separator + '_=' + Date.now(), CHECK_TIMEOUT)
+    return fetchRepositoryText(MANIFEST_URL + separator + '_=' + Date.now(), CHECK_TIMEOUT)
       .then(function (text) { return validateManifest(JSON.parse(text)); });
   }
 
