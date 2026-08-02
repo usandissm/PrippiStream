@@ -38,7 +38,7 @@ def main() -> None:
     css = read(APP / "css" / "style.css").rstrip() + "\n\n" + "\n\n".join(
         style.strip() for style in inline_styles
     ) + "\n"
-    js = read(APP / "main.js")
+    js = read(APP / "standalone.js").rstrip() + "\n\n" + read(APP / "main.js")
 
     files = {"html": body, "css": css, "js": js}
     names = {"html": "app.html", "css": "app.css", "js": "app.js"}

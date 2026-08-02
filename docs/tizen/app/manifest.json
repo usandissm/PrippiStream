@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "channel": "stable",
-  "version": "0.3.1",
-  "revision": 2,
-  "published_at": "2026-08-02T11:39:46.762972Z",
+  "version": "0.4.0",
+  "revision": 3,
+  "published_at": "2026-08-02T11:52:20.519252Z",
   "files": {
     "html": {
       "url": "app.html",
@@ -15,7 +15,7 @@
     },
     "js": {
       "url": "app.js",
-      "sha256": "dc0b79cf55ff774db7f5752faab0f70ba2569e599bb2463ee89353a9c505e425"
+      "sha256": "2eecf599654bebb7f0c8896503188f7d35095c5da66616981875bccf9266627b"
     }
   }
 }
