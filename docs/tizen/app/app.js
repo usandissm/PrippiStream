@@ -1,3 +1,6 @@
+window.__PRIPPI_LIVE_LOGO_BASE__ = "https://raw.githubusercontent.com/usandissm/PrippiStream/main/docs/tizen/app/logos/";
+window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltitle":"Rai 1","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai1","video_url":"https://www.raiplay.it/dirette/rai1.json","callSign":"","id":"","plot":"","logo":"rai_1.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai 2","fulltitle":"Rai 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai2","video_url":"https://www.raiplay.it/dirette/rai2.json","callSign":"","id":"","plot":"","logo":"rai_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai 3","fulltitle":"Rai 3","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai3","video_url":"https://www.raiplay.it/dirette/rai3.json","callSign":"","id":"","plot":"","logo":"rai_3.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai 4","fulltitle":"Rai 4","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4","video_url":"https://www.raiplay.it/dirette/rai4.json","callSign":"","id":"","plot":"","logo":"rai_4.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai 5","fulltitle":"Rai 5","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai5","video_url":"https://www.raiplay.it/dirette/rai5.json","callSign":"","id":"","plot":"","logo":"rai_5.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Movie","fulltitle":"Rai Movie","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raimovie","video_url":"https://www.raiplay.it/dirette/raimovie.json","callSign":"","id":"","plot":"","logo":"rai_movie.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Premium","fulltitle":"Rai Premium","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raipremium","video_url":"https://www.raiplay.it/dirette/raipremium.json","callSign":"","id":"","plot":"","logo":"rai_premium.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Gulp","fulltitle":"Rai Gulp","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raigulp","video_url":"https://www.raiplay.it/dirette/raigulp.json","callSign":"","id":"","plot":"","logo":"rai_gulp.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Yoyo","fulltitle":"Rai Yoyo","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiyoyo","video_url":"https://www.raiplay.it/dirette/raiyoyo.json","callSign":"","id":"","plot":"","logo":"rai_yoyo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai News 24","fulltitle":"Rai News 24","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rainews24","video_url":"https://www.raiplay.it/dirette/rainews24.json","callSign":"","id":"","plot":"","logo":"rai_news_24.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Storia","fulltitle":"Rai Storia","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raistoria","video_url":"https://www.raiplay.it/dirette/raistoria.json","callSign":"","id":"","plot":"","logo":"rai_storia.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Sport","fulltitle":"Rai Sport","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raisport","video_url":"https://www.raiplay.it/dirette/raisport.json","callSign":"","id":"","plot":"","logo":"rai_sport.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Scuola","fulltitle":"Rai Scuola","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiscuola","video_url":"https://www.raiplay.it/dirette/raiscuola.json","callSign":"","id":"","plot":"","logo":"rai_scuola.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai Radio 2","fulltitle":"Rai Radio 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rairadio2","video_url":"https://www.raiplay.it/dirette/rairadio2.json","callSign":"","id":"","plot":"","logo":"rai_radio_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"Rai 4K","fulltitle":"Rai 4K","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4k","video_url":"https://www.raiplay.it/dirette/rai4k.json","callSign":"","id":"","plot":"","logo":"rai_4k.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"RaiPlay Sport 2","fulltitle":"RaiPlay Sport 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiplaysport2","video_url":"https://www.raiplay.it/dirette/raiplaysport2.json","callSign":"","id":"","plot":"","logo":"rai_sport.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"raiplay","title":"RaiPlay Sport 3","fulltitle":"RaiPlay Sport 3","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiplaysport3","video_url":"https://www.raiplay.it/dirette/raiplaysport3.json","callSign":"","id":"","plot":"","logo":"rai_sport.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"mediasetplay","title":"Rete 4","fulltitle":"Rete 4","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/rete4","video_url":"","callSign":"R4","id":"","plot":"","logo":"rete_4.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/r4.png","is_live_channel":true},{"channel":"mediasetplay","title":"Canale 5","fulltitle":"Canale 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/canale5","video_url":"","callSign":"C5","id":"","plot":"","logo":"canale_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/c5.png","is_live_channel":true},{"channel":"mediasetplay","title":"Italia 1","fulltitle":"Italia 1","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia1","video_url":"","callSign":"I1","id":"","plot":"","logo":"italia_1.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i1.png","is_live_channel":true},{"channel":"mediasetplay","title":"20","fulltitle":"20","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/20mediaset","video_url":"","callSign":"LB","id":"","plot":"","logo":"20.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/20.png","is_live_channel":true},{"channel":"mediasetplay","title":"Iris","fulltitle":"Iris","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/iris","video_url":"","callSign":"KI","id":"","plot":"","logo":"iris.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/iris.png","is_live_channel":true},{"channel":"mediasetplay","title":"La 5","fulltitle":"La 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/la5","video_url":"","callSign":"KA","id":"","plot":"","logo":"la_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la5.png","is_live_channel":true},{"channel":"mediasetplay","title":"Cine34","fulltitle":"Cine34","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/cine34","video_url":"","callSign":"B6","id":"","plot":"","logo":"cine34.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b6.png","is_live_channel":true},{"channel":"mediasetplay","title":"Focus","fulltitle":"Focus","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/focus","video_url":"","callSign":"FU","id":"","plot":"","logo":"focus.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/focus.png","is_live_channel":true},{"channel":"mediasetplay","title":"Top Crime","fulltitle":"Top Crime","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/topcrime","video_url":"","callSign":"LT","id":"","plot":"","logo":"top_crime.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/topcrime.png","is_live_channel":true},{"channel":"mediasetplay","title":"Boing","fulltitle":"Boing","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"KB","id":"","plot":"","logo":"boing.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/kb.png","is_live_channel":true},{"channel":"mediasetplay","title":"Cartoonito","fulltitle":"Cartoonito","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"LA","id":"","plot":"","logo":"cartoonito.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la.png","is_live_channel":true},{"channel":"mediasetplay","title":"Mediaset Extra","fulltitle":"Mediaset Extra","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/mediasetextra","video_url":"","callSign":"KQ","id":"","plot":"","logo":"mediaset_extra.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/extra.png","is_live_channel":true},{"channel":"mediasetplay","title":"Italia 2","fulltitle":"Italia 2","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia2","video_url":"","callSign":"I2","id":"","plot":"","logo":"italia_2.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i2.png","is_live_channel":true},{"channel":"mediasetplay","title":"Radio 105","fulltitle":"Radio 105","contentType":"video","action":"findvideos","url":"https://105.net","video_url":"","callSign":"EC","id":"","plot":"","logo":"radio_105.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ec.png","is_live_channel":true},{"channel":"mediasetplay","title":"R101tv","fulltitle":"R101tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/r101_b7871969","video_url":"","callSign":"ER","id":"","plot":"","logo":"r101tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/er.png","is_live_channel":true},{"channel":"mediasetplay","title":"RMC","fulltitle":"RMC","contentType":"video","action":"findvideos","url":"https://radiomontecarlo.net","video_url":"","callSign":"BB","id":"","plot":"","logo":"rmc.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/bb.png","is_live_channel":true},{"channel":"mediasetplay","title":"Virgin Radio","fulltitle":"Virgin Radio","contentType":"video","action":"findvideos","url":"https://virginradio.it","video_url":"","callSign":"EW","id":"","plot":"","logo":"virgin_radio.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ew.png","is_live_channel":true},{"channel":"mediasetplay","title":"27 Twentyseven","fulltitle":"27 Twentyseven","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/","video_url":"","callSign":"TS","id":"","plot":"","logo":"27_twentyseven.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ts.png","is_live_channel":true},{"channel":"mediasetplay","title":"TGCOM","fulltitle":"TGCOM","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/grandefratello","video_url":"","callSign":"B3","id":"","plot":"","logo":"tgcom.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b3.png","is_live_channel":true},{"channel":"mediasetplay","title":"Radio Norba Tv","fulltitle":"Radio Norba Tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/radio-norba-tv","video_url":"","callSign":"U4","id":"","plot":"","logo":"radio_norba_tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/u4.png","is_live_channel":true},{"channel":"la7","title":"La7","fulltitle":"La7","contentType":"video","action":"findvideos","url":"https://www.la7.it/dirette-tv","video_url":"","callSign":"","id":"","plot":"","logo":"la7.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"la7","title":"La7d","fulltitle":"La7d","contentType":"video","action":"findvideos","url":"https://www.la7.it/live-la7cinema","video_url":"","callSign":"","id":"","plot":"","logo":"la7d.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Real Time","fulltitle":"Real Time","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/real-time","video_url":"","callSign":"","id":"310","plot":"","logo":"real_time.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"NOVE","fulltitle":"NOVE","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/nove","video_url":"","callSign":"","id":"311","plot":"","logo":"nove.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Giallo","fulltitle":"Giallo","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/giallo","video_url":"","callSign":"","id":"312","plot":"","logo":"giallo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"K2","fulltitle":"K2","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/k2","video_url":"","callSign":"","id":"313","plot":"","logo":"k2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Frisbee","fulltitle":"Frisbee","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/frisbee","video_url":"","callSign":"","id":"314","plot":"","logo":"frisbee.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Motor Trend","fulltitle":"Motor Trend","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/motor-trend","video_url":"","callSign":"","id":"315","plot":"","logo":"motor_trend.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Discovery Channel","fulltitle":"Discovery Channel","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/discovery-channel","video_url":"","callSign":"","id":"316","plot":"","logo":"discovery_channel.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Food Network","fulltitle":"Food Network","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/food-network","video_url":"","callSign":"","id":"319","plot":"","logo":"food_network.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Home and Garden TV","fulltitle":"Home and Garden TV","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/hgtv","video_url":"","callSign":"","id":"322","plot":"","logo":"home_and_garden_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"DMAX","fulltitle":"DMAX","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/dmax","video_url":"","callSign":"","id":"323","plot":"","logo":"dmax.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true},{"channel":"discoveryplus","title":"Warner Tv","fulltitle":"Warner Tv","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/wbtv-italy","video_url":"","callSign":"","id":"866","plot":"","logo":"warner_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true}];
+
 (function () {
   'use strict';
 
@@ -11,6 +14,9 @@
   var HOST_KEY = 'prippi.tizen.sc.host';
   var HOME_KEY = 'prippi.tizen.standalone.home.v1';
   var hostPromise = null;
+  var mediasetAuthPromise = null;
+  var mediasetAuthAt = 0;
+  var discoverySessionPromise = null;
 
   function timeoutFetch(url, options, timeout) {
     return new Promise(function (resolve, reject) {
@@ -43,6 +49,23 @@
 
   function json(url, options, timeout) {
     return timeoutFetch(url, options, timeout).then(function (response) { return response.json(); });
+  }
+
+  function cleanUrl(value) {
+    var area = document.createElement('textarea');
+    area.innerHTML = String(value || '').replace(/\\\//g, '/');
+    return area.value.trim();
+  }
+
+  function queryString(values) {
+    var parts = [];
+    Object.keys(values || {}).forEach(function (key) {
+      var value = values[key];
+      if (value === undefined || value === null) return;
+      if (typeof value === 'object') value = JSON.stringify(value);
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
+    });
+    return parts.join('&');
   }
 
   function parsePage(html) {
@@ -318,8 +341,162 @@
     });
   }
 
+  function liveLogo(item) {
+    if (!item.logo) return item.thumbnail || '';
+    return (window.__PRIPPI_LIVE_LOGO_BASE__ || 'assets/tv_logos/') + item.logo;
+  }
+
+  function live() {
+    var source = window.__PRIPPI_LIVE_CHANNELS__;
+    var catalog = source && source.length ? Promise.resolve(source) :
+      json('data/live_channels.json', {cache: 'no-store'}, 5000).catch(function () { return []; });
+    return catalog.then(function (values) {
+      var channels = values.map(function (entry) {
+        var item = Object.assign({}, entry);
+        item.thumbnail = liveLogo(item);
+        item.fanart = item.thumbnail;
+        return item;
+      });
+      return {rows: channels.length ? [{id: 'official_tv', title: 'TV', items: channels}] : []};
+    });
+  }
+
+  function resolveRai(item) {
+    if (!item.video_url) return Promise.reject(new Error('Endpoint Rai non disponibile'));
+    return json(item.video_url, {cache: 'no-store', credentials: 'include'}, 10000).then(function (data) {
+      if (data.first_item_path) {
+        var nested = new URL(data.first_item_path, 'https://www.raiplay.it').href.replace(/\.html\?json/i, '.json');
+        return json(nested, {cache: 'no-store', credentials: 'include'}, 10000);
+      }
+      return data;
+    }).then(function (data) {
+      var content = data && data.video && data.video.content_url;
+      if (!content) throw new Error('Stream Rai non disponibile');
+      var separator = content.indexOf('?') >= 0 ? '&' : '?';
+      return text(cleanUrl(content) + separator + 'output=56', {cache: 'no-store'}, 10000);
+    }).then(function (response) {
+      var match = response.body.match(/<url[^>]*type=["']content["'][^>]*>\s*<!\[CDATA\[([^\]]+)/i) ||
+        response.body.match(/<url[^>]*type=["']content["'][^>]*>([^<]+)/i);
+      var url = cleanUrl(match && match[1]);
+      if (!url) throw new Error('Playlist Rai non trovata');
+      return {url: url, manifest_type: /\.mpd(\?|$)/i.test(url) ? 'mpd' : 'hls', headers: {}, drm_type: ''};
+    });
+  }
+
+  function mediasetAuth(force) {
+    if (force) mediasetAuthPromise = null;
+    if (mediasetAuthPromise && Date.now() - mediasetAuthAt < 30 * 60 * 1000) return mediasetAuthPromise;
+    mediasetAuthPromise = json('https://api-ott-prod-fe.mediaset.net/PROD/play/idm/anonymous/login/v2.0', {
+      method: 'POST', cache: 'no-store', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        client_id: 'f66e2a01-c619-4e53-8e7c-4761449dd8ee',
+        platform: 'pc', appName: 'web//mediasetplay-web/1.3.0-h1-8d023f0'
+      })
+    }, 10000).then(function (data) {
+      var auth = data && data.response;
+      if (!auth || !auth.beToken || !auth.sid) throw new Error('Sessione Mediaset non disponibile');
+      mediasetAuthAt = Date.now();
+      return auth;
+    }).catch(function (error) { mediasetAuthPromise = null; throw error; });
+    return mediasetAuthPromise;
+  }
+
+  function resolveMediaset(item, retry) {
+    return mediasetAuth(false).then(function (auth) {
+      var endpoint = 'https://api-ott-prod-fe.mediaset.net/PROD/play/playback/check/v2.0?sid=' + encodeURIComponent(auth.sid);
+      return json(endpoint, {
+        method: 'POST', cache: 'no-store', headers: {
+          'Content-Type': 'application/json', 'Authorization': 'Bearer ' + auth.beToken
+        },
+        body: JSON.stringify({
+          channelCode: item.callSign, streamType: 'LIVE', delivery: 'Streaming',
+          createDevice: 'true', overrideAppName: 'web//mediasetplay-web/1.3.0-h1-8d023f0'
+        })
+      }, 10000);
+    }).then(function (data) {
+      var selector = data && data.response && data.response.mediaSelector;
+      if (!selector || !selector.url) throw new Error('Canale Mediaset non disponibile');
+      return text(selector.url + (selector.url.indexOf('?') >= 0 ? '&' : '?') + queryString(selector), {
+        cache: 'no-store'
+      }, 10000).then(function (response) { return {selector: selector, body: response.body}; });
+    }).then(function (data) {
+      var match = data.body.match(/<video[^>]+src=["']([^"']+)/i);
+      var url = cleanUrl(match && match[1]);
+      if (!url) throw new Error('Playlist Mediaset non trovata');
+      var isDash = /dash/i.test(data.selector.formats || '') && /\.mpd(\?|$)/i.test(url);
+      return {url: url, manifest_type: isDash ? 'mpd' : 'hls', headers: {}, drm_type: ''};
+    }).catch(function (error) {
+      if (retry === false) throw error;
+      return mediasetAuth(true).then(function () { return resolveMediaset(item, false); });
+    });
+  }
+
+  function resolveLa7(item) {
+    return text(item.url, {cache: 'no-store', credentials: 'include'}, 10000).then(function (response) {
+      var hls = response.body.match(/["']?m3u8["']?\s*:\s*["']([^"']+)/i);
+      var mp4 = response.body.match(/["']?mp4["']?\s*:\s*["']([^"']+)/i);
+      var url = cleanUrl(hls && hls[1] || mp4 && mp4[1]);
+      if (!url) throw new Error('La7 offre al dispositivo soltanto una sorgente DRM non ancora compatibile');
+      url = url.replace('http://la7-vh.akamaihd.net/i/', 'https://awsvodpkg.iltrovatore.it/local/hls/')
+        .replace('csmil/master.m3u8', 'urlset/master.m3u8');
+      return {url: url, manifest_type: hls ? 'hls' : 'progressive', headers: {}, drm_type: ''};
+    });
+  }
+
+  function discoverySession() {
+    if (discoverySessionPromise) return discoverySessionPromise;
+    var deviceId = 'tizen-' + Date.now().toString(16) + Math.random().toString(16).slice(2);
+    discoverySessionPromise = json('https://prod-realmservice.mercury.dnitv.com/realm-config/www.discoveryplus.com%2Fit%2Fepg', {cache: 'no-store'}, 10000)
+      .then(function (realm) {
+        var domain = 'https://' + realm.domain;
+        return json(domain + '/token?deviceId=' + encodeURIComponent(deviceId) + '&realm=dplay&shortlived=true', {cache: 'no-store'}, 10000)
+          .then(function (tokenData) {
+            var token = tokenData && tokenData.data && tokenData.data.attributes && tokenData.data.attributes.token;
+            if (!token) throw new Error('Token Discovery non disponibile');
+            return {domain: domain, token: token, deviceId: deviceId};
+          });
+      }).catch(function (error) { discoverySessionPromise = null; throw error; });
+    return discoverySessionPromise;
+  }
+
+  function resolveDiscovery(item) {
+    return discoverySession().then(function (session) {
+      var headers = {
+        'Content-Type': 'application/json',
+        'x-disco-client': 'WEB:UNKNOWN:dplus_us:2.46.0',
+        'x-disco-params': 'realm=dplay,siteLookupKey=dplus_it',
+        'Authorization': 'Bearer ' + session.token
+      };
+      var body = {
+        channelId: item.id,
+        deviceInfo: {adBlocker: 'true', drmSupported: 'true', hwDecodingCapabilities: [], screen: {width: 1920, height: 1080}, player: {width: 1920, height: 1080}},
+        wisteriaProperties: {
+          advertiser: {firstPlay: 0, fwIsLat: 0},
+          device: {browser: {name: 'chrome', version: '76'}, type: 'desktop'},
+          platform: 'desktop', product: 'dplus_emea', sessionId: session.deviceId,
+          streamProvider: {suspendBeaconing: 0, hlsVersion: 6, pingConfig: 1}
+        }
+      };
+      return json(session.domain + '/playback/v3/channelPlaybackInfo', {
+        method: 'POST', cache: 'no-store', headers: headers, credentials: 'include', body: JSON.stringify(body)
+      }, 12000);
+    }).then(function (data) {
+      var streaming = data && data.data && data.data.attributes && data.data.attributes.streaming || [];
+      var source = streaming.filter(function (entry) { return !(entry.protection && entry.protection.drmEnabled); })[0] || streaming[0];
+      if (!source || !source.url) throw new Error('Stream Discovery non disponibile');
+      if (source.protection && source.protection.drmEnabled) {
+        throw new Error('Il canale Discovery richiede Widevine; supporto TV in preparazione');
+      }
+      return {url: source.url, manifest_type: /\.mpd(\?|$)/i.test(source.url) ? 'mpd' : 'hls', headers: {}, drm_type: ''};
+    });
+  }
+
   function resolve(item) {
     if (item.channel === 'streamingcommunity' || /streamingcommunity/i.test(item.url || '')) return resolveStreamingCommunity(item);
+    if (item.channel === 'raiplay') return resolveRai(item);
+    if (item.channel === 'mediasetplay') return resolveMediaset(item);
+    if (item.channel === 'la7') return resolveLa7(item);
+    if (item.channel === 'discoveryplus') return resolveDiscovery(item);
     if (/\.(m3u8|mpd|mp4)(\?|$)/i.test(item.url || '')) {
       return Promise.resolve({url: item.url, manifest_type: /\.mpd/i.test(item.url) ? 'mpd' : /\.m3u8/i.test(item.url) ? 'hls' : 'progressive', headers: item.headers || {}, drm_type: ''});
     }
@@ -333,7 +510,7 @@
     if (route === '/detail') return detail((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});
-    if (route === '/live') return Promise.resolve({rows: []});
+    if (route === '/live') return live();
     if (route === '/browse-macros') return Promise.resolve({items: []});
     if (route === '/settings') return Promise.resolve({items: [
       {id: 'runtime', label: 'Motore', value: 'Standalone Tizen'},
@@ -346,7 +523,7 @@
 }());
 
 (function(){'use strict';
-  var API=localStorage.getItem('prippi.tizen.api')||'';
+  localStorage.removeItem('prippi.tizen.api');
   var DEMO='https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8';
   var HOME_CACHE='prippi.tizen.home.v1',CACHE_MAX_AGE=30*60*1000;
   var state={page:'home',home:[],live:[],items:{},detail:null,playing:false,playerUiTimer:null,playerTick:null,playerEngine:'',htmlFallback:false};
@@ -358,7 +535,7 @@
   function save(x){var id='i'+Object.keys(state.items).length;state.items[id]=x;return id;}
   function toast(t){var e=document.getElementById('toast');e.textContent=t;e.className='toast show';setTimeout(function(){e.className='toast';},3000);}
   function status(ok,text){var e=document.getElementById('connection');e.textContent=(ok?'● ':'● ')+text;e.className=ok?'ok':'';}
-  function request(path,body){if(window.PrippiStandalone)return window.PrippiStandalone.request(path,body);if(!API)return Promise.reject(Error('Motore standalone non disponibile'));var opts=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};return fetch(API+path,opts).then(function(r){return r.json();}).then(function(d){if(!d.ok)throw Error(d.error||'Risposta non valida');return d.data||d;});}
+  function request(path,body){if(window.PrippiStandalone)return window.PrippiStandalone.request(path,body);return Promise.reject(Error('Motore standalone non disponibile'));}
   function card(item,live){
     var id=save(item),img=image(item);
     var poster='<span class="poster" data-image="'+esc(img)+'"></span>';

@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,6 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "tizen" / "PrippiStreamTV"
 OUT = ROOT / "docs" / "tizen" / "app"
+LIVE_CATALOG = APP / "data" / "live_channels.json"
+LIVE_LOGOS = APP / "assets" / "tv_logos"
+LIVE_LOGO_URL = "https://raw.githubusercontent.com/usandissm/PrippiStream/main/docs/tizen/app/logos/"
 
 
 def read(path: Path) -> str:
@@ -38,13 +42,25 @@ def main() -> None:
     css = read(APP / "css" / "style.css").rstrip() + "\n\n" + "\n\n".join(
         style.strip() for style in inline_styles
     ) + "\n"
-    js = read(APP / "standalone.js").rstrip() + "\n\n" + read(APP / "main.js")
+    live_catalog = json.loads(read(LIVE_CATALOG))
+    live_bootstrap = (
+        "window.__PRIPPI_LIVE_LOGO_BASE__ = "
+        + json.dumps(LIVE_LOGO_URL)
+        + ";\nwindow.__PRIPPI_LIVE_CHANNELS__ = "
+        + json.dumps(live_catalog, ensure_ascii=False, separators=(",", ":"))
+        + ";\n\n"
+    )
+    js = live_bootstrap + read(APP / "standalone.js").rstrip() + "\n\n" + read(APP / "main.js")
 
     files = {"html": body, "css": css, "js": js}
     names = {"html": "app.html", "css": "app.css", "js": "app.js"}
     OUT.mkdir(parents=True, exist_ok=True)
     for key, content in files.items():
         (OUT / names[key]).write_text(content, encoding="utf-8", newline="\n")
+    logo_out = OUT / "logos"
+    if logo_out.exists():
+        shutil.rmtree(logo_out)
+    shutil.copytree(LIVE_LOGOS, logo_out)
 
     manifest = {
         "schema": 1,

@@ -8,6 +8,8 @@ on:
       - "tizen/PrippiStreamTV/index.html"
       - "tizen/PrippiStreamTV/main.js"
       - "tizen/PrippiStreamTV/standalone.js"
+      - "tizen/PrippiStreamTV/data/**"
+      - "tizen/PrippiStreamTV/assets/tv_logos/**"
       - "tizen/PrippiStreamTV/css/**"
       - "tizen/PrippiStreamTV/ota-version.json"
       - "tools/publish_tizen_ota.py"

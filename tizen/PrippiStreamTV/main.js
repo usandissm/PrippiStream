@@ -1,5 +1,5 @@
 (function(){'use strict';
-  var API=localStorage.getItem('prippi.tizen.api')||'';
+  localStorage.removeItem('prippi.tizen.api');
   var DEMO='https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8';
   var HOME_CACHE='prippi.tizen.home.v1',CACHE_MAX_AGE=30*60*1000;
   var state={page:'home',home:[],live:[],items:{},detail:null,playing:false,playerUiTimer:null,playerTick:null,playerEngine:'',htmlFallback:false};
@@ -11,7 +11,7 @@
   function save(x){var id='i'+Object.keys(state.items).length;state.items[id]=x;return id;}
   function toast(t){var e=document.getElementById('toast');e.textContent=t;e.className='toast show';setTimeout(function(){e.className='toast';},3000);}
   function status(ok,text){var e=document.getElementById('connection');e.textContent=(ok?'● ':'● ')+text;e.className=ok?'ok':'';}
-  function request(path,body){if(window.PrippiStandalone)return window.PrippiStandalone.request(path,body);if(!API)return Promise.reject(Error('Motore standalone non disponibile'));var opts=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};return fetch(API+path,opts).then(function(r){return r.json();}).then(function(d){if(!d.ok)throw Error(d.error||'Risposta non valida');return d.data||d;});}
+  function request(path,body){if(window.PrippiStandalone)return window.PrippiStandalone.request(path,body);return Promise.reject(Error('Motore standalone non disponibile'));}
   function card(item,live){
     var id=save(item),img=image(item);
     var poster='<span class="poster" data-image="'+esc(img)+'"></span>';
