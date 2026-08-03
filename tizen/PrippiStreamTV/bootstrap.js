@@ -1,8 +1,8 @@
 (function () {
   'use strict';
 
-  var SHELL_VERSION = '0.3.0';
-  var LOCAL_REVISION = 0;
+  var SHELL_VERSION = '0.7.0';
+  var LOCAL_REVISION = 12;
   var REPO_CONTENTS = 'https://api.github.com/repos/usandissm/PrippiStream/contents/docs/tizen/app/';
   var MANIFEST_URL = localStorage.getItem('prippi.tizen.ota.manifest') ||
     REPO_CONTENTS + 'manifest.json?ref=main';
@@ -224,6 +224,14 @@
 
   function start() {
     var cached = readCache();
+    var cachedRevision = cached && cached.manifest ? Number(cached.manifest.revision || 0) : 0;
+    if (LOCAL_REVISION > cachedRevision) {
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(ACTIVE_KEY);
+      loadLocal();
+      backgroundCheck(LOCAL_REVISION);
+      return;
+    }
     if (cached) {
       applyBundle(cached).then(function () {
         backgroundCheck(cached.manifest.revision || 0);

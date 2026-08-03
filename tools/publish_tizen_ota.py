@@ -39,9 +39,9 @@ def main() -> None:
     index = read(APP / "index.html")
     body = extract(r"<body[^>]*>(.*?)</body>", index, "body HTML")
     inline_styles = re.findall(r"<style[^>]*>(.*?)</style>", index, re.IGNORECASE | re.DOTALL)
-    css = read(APP / "css" / "style.css").rstrip() + "\n\n" + "\n\n".join(
-        style.strip() for style in inline_styles
-    ) + "\n"
+    css_parts = [read(APP / "css" / "style.css").rstrip()]
+    css_parts.extend(style.strip() for style in inline_styles if style.strip())
+    css = "\n\n".join(css_parts) + "\n"
     live_catalog = json.loads(read(LIVE_CATALOG))
     live_bootstrap = (
         "window.__PRIPPI_LIVE_LOGO_BASE__ = "
@@ -50,7 +50,18 @@ def main() -> None:
         + json.dumps(live_catalog, ensure_ascii=False, separators=(",", ":"))
         + ";\n\n"
     )
-    js = live_bootstrap + read(APP / "standalone.js").rstrip() + "\n\n" + read(APP / "main.js")
+    hls_runtime = read(APP / "vendor" / "hls.light.min.js").rstrip()
+    shaka_runtime = read(APP / "vendor" / "shaka-player.compiled.js").rstrip()
+    js = (
+        hls_runtime
+        + "\n\n"
+        + shaka_runtime
+        + "\n\n"
+        + live_bootstrap
+        + read(APP / "standalone.js").rstrip()
+        + "\n\n"
+        + read(APP / "main.js")
+    )
 
     files = {"html": body, "css": css, "js": js}
     names = {"html": "app.html", "css": "app.css", "js": "app.js"}
