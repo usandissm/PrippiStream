@@ -24,6 +24,7 @@ import json
 import binascii
 import struct
 import threading
+import time
 
 try:
     from urllib.parse import urljoin, urlsplit
@@ -70,6 +71,14 @@ class TokenExpiredError(Exception):
 
 class DownloadCancelled(Exception):
     """Raised cooperatively when the cancel event is set."""
+
+
+class SegmentIntegrityError(Exception):
+    """Raised when a CDN returns a successful but unusable HLS segment."""
+
+
+class NetworkUnavailableError(Exception):
+    """Raised when Android reports that no validated network is available."""
 
 
 def _pkcs7_unpad(data):
@@ -151,6 +160,17 @@ def _http_status(exc):
         if m:
             code = int(m.group(1))
     return code
+
+
+def _retry_delay(attempt, segment_index):
+    """Exponential retry delay with deterministic per-segment jitter.
+
+    A small jitter prevents all parallel segment workers from reconnecting to
+    the CDN at the same instant after a transient network outage.
+    """
+    base = min(8.0, 0.5 * (2 ** max(0, attempt - 1)))
+    jitter = ((segment_index * 37 + attempt * 17) % 100) / 500.0
+    return base + jitter
 
 
 # ── m3u8 parsing ────────────────────────────────────────────────────────────
@@ -494,7 +514,7 @@ def download_stream(variant_url, headers, out_path,
 
         def _fetch(idx):
             _check_cancel()
-            if idx < 60:
+            if idx < 10:
                 try:
                     import xbmc
                     xbmc.log('[DLstart] idx=%d' % idx, xbmc.LOGINFO)
@@ -507,24 +527,47 @@ def download_stream(variant_url, headers, out_path,
                     data = http_get(seg['url'], headers=headers, timeout=timeout)
                     if isinstance(data, str):
                         data = data.encode('latin-1')
-                    break
+                    if key_bytes is not None:
+                        # AES-CBC accepts only complete 16-byte blocks. Some
+                        # CDNs occasionally return HTTP 200 with a truncated
+                        # body: treat that as a transient transport failure and
+                        # retry this segment instead of aborting the whole job.
+                        if not data or (len(data) % 16):
+                            raise SegmentIntegrityError(
+                                'encrypted segment %d has invalid length %d' %
+                                (idx, len(data)))
+                        iv = _iv_for(seg['seq'], iv_attr)
+                        data = _aes_cbc_decrypt(data, key_bytes, iv)
+                    if not data:
+                        raise SegmentIntegrityError(
+                            'segment %d is empty after processing' % idx)
+                    return idx, data
+                except DownloadCancelled:
+                    raise
+                except NetworkUnavailableError:
+                    # Connectivity is restored by the queue manager. Retrying
+                    # every segment here would only create a request storm and
+                    # consume all five transport attempts while offline.
+                    raise
                 except Exception as exc:
                     code = _http_status(exc)
                     if code in (403, 410):
                         raise TokenExpiredError('segment %d -> HTTP %s' % (idx, code))
                     attempts += 1
+                    delay = _retry_delay(attempts, idx)
                     try:
                         import xbmc
-                        xbmc.log('[DLfetch] idx=%d attempt=%d EXC: %s' % (
-                            idx, attempts, str(exc)[:120]), xbmc.LOGINFO)
+                        xbmc.log('[DLfetch] idx=%d attempt=%d delay=%.1fs EXC: %s' % (
+                            idx, attempts, delay, str(exc)[:120]), xbmc.LOGINFO)
                     except Exception:
                         pass
                     if attempts >= 5:
                         raise
-            if key_bytes is not None:
-                iv = _iv_for(seg['seq'], iv_attr)
-                data = _aes_cbc_decrypt(data, key_bytes, iv)
-            return idx, data
+                    if cancel_evt is not None:
+                        cancel_evt.wait(delay)
+                        _check_cancel()
+                    else:
+                        time.sleep(delay)
 
         # Parallel fetch, in-order write. We keep a sliding window of completed
         # segments and flush consecutively from the write pointer.
@@ -542,7 +585,7 @@ def download_stream(variant_url, headers, out_path,
             while pending:
                 _check_cancel()
                 _now_hb = _t_hb.time()
-                if _now_hb - _hb[0] >= 3:
+                if _now_hb - _hb[0] >= 10:
                     _hb[0] = _now_hb
                     try:
                         import xbmc

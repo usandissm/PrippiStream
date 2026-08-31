@@ -3,11 +3,11 @@
 uprot.net "Captcha Verification" solver for the Maxstream resolver.
 
 uprot.net/msf/<token> now gates the real maxstream.video/uprots/ links behind a
-3-digit numeric image captcha (200x50 PNG, coloured digits over coloured noise,
+numeric image captcha (200x50 PNG/WebP, coloured digits over coloured noise,
 answer validated server-side in the PHP session, regenerated on every failure).
 
-This module reads those 3 digits with a tiny pure-stdlib OCR pipeline (no PIL /
-numpy / tesseract — only zlib + struct, both present in Kodi's Python):
+This module reads those digits with a tiny OCR pipeline. PNG stays pure stdlib;
+the newer WebP variant is converted through Pillow before the same recognizer:
 
     PNG decode -> dark-pixel mask -> connected-component denoise ->
     column segmentation -> per-slot largest blob -> deslant -> grayscale
@@ -21,6 +21,7 @@ Embedded exemplar bank lives in uprot_captcha_data.py.
 import re
 import struct
 import zlib
+import io
 
 from platformcode import logger
 
@@ -353,7 +354,9 @@ def solve_image(png_bytes, n=None):
 # ----------------------------------------------------------------- HTTP flow
 import base64 as _b64
 
-_IMG_RE = re.compile(r'data:image/png;base64,([A-Za-z0-9+/=]+)')
+_IMG_RE = re.compile(r'data:image/(png|webp);base64,([A-Za-z0-9+/=]+)', re.I)
+_FIELD_RE = re.compile(
+    r'''<input[^>]+name=["'](auth_[A-Za-z0-9_]+)["'][^>]*>''', re.I)
 _TOKEN_RE = re.compile(r'maxstream\.video/uprots/')
 # Quante cifre attende il captcha. uprot è passato da 3→4→5 cifre nel tempo e ha
 # anche cambiato il markup dell'input, quindi leggiamo il conteggio da PIÙ forme
@@ -395,9 +398,26 @@ def _img_bytes(html):
     if not m:
         return None
     try:
-        return _b64.b64decode(m.group(1))
+        raw = _b64.b64decode(m.group(2))
+        if m.group(1).lower() == 'png':
+            return raw
+
+        # Da luglio 2026 uprot genera il captcha come WebP. Il riconoscitore
+        # sottostante continua a lavorare su PNG, perciò convertiamo soltanto il
+        # contenitore e conserviamo invariati segmentazione e template OCR.
+        from PIL import Image
+        src = io.BytesIO(raw)
+        dst = io.BytesIO()
+        Image.open(src).convert('RGB').save(dst, format='PNG')
+        return dst.getvalue()
     except Exception:
         return None
+
+
+def _captcha_field(html):
+    """Return the randomized POST field used by the current uprot form."""
+    m = _FIELD_RE.search(html or '')
+    return m.group(1) if m else 'captcha'
 
 
 def solve_uprot(msf_url, downloadpage, max_attempts=8):
@@ -432,17 +452,14 @@ def solve_uprot(msf_url, downloadpage, max_attempts=8):
                 html = downloadpage(msf_url, headers=hdr).data or ''
                 continue
             return None
-        # Conteggio cifre: prima dalla pagina se lo espone (autorevole → risolve
-        # al 1° colpo). Altrimenti auto-detect dall'immagine (affidabile con la
-        # nuova soglia DARK) e, poiché il conteggio varia tra 4 e 5, ciclo i
-        # candidati [auto, 4, 5] sui tentativi — un POST errato dà solo un captcha
-        # nuovo, quindi in pochi tentativi si copre il conteggio giusto.
-        _npage = _digit_count(html, default=None)
-        if _npage:
-            _n = _npage
-        else:
-            _cands = [_auto_digit_count(img), 4, 5]
-            _n = _cands[attempt % len(_cands)]
+        # Conteggio cifre: prima dalla pagina se lo espone (autorevole); per il
+        # WebP attuale, che non lo dichiara, usiamo il valore osservato di 4.
+        # Il form WebP corrente non espone maxlength/pattern ma usa sempre 4
+        # cifre. L'auto-segmentazione può contarne 3 quando due glifi si toccano,
+        # quindi non va usata per scegliere la lunghezza del POST. Se uprot torna
+        # a dichiararla nel markup, quel valore resta comunque prioritario.
+        _npage = _digit_count(html, default=4)
+        _n = _npage
         code = solve_image(img, _n)
         logger.info('uprot_captcha attempt %d -> code=%s (page_n=%s, tried_n=%s)'
                     % (attempt + 1, code, _npage, _n))
@@ -451,7 +468,9 @@ def solve_uprot(msf_url, downloadpage, max_attempts=8):
             html = downloadpage(msf_url, headers=hdr).data or ''
             continue
         try:
-            html = downloadpage(msf_url, post={'captcha': code},
+            # Il campo, prima fisso come "captcha", è ora randomizzato a ogni
+            # pagina (es. auth_a1cd981c) e va riletto dopo ogni tentativo.
+            html = downloadpage(msf_url, post={_captcha_field(html): code},
                                 headers=post_hdr).data or ''
         except Exception as e:
             logger.error('uprot_captcha.solve_uprot POST error: %s' % e)

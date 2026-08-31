@@ -1,0 +1,12055 @@
+﻿# -*- coding: utf-8 -*-
+# ------------------------------------------------------------
+# Prippi-style Home Window for StreamingCommunity + multi-source
+# v4 — lazy-load extra rows from other VOD channels.
+# ------------------------------------------------------------
+
+import os
+import re
+import sys
+import time
+import threading
+import xbmc
+import xbmcaddon
+import xbmcgui
+
+from core.item import Item
+from platformcode import config, logger, watch_history, platformtools, deviceprofile
+from platformcode import _fourk
+from platformcode import sportchannels
+from platformcode import skyepg
+
+PY3 = sys.version_info[0] >= 3
+
+_cache = {'data': None, 'ts': 0}
+
+
+def _cache_put(d, key, val, cap=400):
+    """Scrittura con tetto per le cache module-level senza scadenza: con
+    reuselanguageinvoker (F6) il processo persiste tra i click e questi dict
+    crescerebbero all'infinito. Eviction FIFO (i dict Py3.7+ sono ordinati)."""
+    if key not in d and len(d) >= cap:
+        try:
+            d.pop(next(iter(d)))
+        except (StopIteration, KeyError):
+            pass
+    d[key] = val
+_CACHE_TTL = 1800   # 30 minutes
+
+# ── Snapshot su disco delle righe home (v2 FASE 3) ───────────────────────────
+# La cache _cache vive solo in memoria: il processo Python muore alla chiusura
+# della home, quindi OGNI riapertura è un cold load (~5 s, di cui ~3,3 s di
+# enrich TMDB sincrono pre-paint). Persistendo le righe già enrichite su disco,
+# una riapertura entro _SNAPSHOT_MAX_AGE ridipinge all'istante (fast path,
+# salta l'enrich perché gli item portano il flag _enr). Solo le righe SC
+# (main+archive) vanno nello snapshot: CW/download/live/4K/anime sono ricostruite
+# fresche a ogni apertura da _assemble_initial, quindi nessun rischio staleness.
+_SNAPSHOT_MAX_AGE = 12 * 3600   # oltre: cold load normale
+_SNAPSHOT_LOCK = threading.Lock()
+
+
+def _snapshot_path():
+    return os.path.join(config.get_data_path(), 'home_rows_snapshot.json')
+
+
+def _snapshot_write(rows, host):
+    """Serializza le righe SC (già enrichite) su disco, in modo atomico, in un
+    thread di background. Non solleva mai verso il chiamante."""
+    def _worker():
+        try:
+            import json as _json
+            payload = {
+                'version': 1,
+                'ts': __import__('time').time(),
+                'host': host or '',
+                'rows': [[lbl, [it.tojson() for it in items]] for lbl, items in rows],
+            }
+            blob = _json.dumps(payload)
+            path = _snapshot_path()
+            tmp = path + '.tmp'
+            with _SNAPSHOT_LOCK:
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    f.write(blob)
+                os.replace(tmp, path)
+        except Exception as exc:
+            logger.error('[PrippiHome] snapshot write: %s' % str(exc))
+    t = threading.Thread(target=_worker)
+    t.daemon = True
+    t.start()
+
+
+def _snapshot_read():
+    """Ritorna (rows, ts, host) dallo snapshot, o (None, 0, '') se assente/illeggibile/
+    scaduto oltre _SNAPSHOT_MAX_AGE. Ricostruisce gli Item con fromjson."""
+    try:
+        import json as _json
+        from platformcode import perf
+        _perf_t = perf.mark('home.snapshot start')
+        path = _snapshot_path()
+        if not os.path.isfile(path):
+            return None, 0, ''
+        with _SNAPSHOT_LOCK:
+            with open(path, 'r', encoding='utf-8') as f:
+                blob = f.read()
+        _perf_t = perf.mark('home.snapshot.read', _perf_t)
+        payload = _json.loads(blob)
+        _perf_t = perf.mark('home.snapshot.parse', _perf_t)
+        if not isinstance(payload, dict) or payload.get('version') != 1:
+            return None, 0, ''
+        ts = float(payload.get('ts') or 0)
+        if (__import__('time').time() - ts) > _SNAPSHOT_MAX_AGE:
+            return None, 0, ''
+        rows = []
+        for lbl, jitems in payload.get('rows', []):
+            items = []
+            for j in jitems:
+                try:
+                    items.append(Item().fromjson(j))
+                except Exception:
+                    pass
+            rows.append((lbl, items))
+        perf.mark('home.snapshot.items', _perf_t)
+        if not rows:
+            return None, 0, ''
+        return rows, ts, payload.get('host', '')
+    except Exception as exc:
+        logger.error('[PrippiHome] snapshot read: %s' % str(exc))
+        return None, 0, ''
+
+# Timeout (seconds) per each external channel fetch
+_EXTRA_TIMEOUT = 18
+
+# Valid actions that indicate a real playable/browsable item
+_VALID_ACTIONS = frozenset(['findvideos', 'episodios', 'check', 'findvideos_findhost',
+                             'play', 'seasons', 'temporadas', 'check_series'])
+
+# Sources used to enrich each SC row by content type.
+# Items are fetched ONCE per type (cached); per-row dedup runs at enrichment time.
+# SC items always come first; extra items are appended only if not already in that row.
+#
+# Trimmed to the sources that actually return items AND resolve at playback. The
+# rest were either returning 0 items (dead/changed host: filmpertutti, filmstreaming,
+# piratestreaming, mondoserietv, casacinema, cinemalibero, dinostreaming, eurostreaming)
+# or raising import/param errors (ilgeniodellostreaming, italiaserie, guardaserieclick).
+# Keeping only working sources avoids polluting the carousels with unplayable items
+# and removes per-source thread+timeout cost on every home open. Re-add a channel here
+# once its newest()/host is fixed.
+_ENRICH_SOURCE_MAP = {
+    'peliculas': [
+        ('cineblog01',            'peliculas'),
+        ('altadefinizione01',     'peliculas'),
+    ],
+    'series': [
+        ('cineblog01',            'series'),
+    ],
+}
+# anime sources removed — carousel not yet implemented
+
+# Per-type cache: ctype -> {'items': [Item, ...], 'ts': float}
+_enrich_cache = {}
+_enrich_cache_lock = threading.Lock()
+_enrich_inflight = {}
+_ENRICH_DISK_TTL = 6 * 3600
+
+
+def _enrich_cache_path(ctype):
+    safe = re.sub(r'[^a-z0-9_-]', '', str(ctype).lower())
+    return os.path.join(config.get_data_path(), 'home_enrich_%s.json' % safe)
+
+
+def _enrich_disk_read(ctype):
+    try:
+        import json as _json
+        path = _enrich_cache_path(ctype)
+        if not os.path.isfile(path):
+            return []
+        with open(path, 'r', encoding='utf-8') as handle:
+            payload = _json.load(handle)
+        if payload.get('version') != 1:
+            return []
+        if time.time() - float(payload.get('ts') or 0) > _ENRICH_DISK_TTL:
+            return []
+        items = []
+        for raw in payload.get('items', []):
+            try:
+                items.append(Item().fromjson(raw))
+            except Exception:
+                pass
+        return items
+    except Exception as exc:
+        logger.error('[PrippiHome enrich] disk read %s: %s' % (ctype, str(exc)[:100]))
+        return []
+
+
+def _enrich_disk_write(ctype, items):
+    try:
+        import json as _json
+        path = _enrich_cache_path(ctype)
+        tmp = path + '.tmp'
+        payload = {'version': 1, 'ts': time.time(),
+                   'items': [it.tojson() for it in items]}
+        with open(tmp, 'w', encoding='utf-8') as handle:
+            _json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'))
+        os.replace(tmp, path)
+    except Exception as exc:
+        logger.error('[PrippiHome enrich] disk write %s: %s' % (ctype, str(exc)[:100]))
+
+# Persistent trailer cache across window instances: tmdb_id -> url (str) or False (no trailer).
+# Never expires — trailer links are stable YouTube IDs.
+_trailer_cache = {}
+
+# Audio-language hint per YouTube video id: 'it' when the trailer was found via
+# an Italian-intent query (or TMDB language=it). Used to decide subtitles when
+# the stream reports no usable audio language ('und' is common on YT uploads).
+_trailer_lang_hint = {}
+
+
+def _hint_for_trailer_url(url):
+    """Return the recorded language hint ('it' or '') for a plugin://…video_id=X url."""
+    try:
+        m = re.search(r'video_id=([A-Za-z0-9_\-]+)', url or '')
+        return _trailer_lang_hint.get(m.group(1), '') if m else ''
+    except Exception:
+        return ''
+
+# Italian plot cache: tmdb_id -> Italian overview string.
+# Populated by _load_hd_fanart (DetailWindow) and home hero background fetch.
+# Persists across window opens so already-fetched plots are shown instantly.
+_plot_it_cache = {}
+
+# CW backdrop cache: "<ctype>:<tmdb_id>" -> [backdrop_url, ...] (or [] if none).
+# Filled during initial home loading (for Continue-Watching items) so the
+# DetailWindow fanart slideshow starts instantly with no TMDB round-trip.
+_cw_backdrops_cache = {}
+_cw_backdrops_lock  = threading.Lock()
+
+
+def _fetch_cw_backdrops(tmdb_id, ctype):
+    """Up to 6 TMDB backdrop URLs for a title, cached by '<ctype>:<tmdb_id>'.
+    ctype is 'tv' or 'movie'. Returns a (possibly empty) list; never raises."""
+    if not tmdb_id:
+        return []
+    key = '%s:%s' % (ctype, tmdb_id)
+    with _cw_backdrops_lock:
+        if key in _cw_backdrops_cache:
+            return _cw_backdrops_cache[key]
+    urls = []
+    try:
+        from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+        url = '%s/%s/%s/images?api_key=%s&include_image_language=null' % (
+              _tmdb_host, ctype, tmdb_id, _tmdb_api)
+        data = _Tmdb.get_json(url)
+        for b in (data or {}).get('backdrops', [])[:6]:
+            fp = b.get('file_path') or ''
+            if fp:
+                # w780 e non original: lo slideshow sta dietro un overlay scuro e
+                # queste URL alimentano SIA il preloader home SIA il DetailWindow
+                # (devono restare identiche perche' il preload scaldi la texture giusta).
+                urls.append('https://image.tmdb.org/t/p/w780' + fp)
+    except Exception as exc:
+        logger.error('[CW preload] backdrops fetch %s: %s' % (tmdb_id, str(exc)[:80]))
+    with _cw_backdrops_lock:
+        _cache_put(_cw_backdrops_cache, key, urls)
+    return urls
+# Token counter used to cancel stale home-hero plot-fetch threads when focus moves fast.
+_hero_plot_token = 0
+
+# Shutdown event: set by open_prippi_home() the moment the user closes the home screen
+# AND by _AppShutdownMonitor.onAbortRequested() the instant Kodi sends the global abort
+# signal to our invoker.  ALL background network threads check this flag before starting
+# a new HTTP request so they exit within the current request's socket timeout (≤3 s).
+# Using a PUSH callback (onAbortRequested) instead of relying solely on polling guarantees
+# the flag is set the moment Kodi signals our CPythonInvoker — regardless of whether
+# open_prippi_home()'s while loop has had a chance to detect it yet.
+_shutdown_event = threading.Event()
+
+
+class _AppShutdownMonitor(xbmc.Monitor):
+    """Receives Kodi's abort signal immediately via callback and sets _shutdown_event.
+
+    Kodi processes invokers sequentially during shutdown: our invoker may not receive
+    the signal for several seconds after "Stopping the application".  When it finally
+    does, onAbortRequested() fires instantly — before the polling loop in
+    open_prippi_home() even gets a chance to check.  This eliminates the window where
+    background trailer threads run unchecked after the user has closed Kodi.
+    """
+
+    def onAbortRequested(self):
+        _shutdown_event.set()
+
+
+# Singleton registered at import time so it is always listening.
+_app_monitor = _AppShutdownMonitor()
+
+# Home settings we apply LIVE (no addon reload) when the user changes them.
+# ('show_adult_anime' only toggles the Browse HENTAI tab, which is read fresh on
+# every Browse open, so it needs no live re-render of the home.)
+_LIVE_SETTING_KEYS = ('show_sky_row', 'show_sport_row', 'show_tv_row',
+                      'show_downloads_row', 'show_4k_row', 'reduced_animations')
+
+
+class _SettingsWatchMonitor(xbmc.Monitor):
+    """Fires the home's _on_settings_changed() whenever the addon settings are
+    saved.  onSettingsChanged is the RELIABLE trigger: on Kodi 21, snapshotting
+    then re-reading the (module-cached) Addon settings after openSettings() returns
+    does NOT reflect the change, so the previous approach silently did nothing.
+    Holds the window by weakref so it never keeps a closed home alive."""
+
+    def __init__(self, win):
+        super(_SettingsWatchMonitor, self).__init__()
+        import weakref
+        self._winref = weakref.ref(win)
+
+    def onSettingsChanged(self):
+        win = self._winref()
+        if win is None:
+            return
+        try:
+            win._on_settings_changed()
+        except Exception:
+            pass
+
+
+class _AvReadyPlayer(xbmc.Player):
+    """xbmc.Player subclass that signals via threading.Event when onAVStarted fires.
+    onAVStarted is called by Kodi exactly once per stream, after the A/V pipeline is
+    fully initialised and all audio/subtitle tracks are enumerated — the correct and
+    earliest moment to safely call setAudioStream() / setSubtitleStream().
+    """
+    def __init__(self):
+        super(_AvReadyPlayer, self).__init__()
+        self.av_started = threading.Event()
+
+    def onAVStarted(self):
+        self.av_started.set()
+
+
+class _LivePlayer(xbmc.Player):
+    """Player for live-channel playback. Distinguishes a USER stop (onPlayBackStopped
+    — viewer pressed Back/Stop) from a real stream failure (onPlayBackEnded/Error or
+    never starting).  This stops a working channel that the user simply EXITED during
+    the verify window from being mistaken for 'channel unavailable' (which used to
+    deny-list it, drop it from the row and desync the hero)."""
+    def __init__(self):
+        super(_LivePlayer, self).__init__()
+        self.reset_flags()
+
+    def reset_flags(self):
+        self.user_stopped = False
+        self.playback_ended = False
+        self.playback_error = False
+
+    def onPlayBackStopped(self):
+        self.user_stopped = True
+
+    def onPlayBackEnded(self):
+        self.playback_ended = True
+
+    def onPlayBackError(self):
+        self.playback_error = True
+
+
+# Generation counter coordinating the per-play global-locale language override
+# across autoplay episode chains. Each _pre_play_set_lang that actually changes
+# the global locale bumps it; a restore thread only restores the ORIGINAL locale
+# if it is still the latest generation (i.e. no newer episode has taken over).
+# Without this, the restore thread of episode N fires at the N→N+1 autoplay
+# boundary (or attaches to N+1's playback and fires at its end) and clobbers the
+# next episode's language — the "audio reverts to default after 2-3 episodes" bug.
+_lang_gen = 0
+_lang_gen_lock = threading.Lock()
+
+
+def _restore_lang_after_av_started(orig_audio, orig_sub, timeout=20, gen=None):
+    """Keep the temporary locale settings active for the ENTIRE playback duration,
+    then restore the originals.
+
+    Previous approach used xbmc.Monitor.onAVStarted() — which does NOT exist on
+    Monitor (only on xbmc.Player) — so it always timed out after 20 s and restored
+    'Italian'.  On Android, inputstream.adaptive re-reads locale.audiolanguage on
+    every ABR quality-switch (bitrate adaptation); with 'Italian' already restored
+    at t=20 s, any quality switch at t=60-120 s would silently switch the audio to
+    Italian.
+
+    New approach:
+      Phase 1 — wait up to *timeout* seconds for the new item to START playing
+                (the previous trailer/content is already stopped by the time this
+                function is called from _pre_play_set_lang → _launch).
+      Phase 2 — wait until playback ENDS.
+      Restore  — always restore, even on timeout or exception.
+    """
+    try:
+        import time as _time
+        player  = xbmc.Player()
+        monitor = xbmc.Monitor()
+
+        # Phase 1: wait for the new content to start playing (up to 'timeout' s).
+        t0 = _time.time()
+        while not player.isPlaying():
+            if monitor.abortRequested() or (_time.time() - t0) > timeout:
+                break
+            _time.sleep(0.2)
+
+        # Phase 2: wait for playback to END — locale.audiolanguage stays at the
+        # preferred language so every ISA ABR re-init picks the right track.
+        while player.isPlaying() and not monitor.abortRequested():
+            _time.sleep(0.5)
+
+    except Exception as exc:
+        logger.error('[CW] _restore_lang_after_av_started (wait): %s' % str(exc))
+
+    # If a newer play/episode superseded us (autoplay chain), DO NOT restore:
+    # the newer _pre_play_set_lang now owns the global locale, and restoring the
+    # old default here would clobber the next episode's language — the exact
+    # "language reverts to default after a few episodes" bug. Only the latest
+    # generation (the episode the user actually stopped on) restores.
+    if gen is not None:
+        with _lang_gen_lock:
+            if gen != _lang_gen:
+                logger.info('[CW] lang restore skipped: superseded (gen %s != current %s)'
+                            % (gen, _lang_gen))
+                return
+
+    # Restore global settings — always, outside the try so it's guaranteed
+    try:
+        def _rpc_set(setting, value):
+            if value is None:
+                return
+            xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
+                '"params":{"setting":"%s","value":"%s"},"id":1}'
+                % (setting, str(value).replace('"', '')))
+
+        if orig_audio is not None:
+            _rpc_set('locale.audiolanguage', orig_audio)
+            logger.info('[CW] restored locale.audiolanguage -> %s' % orig_audio)
+        if orig_sub is not None:
+            _rpc_set('locale.subtitlelanguage', orig_sub)
+            logger.info('[CW] restored locale.subtitlelanguage -> %s' % orig_sub)
+    except Exception as exc:
+        logger.error('[CW] _restore_lang_after_av_started (restore): %s' % str(exc))
+
+
+def _pre_play_set_lang(item):
+    """Read audio/sub preference for *item* and temporarily set the Kodi global
+    locale settings so ISA picks the right track from frame 0.
+    Starts a background thread that restores the originals after onAVStarted fires.
+    Safe to call for any item — does nothing if no preference is saved."""
+    try:
+        import json as _json
+        addon   = xbmcaddon.Addon()
+        infolabels = getattr(item, 'infoLabels', None) or {}
+        tmdb    = str(infolabels.get('tmdb_id') or '').strip()
+        key     = tmdb or re.sub(r'[^a-z0-9]', '',
+                                 (getattr(item, 'fulltitle', '') or
+                                  getattr(item, 'show', '') or '').lower())
+        if not key:
+            return
+
+        ap = addon.getSetting('audiolang_%s' % key) or ''
+        sp = addon.getSetting('sublang_%s'   % key) or ''
+        logger.info('[CW] pre-play key=%r tmdb=%r ap=%r sp=%r' % (key, tmdb, ap, sp))
+
+        if not ap and not sp:
+            return  # no preference → nothing to do
+
+        def _rpc_get(setting):
+            r = xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.GetSettingValue",'
+                '"params":{"setting":"%s"},"id":1}' % setting)
+            return _json.loads(r).get('result', {}).get('value', '')
+
+        def _rpc_set(setting, value):
+            xbmc.executeJSONRPC(
+                '{"jsonrpc":"2.0","method":"Settings.SetSettingValue",'
+                '"params":{"setting":"%s","value":"%s"},"id":1}'
+                % (setting, str(value).replace('"', '')))
+
+        def _disk_get(setting):
+            try:
+                import re as _re2
+                gui = xbmc.translatePath('special://userdata/guisettings.xml')
+                with open(gui, 'r', encoding='utf-8') as _f:
+                    txt = _f.read()
+                m = _re2.search(r'<setting id="%s">([^<]*)</setting>' % setting, txt)
+                return m.group(1) if m else ''
+            except Exception:
+                return ''
+
+        _safe_defaults = {'locale.audiolanguage': 'Italian',
+                          'locale.subtitlelanguage': 'default'}
+
+        def _get_orig(setting):
+            v = _disk_get(setting)
+            if not v:
+                v = _rpc_get(setting)
+            # Sanity: avoid perpetuating a previously contaminated value
+            if setting == 'locale.audiolanguage' and v in ('English', 'en', 'eng'):
+                return _safe_defaults[setting]
+            if setting == 'locale.subtitlelanguage' and v in ('Italian', 'it', 'ita'):
+                return _safe_defaults[setting]
+            return v or _safe_defaults.get(setting, '')
+
+        orig_audio = None
+        orig_sub   = None
+
+        if ap and ap != u'Originale (non cambiare)':
+            orig_audio = _get_orig('locale.audiolanguage')
+            lang = 'Italian' if 'Italiano' in ap else 'English'
+            _rpc_set('locale.audiolanguage', lang)
+            logger.info('[CW] pre-play audio: %s → %s' % (orig_audio, lang))
+
+        if sp and sp not in (u'Nessun sottotitolo', ''):
+            orig_sub = _get_orig('locale.subtitlelanguage')
+            slang = 'Italian' if ('Italiano' in sp or 'Come audio' in sp) else 'English'
+            _rpc_set('locale.subtitlelanguage', slang)
+            logger.info('[CW] pre-play sub: %s → %s' % (orig_sub, slang))
+
+        if orig_audio is not None or orig_sub is not None:
+            # Claim the latest language generation so a restore thread from a
+            # previous (autoplay) episode sees a newer generation and skips its
+            # restore instead of clobbering this episode's language.
+            with _lang_gen_lock:
+                global _lang_gen
+                _lang_gen += 1
+                my_gen = _lang_gen
+            t = threading.Thread(
+                target=_restore_lang_after_av_started,
+                args=(orig_audio, orig_sub),
+                kwargs={'gen': my_gen})
+            t.daemon = True
+            t.start()
+
+    except Exception as exc:
+        logger.error('[CW] _pre_play_set_lang: %s' % str(exc))
+
+
+def _await_player_teardown(player, settle_ms=2000, max_wait_ms=4000):
+    """Block until the current player has FULLY released its decoder before the
+    next (autoplay) episode is launched.
+
+    On weak Android/Amlogic boxes the hardware MediaCodec video instance is freed
+    ASYNCHRONOUSLY after stop()/playback end. Launching the next episode too soon
+    leaves the new decoder contending with the still-alive old instance
+    ("InstanceGuard locked" → could not open video codec), so the new stream
+    starts with a corrupted pipeline: persistent A/V desync + stalls that look
+    exactly like network buffering (the network is fine). A manual restart works
+    only because the user happened to wait long enough.
+
+    Poll until playback has stopped, then wait an extra settle window for the
+    codec/surface to be released. Costs ~2 s between episodes; removes the
+    back-to-back autoplay buffering. Only runs on the autoplay path — manual and
+    single plays are unaffected.
+    """
+    try:
+        if player.isPlaying():
+            try:
+                player.stop()
+            except Exception:
+                pass
+        waited = 0
+        while waited < max_wait_ms:
+            try:
+                if not player.isPlaying():
+                    break
+            except Exception:
+                break
+            xbmc.sleep(100)
+            waited += 100
+    except Exception:
+        pass
+    xbmc.sleep(settle_ms)
+
+
+# Label for the Continue Watching row (must match what _refresh_cw_row checks).
+_CW_ROW_LABEL = u'Continua a guardare'
+
+# Label for the offline Downloads row ("I miei download"). Items are sourced
+# locally from downloads_db and play from disk (decrypted on the fly by the
+# local stream server when protected) — never from the network.
+_DL_ROW_LABEL = u'I miei download'
+
+# Live-channel row labels (SKY, Sport Live).  These keep their title visible even
+# when empty — an empty live row means "no channel online right now", which we
+# show as a bare titled row rather than hiding it like the other empty rows.
+_LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'),
+                    sportchannels.row_label('tv'))
+
+# Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
+# of the home. Sourced live from the animeunity channel (which already handles
+# the domain auto-update via channels.json + the streamingcommunityws resolver).
+# Items carry the '_enr' sentinel so the TMDB enrichment pass skips them — anime
+# titles match TMDB poorly, so we keep AnimeUnity's own native posters.
+_ANIME_ROW_LABEL = u'Anime — Popolari'
+# Module-level cache so re-opening the home reuses the fetched anime titles.
+_anime_row_cache = {'items': None, 'ts': 0}
+
+# CW lookup tables — populated by _build_cw_items(), used by _apply_cw_to_item().
+_cw_lookup_by_tmdb  = {}   # tmdb_id (str) -> CW Item
+_cw_lookup_by_title = {}   # normalized show name -> CW Item
+
+BG_FANART          = 100
+HERO_CATEG         = 102
+HERO_TITLE         = 103
+HERO_META          = 104
+HERO_PLOT          = 105
+CLOSE_BTN          = 108
+SETTINGS_BTN       = 107   # ⚙ settings button in top bar
+BROWSE_BTN_HOME    = 106   # "Sfoglia" (category browser) button in top bar
+BTN_PLAY           = 110   # PLAY CTA button in hero
+BTN_INFO           = 111   # MORE INFO CTA button in hero
+LOADING_LBL        = 200
+LOADING_TXT        = 201   # dynamic status text inside the loading overlay
+LOADING_BAR        = 202   # progress bar (width driven by Python)
+LOADING_TRACK      = 203   # full-width track behind the progress bar
+HOME_PRELOAD_IMG   = 290   # off-screen image (behind base bg) used to warm the
+                           # texture cache for CW backdrops — never visible
+
+ROW_WRAPLIST_BASE  = 2000
+ROW_LABEL_BASE     = 3000   # category label above each row
+ROW_LEFT_BASE      = 4000   # left arrow button per row
+ROW_RIGHT_BASE     = 4001   # right arrow button per row
+ROW_OVERLAY_BASE   = 5000   # ex overlay bloccamouse (ora disattivato: _disable_mouse_overlays)
+HOVER_BOX_BASE     = 6000   # ex finta cornice-hover (ora disattivata: _disable_mouse_overlays)
+ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
+ROW_STEP           = 10
+# SC_MAX_ROWS: include slider, curated rows and every individual genre. The
+# Android UI is lazy, so rows outside the viewport don't allocate poster views.
+# MAX_ROWS: total row slots STATICALLY defined in PrippiHome.xml (1080i):
+# wraplist/list id 2000-2390 step 10 = 40 slots. Must NEVER exceed the XML
+# count: row 40+ would getControl() non-existent ids and raise.
+SC_MAX_ROWS        = 64
+MAX_ROWS           = 40
+ARROW_PAGE_SIZE    = 1
+UPNEXT_COUNTDOWN   = 60   # seconds before episode end: show Up Next overlay
+
+# ── Detail window control IDs ──────────────────────────────────
+DW_BG_FANART   = 201
+DW_VIDEO       = 202
+DW_TITLE       = 204
+DW_META1       = 205
+DW_META2       = 206
+DW_META3       = 207
+DW_TAGLINE     = 208
+DW_PLOT        = 209
+DW_BTN_PLAY      = 210
+DW_BTN_AUDIO_SUB = 211   # formerly LIST — now opens audio/subtitle picker
+DW_BTN_CLOSE     = 212
+DW_BTN_REMOVE_CW = 213   # remove item from CW (visible only for CW items)
+DW_BTN_DOWNLOAD  = 214   # "SCARICA" — offline download (VOD only; SC/AnimeUnity)
+DW_CAST_PANEL    = 220   # horizontal cast cards panel
+DW_CAST_HDR      = 221   # "CAST" section header label
+DW_EP_INFO       = 223   # "Continua S02E05" episode info label (tvshow only)
+DW_BTN_EP_SEL    = 215   # "STAGIONI & EPISODI" selector button (tvshow only)
+DW_OVERLAY_GROUP = 230   # cinema-mode group (fades out when trailer plays)
+
+# ── EpisodePicker dialog control IDs ─────────────────────────────────────────
+EP_SEASON_LIST   = 310   # (legacy) horizontal panel of season tabs — replaced
+EP_EP_LIST       = 311   # vertical list of episode rows
+EP_SEASON_BTN    = 312   # "Stagione N" dropdown trigger button
+EP_SEASON_DD     = 313   # drop-down list of seasons (overlay, toggled)
+EP_BTN_CANCEL    = 321   # close / cancel button
+
+ACTION_EXIT         = 10
+ACTION_BACK         = 92
+ACTION_LEFT         = 1
+ACTION_RIGHT        = 2
+ACTION_UP           = 3
+ACTION_DOWN         = 4
+ACTION_SELECT_ITEM  = 7
+ACTION_WHEEL_UP     = 104
+ACTION_WHEEL_DOWN   = 105
+ACTION_MOUSE_MOVE   = 107
+ACTION_CONTEXT_MENU = 117
+
+# ── Touch (telefono/tablet) ──────────────────────────────────
+# Id azione che nascono SOLO da un touchscreen: tap/long-press diretti (4xx)
+# e gesti del recognizer (5xx: begin/pan/swipe/end). Mouse e telecomando non
+# li generano mai, quindi il primo che arriva marchia il dispositivo come
+# touch — persistito, perché al riavvio il long-press può essere il PRIMO
+# evento ricevuto e la protezione deve già essere attiva.
+# Id verificati sul campo con [TouchProbe] (telefono, Kodi 21): gli swipe sono
+# 511/521/531/541 (NON 511-514); il pan 504 arriva a onAction con le
+# COORDINATE ASSOLUTE del dito in spazio skin, begin=501, end=599 (amt 0,0).
+ACTION_TOUCH_TAP           = 401
+ACTION_TOUCH_LONGPRESS     = 411
+ACTION_GESTURE_BEGIN       = 501
+ACTION_GESTURE_PAN         = 504
+ACTION_GESTURE_SWIPE_LEFT  = 511
+ACTION_GESTURE_SWIPE_RIGHT = 521
+ACTION_GESTURE_SWIPE_UP    = 531
+ACTION_GESTURE_SWIPE_DOWN  = 541
+ACTION_GESTURE_END         = 599
+_TOUCH_ACTION_IDS = frozenset(range(400, 420)) | frozenset(range(500, 600))
+
+# Pan verticale: pixel di corsa del dito per uno scatto di riga. Le righe sono
+# alte 320/522 in spazio skin 1080: ~190px = segue il dito senza sembrare nervoso.
+_PAN_ROW_STEP_PX = 190
+
+_touch_mode_cache = [None]   # None = non ancora letto dal setting
+
+
+def _is_touch_mode():
+    if _touch_mode_cache[0] is None:
+        try:
+            _touch_mode_cache[0] = bool(config.get_setting('touch_device', default=False))
+        except Exception:
+            _touch_mode_cache[0] = False
+    return _touch_mode_cache[0]
+
+
+def _note_touch_action(aid):
+    """Da chiamare a inizio onAction: al primo id touch attiva (e persiste)
+    la modalità touch. Costo per azione: un lookup in frozenset."""
+    if aid in _TOUCH_ACTION_IDS and not _is_touch_mode():
+        _touch_mode_cache[0] = True
+        try:
+            config.set_setting('touch_device', True)
+            logger.info('[Touch] touchscreen rilevato: modalità touch attiva (persistita)')
+        except Exception:
+            pass
+
+# ── Search window control IDs ────────────────────────────────
+SEARCH_BTN_HOME     = 109   # search button in PrippiHome top bar
+SEARCH_BTN_BACK     = 109   # (legacy) back; ESC/Back key handled in onAction
+SEARCH_CTX_POSTER   = 131   # hero box: focused item mini poster
+SEARCH_CTX_TITLE    = 132   # hero box: focused item title
+SEARCH_CTX_META     = 133   # hero box: focused item meta (type · year · rating)
+SEARCH_CTX_PLOT     = 134   # hero box: focused item plot (2 lines)
+SEARCH_QUERY_BTN    = 120   # clickable query display / re-search button
+SEARCH_PROGRESS     = 121   # result-count / progress label
+SEARCH_CLOSE        = 122   # close ✕ button
+SEARCH_FILTER_ALL   = 140   # filter chip: Tutti
+SEARCH_FILTER_FILM  = 141   # filter chip: Film
+SEARCH_FILTER_SERIE = 142   # filter chip: Serie
+SEARCH_FILTER_ANIME = 143   # filter chip: Anime
+SEARCH_WL_SC        = 160   # poster grid panel
+SEARCH_LOADING      = 170   # loading indicator group
+SEARCH_NORESULTS    = 171   # no-results label
+SEARCH_STATUS_LBL   = 172   # "Ricerca in corso..." text inside loading group
+
+# ── One Piece "rows" mode (a dedicated, carousel layout shown only when the user
+# searches One Piece). When active, Window.Property(op_mode)=1 hides the filter
+# chips + the single grid and reveals the three carousels below.
+OP_HEADER   = 180           # "ONE PIECE" hero header label
+OP_SUBHDR   = 181           # subtitle / count
+OP_ROW_WL   = (182, 184, 186)   # carousel wraplists: Serie / Film / Speciali
+OP_ROW_LBL  = (183, 185, 187)   # row title labels
+
+# Map filter chip control id → search-type key
+SEARCH_FILTER_MAP = {
+    SEARCH_FILTER_ALL:   'all',
+    SEARCH_FILTER_FILM:  'film',
+    SEARCH_FILTER_SERIE: 'serie',
+    SEARCH_FILTER_ANIME: 'anime',
+}
+
+
+# ── Continue Watching helpers ────────────────────────────────
+
+# ── 4K carousel row builder ──────────────────────────────────
+
+def _sync_channels_json():
+    """Compatibilità Home: delega all'unico updater condiviso e atomico."""
+    from platformcode import remote_registry
+    return remote_registry.sync(config, logger=logger, timeout=6)
+
+
+def _build_4k_row():
+    """Build a list of Items for the 4K carousel row.
+    Enriches with TMDB metadata so fanart/poster are available for CW."""
+    if not _fourk._ready or not _fourk._index_by_tmdb:
+        return []
+    items = []
+    for tmdb_id, f4k in _fourk._index_by_tmdb.items():
+        try:
+            it = Item(
+                fulltitle=f4k.get('name', ''),
+                thumbnail=f4k.get('poster', ''),
+                fanart=f4k.get('poster', ''),
+                contentType='movie',
+                action='findvideos',
+                infoLabels={
+                    'tmdb_id': int(tmdb_id),
+                    'rating': f4k.get('rating', 0),
+                    'year': f4k.get('year', 0),
+                    'mediatype': 'movie',
+                }
+            )
+            items.append(it)
+        except Exception:
+            pass
+    # TMDB enrichment is intentionally deferred to _bg_enrich_inplace so
+    # _build_4k_row() returns instantly and never blocks the home render.
+    # Items already carry tmdb_id + IPTV poster (stream_icon) which is
+    # sufficient for the first frame; HD TMDB posters arrive shortly after.
+    return items
+
+
+def _ask_quality_enabled():
+    """Read 'fourk_ask_quality' FRESH (new Addon instance) so an in-session
+    settings change applies LIVE: the module-cached Addon in config returns
+    stale values after the settings dialog saves (Kodi 21 — same reason
+    _read_live_settings exists). One Addon() per play click is negligible."""
+    try:
+        return xbmcaddon.Addon('plugin.video.prippistream').getSetting('fourk_ask_quality') == 'true'
+    except Exception:
+        return False
+
+
+def _ask_4k_quality(item):
+    """Ask the user whether to play a 4K-available movie in 4K or Full HD.
+    Only called when the 'fourk_ask_quality' setting is enabled.
+    Returns '4k', 'fhd', or None if the dialog was dismissed (= play nothing)."""
+    try:
+        title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                       item.fulltitle or item.title or '').strip()
+        heading = u'Qualità di riproduzione'
+        if title:
+            heading += u' — %s' % title
+        idx = xbmcgui.Dialog().select(heading,
+                                      [u'4K (Ultra HD)', u'Full HD (1080p)'])
+    except Exception as exc:
+        logger.error('[PrippiHome] _ask_4k_quality: %s' % str(exc))
+        return '4k'
+    if idx < 0:
+        return None
+    return 'fhd' if idx == 1 else '4k'
+
+
+def _resolve_sc_movie(item):
+    """Find the SC counterpart of a bare 4K-row movie item (no channel/url).
+    One SC search by title, then match by tmdb_id (SC search results are
+    TMDB-enriched before returning) with a normalized title+year fallback.
+    Returns a full SC Item (action=findvideos) or None."""
+    try:
+        from channels import streamingcommunity as _sc
+        title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                       item.fulltitle or item.title or '').strip()
+        if not title:
+            return None
+        seed = Item(channel='streamingcommunity', extra='search')
+        results = list(_sc.search(seed, title) or [])
+        want_tmdb = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
+        want_year = str((item.infoLabels or {}).get('year') or '')[:4]
+
+        def _norm(s):
+            return re.sub(r'[^a-z0-9]+', '', (s or '').lower())
+
+        movies = [it for it in results
+                  if (getattr(it, 'contentType', '') or '') == 'movie'
+                  and (getattr(it, 'url', '') or '').strip()]
+        if want_tmdb:
+            for it in movies:
+                il = it.infoLabels or {}
+                if str(il.get('tmdb_id') or il.get('tmdb') or '').strip() == want_tmdb:
+                    return it
+        nt = _norm(title)
+        for it in movies:
+            cand = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                          it.fulltitle or it.title or '').strip()
+            if _norm(cand) == nt:
+                y = str((it.infoLabels or {}).get('year') or '')[:4]
+                if not want_year or not y or y == want_year:
+                    return it
+    except Exception as exc:
+        logger.error('[PrippiHome] _resolve_sc_movie: %s' % str(exc))
+    return None
+
+
+# ── CW helpers ──────────────────────────────────────────────
+
+def _cw_key(item):
+    """Return a stable string key that uniquely identifies this content in the CW db.
+    TV series (contentType=='episode') share a single series-level key so that all
+    episodes of the same show are tracked under one CW entry.
+    """
+    tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+    ct   = getattr(item, 'contentType', '') or ''
+    if ct == 'episode':
+        base = tmdb or re.sub(r'[^a-z0-9]', '',
+                               (item.show or item.contentSerieName or '').lower())
+        return 'tv_%s' % base
+    else:
+        base = tmdb or re.sub(r'[^a-z0-9]', '',
+                               (item.fulltitle or item.show or '').lower())
+        return 'movie_%s' % base
+
+
+def _fix_cw_url_domain(it):
+    """Replace a stale channel domain in a CW item's URL with the current one from channels.json.
+
+    CW items store the full URL at watch-time. When the channel migrates to a new domain
+    (e.g. streamingcommunityz.ooo → streamingcommunityz.organic) the stored URL becomes
+    unreachable. This function rewrites the netloc to match the live channel host so that
+    playback and data-fetching work correctly without the user having to re-add the item.
+    """
+    ch = getattr(it, 'channel', '') or ''
+    if not ch:
+        return
+    try:
+        current_host = config.get_channel_url(name=ch)
+    except Exception:
+        return
+    if not current_host:
+        return
+    try:
+        if PY3:
+            from urllib.parse import urlsplit, urlunsplit
+        else:
+            from urlparse import urlsplit, urlunsplit
+        current_netloc = urlsplit(current_host).netloc
+        for attr in ('url', '_cw_show_url'):
+            old_url = getattr(it, attr, '') or ''
+            if not old_url:
+                continue
+            parsed = urlsplit(old_url)
+            if parsed.netloc and parsed.netloc != current_netloc:
+                logger.info('[CW] domain updated %s → %s (%s)' % (
+                    parsed.netloc, current_netloc, getattr(it, 'fulltitle', '')))
+                new_url = urlunsplit((parsed.scheme, current_netloc,
+                                     parsed.path, parsed.query, parsed.fragment))
+                setattr(it, attr, new_url)
+    except Exception as exc:
+        logger.error('[CW] _fix_cw_url_domain: %s' % str(exc))
+
+
+def _build_cw_items():
+    """Build Items from the Continue Watching DB.
+    Entries >= 97% watched are treated as completed and auto-removed.
+    Also rebuilds the module-level CW lookup tables used by _apply_cw_to_item().
+    """
+    global _cw_lookup_by_tmdb, _cw_lookup_by_title
+    _cw_lookup_by_tmdb  = {}
+    _cw_lookup_by_title = {}
+
+    entries = watch_history.get_all()
+    if not entries:
+        return []
+    items = []
+    completed_keys = []
+    for e in entries:
+        try:
+            cw_time  = float(e.get('time_watched', 0))
+            cw_total = float(e.get('total_time', 0))
+            if cw_total > 0 and (cw_time / cw_total) >= 0.97:
+                completed_keys.append(e['key'])
+                logger.info('[CW] auto-removing completed: %s' % e.get('title', e['key']))
+                continue
+            it = Item().fromurl(e['item_url'])
+            # Live channels have no resumable timeline.  Older TV provider
+            # launches passed through the generic VOD watcher and could leak a
+            # channel (for example Rete 4) into Continue Watching.
+            if (getattr(it, 'is_live_channel', False)
+                    or getattr(it, '_app_live_provider', False)
+                    or getattr(it, 'channel', '') in
+                    ('raiplay', 'mediasetplay', 'la7', 'discoveryplus')):
+                completed_keys.append(e['key'])
+                logger.info('[CW] auto-removing live entry: %s' %
+                            e.get('title', e['key']))
+                continue
+            it.cw_time_watched = cw_time
+            it.cw_total_time   = cw_total
+            it._cw_show_url    = e.get('show_url', '') or ''
+            it._cw_db_key      = e['key']
+            _fix_cw_url_domain(it)  # update stale domains after migration
+            # Title fallback from DB entry (items stored before fulltitle was set)
+            if not _extract_item_title(it):
+                it.title = e.get('title', '') or ''
+            items.append(it)
+        except Exception as exc:
+            logger.error('[CW] build item: %s' % str(exc))
+    for key in completed_keys:
+        try:
+            watch_history.remove(key)
+        except Exception as exc:
+            logger.error('[CW] remove completed: %s' % str(exc))
+
+    # Build lookup tables for cross-row sync
+    for it in items:
+        tmdb = str(it.infoLabels.get('tmdb_id') or '').strip()
+        if tmdb and tmdb not in _cw_lookup_by_tmdb:
+            _cw_lookup_by_tmdb[tmdb] = it
+        show_name = (getattr(it, 'show', '') or
+                     getattr(it, 'contentSerieName', '') or
+                     getattr(it, 'fulltitle', '') or '')
+        norm = _normalize_title(show_name)
+        if norm and norm not in _cw_lookup_by_title:
+            _cw_lookup_by_title[norm] = it
+
+    return items
+
+
+def _build_dl_items():
+    """Build Items for the offline Downloads row from downloads_db.
+
+    Movies become one tile each; episodes are grouped into a single tile per
+    series (clicking it lists the downloaded episodes). Items carry is_download
+    so the home plays them from disk instead of opening the detail card, and the
+    '_enr' sentinel so TMDB enrichment leaves their local posters alone.
+    """
+    from platformcode import downloads_db
+    try:
+        entries = downloads_db.get_all()
+    except Exception as exc:
+        logger.error('[DL] get_all: %s' % str(exc))
+        return []
+    if not entries:
+        return []
+
+    items = []
+    shows = {}   # show_key -> aggregate dict
+    for e in entries:
+        if e.get('type') == 'episode' and e.get('show_key'):
+            sk = e['show_key']
+            agg = shows.get(sk)
+            if agg is None:
+                agg = {'title': e.get('show_title', '') or 'Serie',
+                       'thumb': e.get('thumbnail', ''),
+                       'fanart': e.get('fanart', ''),
+                       'count': 0, 'done': 0, 'ts': 0}
+                shows[sk] = agg
+            agg['count'] += 1
+            if e.get('status') == 'done':
+                agg['done'] += 1
+            agg['ts'] = max(agg['ts'], e.get('timestamp', 0) or 0)
+            if not agg['thumb'] and e.get('thumbnail'):
+                agg['thumb'] = e['thumbnail']
+            continue
+        # Movie tile
+        it = Item(contentType='movie')
+        label = e.get('title', '') or 'Film'
+        if e.get('status') != 'done':
+            label = u'%s  (%d%%)' % (label, int(e.get('progress', 0) or 0))
+        it.title = it.fulltitle = label
+        it.thumbnail = e.get('thumbnail', '') or ''
+        it.fanart = e.get('fanart', '') or it.thumbnail
+        it.is_download = True
+        it.dl_db_key = e.get('key', '')
+        it.dl_file_path = e.get('file_path', '') or ''
+        it.dl_protection = e.get('protection', 'none')
+        it.dl_status = e.get('status', '')
+        it._dl_ts = e.get('timestamp', 0) or 0
+        it.infoLabels['_enr'] = 1
+        items.append(it)
+
+    for sk, agg in shows.items():
+        it = Item(contentType='tvshow')
+        it.title = it.fulltitle = u'%s  (%d ep.)' % (agg['title'], agg['count'])
+        it.thumbnail = agg['thumb'] or ''
+        it.fanart = agg['fanart'] or it.thumbnail
+        it.is_download = True
+        it.dl_show_key = sk
+        it.dl_show_title = agg['title']
+        it._dl_ts = agg['ts']
+        it.infoLabels['_enr'] = 1
+        items.append(it)
+
+    items.sort(key=lambda x: getattr(x, '_dl_ts', 0), reverse=True)
+    return items
+
+
+class PrippiHomeWindow(xbmcgui.WindowXML):
+
+    def __init__(self, *args, **kwargs):
+        self.rows_data = []
+        self._num_rows = 0
+        self._alive = True
+        self._last_focused_row = 0
+        self._hero_nav_token = 0  # debounce token for deferred hero updates on keyboard nav
+        self._load_full_w = 0     # cached loading-track width (resolution-independent bar)
+        self._populated = set()  # track which row indices have had addItems() called
+        self._hover_last = (-1, -1)      # (riga, pos) dell'ultimo hero disegnato: throttle mouse/touch
+        self._mouse_overlays_off = False  # overlay bloccamouse già neutralizzati
+        self._rows_lock = threading.Lock()  # protects rows_data + _num_rows extension
+        # Rende atomico il check+add di _populated (onFocus vs populater bg).
+        self._populate_lock = threading.Lock()
+        # Sonda azioni touch nel log (vedi onAction) — attiva solo nelle build
+        # di test insieme al resto della diagnostica (setting perf_log).
+        # La sonda touch e' estremamente verbosa: richiede sia la telemetria
+        # prestazioni sia il debug generico esplicitamente abilitato.
+        self._probe = bool(config.get_setting('perf_log', default=False)
+                           and config.get_setting('debug', default=False))
+        self._probe_n = 0
+        # Pan-tracking touch: [x0, y0, y dell'ultimo scatto, asse 'v'/'h'/None]
+        self._pan_state = None
+        # Cleared while a modal dialog is open — background thread must NOT modify the UI
+        self._bg_ui_pause = threading.Event()
+        self._bg_ui_pause.set()   # initially NOT paused
+        # Tier-3 nav-pause: cleared mentre l'utente NAVIGA (tasti/focus), ri-settato
+        # dal watcher ~1,2s dopo l'ultima azione. I lavori bg (enrich, trailer,
+        # extra-source, re-render poster) aspettano ENTRAMBI gli eventi via
+        # _bg_gate() così non rubano GIL/rete proprio mentre si scorre la home.
+        self._nav_idle = threading.Event()
+        self._nav_idle.set()      # initially idle (nessuna navigazione in corso)
+        self._nav_kick = threading.Event()
+        self._last_nav_ts = 0.0
+        # Set by background threads to request a CW row refresh on the GUI thread.
+        # Checked (and drained) in onFocus, which always runs on the GUI thread.
+        self._cw_refresh_pending = False
+        # When set to (wl_id, pos, remaining_attempts), onFocus will call
+        # selectItem(pos) every time that wl_id gains focus, until attempts run out.
+        # This defeats the skin's post-animation focus reset on Android TV.
+        self._pending_select_pos = None
+        # Lock to prevent concurrent _enforce_scroll_pos threads.
+        self._scroll_lock = threading.Lock()
+        # Prevents two concurrent _bg_load calls (Kodi fires onInit twice when
+        # show() is called from _restore_home, causing duplicate live rows).
+        self._bg_load_lock = threading.Lock()
+        # Per-row epoch of the last live-channel probe (throttles re-probes when
+        # onInit re-fires on every return from playback).  row_key -> ts.
+        self._last_live_probe = {}
+        # Monotonic play counter: each channel click supersedes older in-flight
+        # play workers (they share one xbmc.Player and must not cross-talk).
+        self._play_gen = 0
+        self._live_remote_active = False
+        self._live_remote_gen = 0
+        self._live_remote_row = None
+        self._live_remote_pos = 0
+        self._live_zap_busy = False
+        self._live_zap_lock = threading.Lock()
+        # True once the home has been fully built; stops onInit (which re-fires
+        # when _restore_home calls show()) from re-running the whole load.
+        self._loaded_once = False
+        # Guard so the dedicated ANIME row is appended exactly once per build.
+        self._anime_appended = False
+        # FASE 2 ARM: expensive jobs share one lane on low-memory devices instead
+        # of competing for the GIL/SQLite/network at the same time.
+        self._low_power = deviceprofile.is_low_power()
+        self._heavy_bg_lock = threading.Lock()
+        self._first_paint = threading.Event()
+        try:
+            logger.info('[PrippiHome] device profile: %s' % deviceprofile.profile())
+        except Exception:
+            pass
+
+    def onInit(self):
+        # Kodi può consegnare un ultimo onInit mentre sta già distruggendo le
+        # finestre. Non avviare thread o accedere ai controlli in quella fase.
+        if _shutdown_event.is_set() or xbmc.Monitor().abortRequested():
+            self._alive = False
+            return
+        try:
+            if config.get_platform(True)['num_version'] < 18:
+                self.setCoordinateResolution(3)  # 1920x1080
+        except Exception:
+            pass
+        # Mouse/touch e frecce devono muovere la STESSA selezione: spegne il
+        # vecchio overlay bloccamouse + finta cornice-hover (vedi il metodo).
+        self._disable_mouse_overlays()
+        # Reflect the real installed version into the read-only settings field, so
+        # "Versione installata" in settings is always current (the release CI bumps
+        # addon.xml automatically). Only write when it actually changed.
+        try:
+            _ad = xbmcaddon.Addon()
+            _ver = _ad.getAddonInfo('version')
+            if _ad.getSetting('addon_version_display') != _ver:
+                _ad.setSetting('addon_version_display', _ver)
+        except Exception:
+            pass
+        # Live-apply our own settings (row toggles, 18+) without an addon reload:
+        # watch for settings changes and re-render the affected UI. Create once —
+        # onInit re-fires on every return from playback.
+        try:
+            if not getattr(self, '_settings_monitor', None):
+                self._settings_snap = self._read_live_settings()
+                self._settings_monitor = _SettingsWatchMonitor(self)
+        except Exception as exc:
+            logger.error('[PrippiHome] settings monitor init: %s' % str(exc))
+        # "Animazioni ridotte": la condition delle animation zoom nello skin
+        # legge Window.Property(reduced_anim). Applicata FUORI dal blocco
+        # first-run: onInit ri-fires al ritorno dal playback e ri-applicarla
+        # è gratis e robusto.
+        self._apply_reduced_anim()
+        # Watcher nav-pause (Tier-3): un solo daemon per finestra.
+        if not getattr(self, '_nav_watcher_started', False):
+            self._nav_watcher_started = True
+            _tnav = threading.Thread(target=self._nav_idle_watcher)
+            _tnav.daemon = True
+            _tnav.start()
+        if _shutdown_event.is_set() or _app_monitor.abortRequested():
+            self._alive = False
+            return
+        # Loading overlay starts visible in XML — just start background fetch.
+        t = threading.Thread(target=self._bg_load)
+        t.daemon = True
+        t.start()
+        # Background refresh of 4K index (non-blocking, cache-first)
+        _t4k = threading.Thread(target=_fourk.build_4k_index)
+        _t4k.daemon = True
+        _t4k.start()
+        # Background daily refresh of the One Piece index (cache-first, TTL 24h):
+        # discovers new episodes once a day at skin load so they appear by themselves.
+        try:
+            import channels.onepiece as _op_idx
+            _top = threading.Thread(target=_op_idx.build_index)
+            _top.daemon = True
+            _top.start()
+        except Exception as _exc_op:
+            logger.error('[OnePiece] index thread start: %s' % str(_exc_op))
+
+    def _set_loading(self, pct, msg=None):
+        """Update the dynamic loading overlay: progress-bar width + percentage.
+        Always shows "CARICAMENTO NN%" (no phase-specific text).
+        Resolution-independent (reads the track width once via getWidth)."""
+        if not self._alive or _shutdown_event.is_set():
+            return
+        try:
+            pct = max(0, min(100, int(pct)))
+            try:
+                self.getControl(LOADING_TXT).setLabel('CARICAMENTO %d%%' % pct)
+            except Exception:
+                pass
+            if self._load_full_w <= 0:
+                try:
+                    self._load_full_w = int(self.getControl(LOADING_TRACK).getWidth() or 0)
+                except Exception:
+                    self._load_full_w = 0
+            full = self._load_full_w
+            if full > 0:
+                w = max(2, int(full * pct / 100.0))
+                try:
+                    self.getControl(LOADING_BAR).setWidth(w)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _assemble_initial(self, sc_rows):
+        """Build rows_data = [CW] + special rows + SC rows.
+
+        The 4K index always runs in parallel so normal film/search cards retain
+        4K lookup and playback.  The dedicated carousel is optional and disabled
+        by default: when hidden we neither wait for its index nor build 250+ cards.
+        """
+        from platformcode import perf
+        _perf_t = perf.mark('home.assembly start')
+        cw_items = _build_cw_items()
+        _perf_t = perf.mark('home.assembly.cw', _perf_t)
+        self.rows_data = [(_CW_ROW_LABEL, cw_items)]
+
+        # Read the row-toggle settings FRESH (a new Addon instance + getSettingBool)
+        # so a LIVE re-render after the user flips a toggle reflects the change.
+        # The module-cached config.get_setting() is stale on Kodi 21 until an addon
+        # reload, so using it here made the home re-render with the OLD values
+        # (rows looked unchanged). Fall back to the cached read only if the fresh
+        # read is unavailable, preserving the original "shown unless explicitly
+        # disabled" semantics.
+        try:
+            _fresh_addon = xbmcaddon.Addon('plugin.video.prippistream')
+        except Exception:
+            _fresh_addon = None
+
+        def _row_hidden(key):
+            if _fresh_addon is not None:
+                try:
+                    return _fresh_addon.getSettingBool(key) is False
+                except Exception:
+                    pass
+            return config.get_setting(key) is False
+
+        # SLOT FISSI PER IDENTITÀ: le 5 righe speciali occupano SEMPRE gli slot
+        # 0-4 (CW=2000, Download=2010, SKY=2020, Sport=2030, TV=2040), anche
+        # quando spente da setting o vuote: restano in rows_data con [] (il
+        # gruppo si nasconde e lo spazio collassa), così le righe successive
+        # NON slittano e ogni riga mantiene il SUO controllo XML — i 5 slot
+        # sono tutti type="list" (non ciclici), le wraplist partono dallo slot 5.
+        try:
+            _dl_items = [] if _row_hidden('show_downloads_row') else (_build_dl_items() or [])
+        except Exception as exc:
+            logger.error('[PrippiHome] downloads row build: %s' % str(exc))
+            _dl_items = []
+        self.rows_data.append((_DL_ROW_LABEL, _dl_items))
+        _perf_t = perf.mark('home.assembly.download', _perf_t)
+
+        # Live-channel rows (SKY, Sport Live, then TV).  Items play directly on
+        # click (handled in onClick), never opening DetailWindow. Le righe spente
+        # restano comunque probate in background (_refresh_live_rows), così
+        # riattivarle le mostra all'istante con i canali già in cache.
+        _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
+        for _row_key in ('sky', 'sport', 'tv'):
+            _ch_items = []
+            if not _row_hidden(_row_toggle[_row_key]):
+                try:
+                    _ch_items = sportchannels.build_items(_row_key) or []
+                    # Prefetch "now on air" for any disk-cached online channels so
+                    # the hero shows EPG immediately on first focus.
+                    if _ch_items:
+                        self._prefetch_live_epg(_ch_items)
+                except Exception as exc:
+                    logger.error('[PrippiHome] %s row build: %s' % (_row_key, str(exc)))
+                    _ch_items = []
+            self.rows_data.append((sportchannels.row_label(_row_key), _ch_items))
+        _perf_t = perf.mark('home.assembly.live', _perf_t)
+
+        # Index after the live block. The optional 4K row inserts here so it never
+        # splits Sport from TV (TV must stay right after Sport).
+        _live_block_end = len(self.rows_data)
+
+        self.rows_data += list(sc_rows)
+
+        show_4k_row = not _row_hidden('show_4k_row')
+        need_4k_fill = False
+        if show_4k_row:
+            # Never hold the home behind the 4K provider. Use its disk-cached
+            # index immediately; a cold index fills the reserved row later.
+            _4k_items = _build_4k_row() if _fourk._ready else []
+            self.rows_data.insert(min(_live_block_end, len(self.rows_data)),
+                                  (u'Film in 4K', _4k_items))
+            need_4k_fill = not _4k_items
+        logger.info('[4K] home row enabled=%s ready=%s items=%d'
+                    % (show_4k_row, _fourk._ready,
+                       len(_4k_items) if show_4k_row else 0))
+
+        # Sync CW progress into every non-CW row (skip the live-channel rows —
+        # live channels have no watch progress).
+        _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
+                        sportchannels.row_label('sky'), sportchannels.row_label('tv'))
+        if cw_items:
+            for row_label, row_items in self.rows_data:
+                if row_label in _live_labels:
+                    continue
+                for it in row_items:
+                    _apply_cw_to_item(it)
+        perf.mark('home.assembly.progress', _perf_t)
+        return cw_items, need_4k_fill
+
+    def _render_now(self, cw_items):
+        """Hide the loading overlay, populate the first rows and set focus.
+        Safe to call once from the GUI-driving background thread."""
+        if not self._alive or _shutdown_event.is_set():
+            return
+        try:
+            self.getControl(LOADING_LBL).setVisible(False)
+        except Exception:
+            pass
+        self._num_rows = min(len(self.rows_data), MAX_ROWS)
+        logger.debug('[PrippiHome] rows rendered: %d (CW: %d)' % (self._num_rows, len(cw_items)))
+        if self._num_rows > 0 and self._alive:
+            xbmc.sleep(80)
+            from platformcode import perf
+            _populate_t = perf.mark('home.assembly.populate start')
+            for i in range(min(6, self._num_rows)):
+                self._populate_single_row(i)
+            perf.mark('home.assembly.populate', _populate_t)
+            # Focus e hero sulla PRIMA riga non vuota: con gli slot riservati
+            # (CW/Download/SKY/Sport/TV sempre presenti, anche vuoti/nascosti)
+            # la riga 1 può essere un gruppo nascosto — mai focalizzarlo.
+            first_idx = 0
+            for n, (_lbl, _its) in enumerate(self.rows_data[:self._num_rows]):
+                if _its:
+                    first_idx = n
+                    break
+            self._update_hero(first_idx)
+            self.setFocusId(ROW_WRAPLIST_BASE + first_idx * ROW_STEP)
+        try:
+            from platformcode import perf
+            perf.note('home.mem_mb', '%s (al paint)' % xbmc.getInfoLabel('System.Memory(used)'))
+        except Exception:
+            pass
+        self._first_paint.set()
+        # Touch: riempi il resto delle righe nei momenti di quiete, altrimenti
+        # scorrendo col dito (che NON sposta il focus) si trovano righe nere.
+        if self._alive and _is_touch_mode():
+            _tpop = threading.Thread(target=self._bg_populate_all_rows)
+            _tpop.daemon = True
+            _tpop.start()
+        # Preload the DetailWindow fanart-slideshow backdrops for CW items (URLs +
+        # Kodi texture cache) so opening a CW card shows them with no delay.
+        if cw_items and self._alive and not self._low_power:
+            _tpre = threading.Thread(target=self._preload_cw_backdrops, args=(list(cw_items),))
+            _tpre.daemon = True
+            _tpre.start()
+
+    def _preload_cw_backdrops(self, cw_items):
+        """Background (post-render): for each Continue-Watching item, fetch its
+        TMDB backdrop URLs and prime Kodi's texture cache by briefly displaying
+        each on the off-screen preload image (control 290, hidden behind the base
+        background). The DetailWindow slideshow then shows them with no network or
+        decode delay. Bounded + abort-aware so it never burdens the home."""
+        try:
+            seen = set()
+            for it in (cw_items or []):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                tmdb_id = str((it.infoLabels or {}).get('tmdb_id') or '').strip()
+                if not tmdb_id or tmdb_id in seen:
+                    continue
+                seen.add(tmdb_id)
+                ctype = 'tv' if getattr(it, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+                urls = _fetch_cw_backdrops(tmdb_id, ctype)
+                for u in urls:
+                    if not self._alive or _shutdown_event.is_set():
+                        return
+                    # Pause preloading while a modal (e.g. DetailWindow) is open, so
+                    # we don't fight it for the GUI/texture loader.
+                    self._bg_gate(15)
+                    try:
+                        self.getControl(HOME_PRELOAD_IMG).setImage(u)
+                    except Exception:
+                        pass
+                    xbmc.sleep(250)  # give the texture loader time to fetch + cache
+            logger.info('[CW preload] warmed backdrops for %d CW titles' % len(seen))
+        except Exception as exc:
+            logger.error('[CW preload] %s' % str(exc)[:100])
+
+    def _bg_load(self):
+        """Background thread: progressively fetch SC rows and render the home.
+
+        Fast path (cache hit): assemble + render everything at once.
+        Progressive path (cache miss): render the main-page rows immediately,
+        then append the archive rows live and enrich all rows in the background.
+        """
+        # onInit re-fires every time _restore_home() calls show() to bring the
+        # home back after playback.  Only do the full build ONCE — re-running it
+        # re-renders 30 rows, re-spawns all the TMDB-enrich threads and re-probes
+        # the live rows, flooding the network with blocking I/O that then blocks
+        # Kodi's shutdown ("script didn't stop in 5 seconds" → freeze/kill).
+        if self._loaded_once:
+            logger.info('[PrippiHome] _bg_load: already built — skipping reload (return from playback)')
+            return
+        # Kodi fires onInit twice when show() is called from _restore_home
+        # (once from the GUI thread, once from the background caller).  Guard with
+        # a non-blocking lock so the second concurrent call is silently dropped.
+        if not self._bg_load_lock.acquire(blocking=False):
+            logger.info('[PrippiHome] _bg_load: already running — skipped (double onInit)')
+            return
+        try:
+            self._bg_load_inner()
+            self._loaded_once = True
+        finally:
+            self._bg_load_lock.release()
+
+    def _bg_load_inner(self):
+        if not self._alive or _shutdown_event.is_set() or _app_monitor.abortRequested():
+            return
+        from platformcode import perf
+        _pt = perf.mark('home.load start')
+
+        # ── Refresh the live-channel lists (Sport + SKY) from the backend, then
+        # swap the probed (online-only) result into the SKY/Sport rows live ──
+        _t_sport = threading.Thread(target=self._refresh_live_rows)
+        _t_sport.daemon = True
+        _t_sport.start()
+        sportchannels.start_keepalive(_shutdown_event)
+
+        self._set_loading(8)
+
+        from time import time as _now
+
+        # ---- Snapshot su disco: se la cache in-memory è vuota (nuovo processo),
+        # prova a ripartire dallo snapshot dell'ultima sessione. ----
+        _snap_age = None
+        if _cache['data'] is None and config.get_setting('home_snapshot', default=True):
+            try:
+                _snap_rows, _snap_ts, _snap_host = _snapshot_read()
+            except Exception:
+                _snap_rows, _snap_ts, _snap_host = None, 0, ''
+            if _snap_rows:
+                # Se il dominio SC è cambiato dall'ultima sessione, gli URL nello
+                # snapshot sono vecchi: scartalo (il click si auto-riparerebbe
+                # comunque, ma un cold load qui è più pulito).
+                _cur_host = ''
+                try:
+                    from channels import streamingcommunity as _sc
+                    _cur_host = (getattr(_sc, 'host', '') or '').rstrip('/')
+                except Exception:
+                    pass
+                if _snap_host and _cur_host and _snap_host.rstrip('/') != _cur_host:
+                    logger.info('[PrippiHome] snapshot host mismatch → cold load')
+                else:
+                    _cache['data'] = _snap_rows
+                    _cache['ts'] = _snap_ts
+                    _snap_age = _now() - _snap_ts
+                    logger.info('[PrippiHome] snapshot loaded: %d rows, age %.0f min'
+                                % (len(_snap_rows), _snap_age / 60.0))
+
+        # Fast path se la cache è fresca (<30 min) OPPURE se abbiamo uno snapshot
+        # entro _SNAPSHOT_MAX_AGE (12 h): in entrambi i casi le righe sono già
+        # enrichite, quindi si dipinge subito saltando l'enrich sincrono.
+        cache_fresh = (_cache['data'] is not None
+                       and ((_now() - _cache['ts']) < _CACHE_TTL or _snap_age is not None))
+
+        if cache_fresh:
+            # ---- FAST PATH: full cached rows (already enriched from prior run) ----
+            sc_rows = _cache['data']
+            logger.info('[PrippiHome] cache hit, %d rows' % len(sc_rows))
+            if not self._alive or _shutdown_event.is_set():
+                return
+            self._set_loading(70)
+            cw_items, need_4k_fill = self._assemble_initial(sc_rows)
+            _pt = perf.mark('home.assemble (warm)', _pt)
+            self._set_loading(100)
+            self._render_now(cw_items)
+            perf.mark('home.paint (warm)', _pt)
+            self._start_bg_tasks(need_4k_fill, enrich=True)
+            # No archive phase on the cache-hit path → append the ANIME row here.
+            self._start_anime_append(cw_items)
+            # Se il paint è venuto da uno snapshot più vecchio della TTL della
+            # cache, rinfresca in BACKGROUND per la PROSSIMA apertura: aggiorna
+            # solo snapshot + _cache (dati), senza toccare la UI corrente → nessun
+            # flicker né spostamento di focus.
+            if _snap_age is not None and _snap_age > _CACHE_TTL:
+                _target = (self._run_heavy_bg if self._low_power
+                           else self._revalidate_snapshot_silent)
+                _args = ((self._revalidate_snapshot_silent,)
+                         if self._low_power else ())
+                t = threading.Thread(target=_target, args=_args)
+                t.daemon = True
+                t.start()
+            return
+
+        # ---- PROGRESSIVE PATH ----
+        try:
+            main_rows, host, homepage_data = _fetch_main_rows(progress_cb=self._set_loading)
+        except Exception as exc:
+            logger.error('[PrippiHome] main fetch error: %s' % str(exc))
+            main_rows, host, homepage_data = [], '', None
+        _pt = perf.mark('home.fetch_main (cold)', _pt)
+
+        if not main_rows and _cache['data']:
+            # Network failed: fall back to whatever we showed last time.
+            main_rows = _cache['data']
+
+        if not self._alive:
+            return
+
+        self._set_loading(60)
+        cw_items, need_4k_fill = self._assemble_initial(main_rows)
+        _pt = perf.mark('home.assemble (cold)', _pt)
+
+        # First paint uses SC metadata only. Every row is sent through the
+        # existing in-place TMDB enrichment lane immediately after rendering.
+        self._set_loading(98)
+        self._set_loading(100)
+        self._render_now(cw_items)
+        perf.mark('home.paint (cold)', _pt)
+
+        # Enrich the rest of the rows + extra-source + 4K fill in the background.
+        self._start_bg_tasks(need_4k_fill, enrich=True)
+
+        # Fetch archive rows in the background, then append them live.
+        # _bg_load_archive appends the ANIME row last; if SC is unreachable
+        # (no host) there is no archive phase, so append the ANIME row here.
+        if self._alive and host:
+            t = threading.Thread(target=self._bg_load_archive,
+                                  args=(host, homepage_data, main_rows, cw_items))
+            t.daemon = True
+            t.start()
+        else:
+            self._start_anime_append(cw_items)
+
+    def _bg_load_archive(self, host, homepage_data, main_rows, cw_items):
+        """Fetch archive rows after the first paint and append them live."""
+        from platformcode import perf
+        _pt = perf.mark('home.archive start')
+        try:
+            archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows))
+        except Exception as exc:
+            logger.error('[PrippiHome] archive fetch error: %s' % str(exc))
+            archive_rows = []
+        perf.mark('home.archive fetch (%d rows)' % len(archive_rows), _pt)
+        if not archive_rows or not self._alive:
+            # Still cache the main rows so a quick re-open is instant.
+            full = list(main_rows)
+            if full:
+                _cache['data'] = full
+                _cache['ts'] = __import__('time').time()
+                self._write_home_snapshot(host)
+            # The ANIME row goes last — append it even when there are no archive rows.
+            self._append_anime_row(cw_items)
+            return
+
+        # Apply CW progress to the new items.
+        if cw_items:
+            for _lbl, _items in archive_rows:
+                for it in _items:
+                    _apply_cw_to_item(it)
+
+        start_idx = None
+        with self._rows_lock:
+            if not self._alive:
+                return
+            start_idx = len(self.rows_data)
+            self.rows_data.extend(archive_rows)
+            self._num_rows = min(len(self.rows_data), MAX_ROWS)
+
+        # Populate any newly-appended rows that fall within the first screenful.
+        if _is_touch_mode():
+            for j in range(start_idx, min(start_idx + 2, self._num_rows)):
+                self._populate_single_row(j)
+
+        # Cache the full assembled SC rows (main + archive) for fast re-open.
+        full = list(main_rows) + list(archive_rows)
+        _cache['data'] = full
+        _cache['ts'] = __import__('time').time()
+
+        # Persisti subito lo snapshot su disco (righe complete; le archive non sono
+        # ancora enrichite ma il fast path le enrichirà in bg alla riapertura, e
+        # comunque _bg_enrich_inplace qui sotto lo riscrive enrichito a fine passata).
+        self._write_home_snapshot(host)
+
+        # Enrich the freshly-added archive rows in the background.
+        if self._alive:
+            _target = self._run_heavy_bg if self._low_power else self._bg_enrich_inplace
+            _args = (self._bg_enrich_inplace, start_idx) if self._low_power else (start_idx,)
+            t = threading.Thread(target=_target, args=_args)
+            t.daemon = True
+            t.start()
+        logger.info('[PrippiHome] archive appended: %d rows (from #%d)' % (len(archive_rows), start_idx))
+
+        # Finally, append the ANIME row so it sits at the very bottom of the home.
+        self._append_anime_row(cw_items)
+
+    def _start_anime_append(self, cw_items):
+        """Spawn the ANIME-row append on a background thread (used by the cache-hit
+        fast path, where there is no archive phase to piggy-back on)."""
+        if self._anime_appended or not self._alive:
+            return
+        t = threading.Thread(target=self._append_anime_row, args=(cw_items,))
+        t.daemon = True
+        t.start()
+
+    def _append_anime_row(self, cw_items=None):
+        """Fetch popular AnimeUnity titles and append them as the last home row.
+
+        Runs on a background thread (either the archive thread or the one spawned
+        by _start_anime_append). Guarded so it executes once per build. Network
+        fetch + append are abort-aware and never raise into the caller."""
+        if self._anime_appended or not self._alive:
+            return
+        self._anime_appended = True
+        try:
+            items = _fetch_anime_row()
+            if not items or not self._alive:
+                return
+            if cw_items:
+                for it in items:
+                    _apply_cw_to_item(it)
+            with self._rows_lock:
+                if not self._alive:
+                    return
+                start_idx = len(self.rows_data)
+                self.rows_data.append((_ANIME_ROW_LABEL, items))
+                self._num_rows = min(len(self.rows_data), MAX_ROWS)
+            # Pre-fill the row (it is off-screen at the bottom) so scrolling to it
+            # is instant — mirrors how archive rows are populated after append.
+            if start_idx < self._num_rows and _is_touch_mode():
+                self._populate_single_row(start_idx)
+            logger.info('[PrippiHome] anime row appended at #%d (%d items)'
+                        % (start_idx, len(items)))
+        except Exception as exc:
+            logger.error('[PrippiHome] _append_anime_row: %s' % str(exc)[:160])
+
+    def _start_bg_tasks(self, need_4k_fill, enrich=True):
+        """Launch the non-blocking post-render background jobs."""
+        # Nuke stale vixcloud bookmarks from prior sessions.
+        _t_nuke = threading.Thread(target=_nuke_all_vixcloud_bookmarks)
+        _t_nuke.daemon = True
+        _t_nuke.start()
+
+        # Deferred TMDB enrichment of all currently-loaded rows (Plan B).
+        if self._low_power and self._alive:
+            # Deterministic order: metadata first, then extra sources. One thread
+            # owns the heavy lane, so pools cannot multiply each other's workers.
+            t = threading.Thread(target=self._bg_low_power_pipeline,
+                                 args=(enrich,), daemon=True)
+            t.start()
+        else:
+            if enrich and self._alive:
+                te = threading.Thread(target=self._bg_enrich_inplace, args=(0,))
+                te.daemon = True
+                te.start()
+            if self._alive:
+                t = threading.Thread(target=self._bg_enrich_rows)
+                t.daemon = True
+                t.start()
+
+        # Fill the 4K row live if its index was cold at render time.
+        if need_4k_fill and self._alive:
+            t4k = threading.Thread(target=self._bg_fill_4k_row)
+            t4k.daemon = True
+            t4k.start()
+
+        # Resume any downloads interrupted by a previous session.
+        if self._alive:
+            tdl = threading.Thread(target=self._resume_downloads)
+            tdl.daemon = True
+            tdl.start()
+
+    def _run_heavy_bg(self, target, *args):
+        """Serialize a heavy callable on low-power devices."""
+        with self._heavy_bg_lock:
+            if self._alive and not _shutdown_event.is_set():
+                target(*args)
+
+    def _bg_low_power_pipeline(self, enrich=True):
+        with self._heavy_bg_lock:
+            if enrich and self._alive:
+                self._bg_enrich_inplace(0)
+            if self._alive and not _shutdown_event.is_set():
+                self._bg_enrich_rows()
+
+    def _resume_downloads(self):
+        try:
+            from platformcode import download_manager
+            mgr = download_manager.get_manager()
+            mgr.on_change = self._refresh_dl_row
+            mgr.resume_pending()
+        except Exception as exc:
+            logger.error('[PrippiHome] _resume_downloads: %s' % str(exc))
+
+    def _enrich_visible_rows_sync(self, progress_lo=60, progress_hi=98, max_rows=8):
+        """Enrich the first visible SC rows SYNCHRONOUSLY (before the first paint).
+
+        Builds the official TMDB metadata/posters into the same Item objects so
+        the cards render correct from the very first frame (no flicker, no
+        'SC poster until you scroll' problem, and CW items are covered too).
+        Drives the loading bar from progress_lo to progress_hi. The remaining
+        rows are enriched in the background afterwards."""
+        try:
+            # Collect the indices of the first non-empty SC rows worth enriching.
+            targets = []
+            for idx, (label, items) in enumerate(self.rows_data):
+                if len(targets) >= max_rows:
+                    break
+                if not items:
+                    continue
+                if label in (_CW_ROW_LABEL, u'Film in 4K'):
+                    continue
+                if items[0].infoLabels.get('_enr'):
+                    continue
+                targets.append(idx)
+
+            if not targets:
+                self._set_loading(progress_hi)
+                return
+
+            span = max(1, progress_hi - progress_lo)
+            for n, idx in enumerate(targets):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                _label, items = self.rows_data[idx]
+                try:
+                    _tmdb_enrich_validated(items)
+                    for it in items:
+                        it.infoLabels['_enr'] = 1
+                except Exception as exc:
+                    logger.error('[PrippiHome] sync enrich row %d: %s' % (idx, str(exc)))
+                self._set_loading(progress_lo + int(span * (n + 1) / len(targets)))
+        except Exception as exc:
+            logger.error('[PrippiHome] _enrich_visible_rows_sync: %s' % str(exc))
+
+    def _bg_enrich_inplace(self, start_idx=0):
+        """Enrich row items with TMDB metadata IN PLACE, after the first paint.
+
+        The hero reads rows_data live, so enriching the same Item objects makes
+        the hero metadata (rating/genre/localized plot/fanart) improve without a
+        full re-render. Card thumbnails keep SC's own posters (already good), so
+        no wraplist reset/flicker is needed. Visible rows are enriched first.
+        Rows already enriched (sentinel _enr) are skipped, so a cache-hit reopen
+        does not refetch."""
+        try:
+            mon = xbmc.Monitor()
+            with self._rows_lock:
+                snapshot = list(enumerate(self.rows_data))
+            for idx, (label, items) in snapshot:
+                if idx < start_idx:
+                    continue
+                if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
+                    return
+                # Yield to active downloads: heavy TMDB enrichment (many requests
+                # + large JSON parsing) would starve the download's worker/writer
+                # threads of the Python GIL. Pause until downloads finish.
+                while _dl_active() and self._alive and not mon.abortRequested():
+                    xbmc.sleep(1500)
+                # v2 FASE 6: pausa anche mentre un play sta partendo/riproducendo
+                # o un dialog è aperto (_bg_ui_pause clearato da _launch/dialoghi,
+                # ri-settato in finally da _wait_and_restore).
+                # Tier-3: e mentre l'utente NAVIGA (_nav_idle clearato da _mark_nav).
+                while ((not self._bg_ui_pause.is_set() or not self._nav_idle.is_set())
+                       and self._alive
+                       and not mon.abortRequested() and not _shutdown_event.is_set()):
+                    xbmc.sleep(300)
+                if not items:
+                    continue
+                # Skip CW row only — 4K is now enriched here like SC rows.
+                if label == _CW_ROW_LABEL:
+                    continue
+                # Skip rows already enriched (sentinel on first item).
+                if items[0].infoLabels.get('_enr'):
+                    continue
+                try:
+                    _tmdb_enrich_validated(items)
+                    for it in items:
+                        it.infoLabels['_enr'] = 1
+                except Exception as exc:
+                    logger.error('[PrippiHome] inplace enrich row %d: %s' % (idx, str(exc)))
+                    continue
+                # Re-render this row's cards so they pick up the official TMDB
+                # HD posters (SC/IPTV posters are lower-res / sometimes unofficial).
+                if idx in self._populated and self._alive:
+                    try:
+                        self._refresh_row_cards(idx)
+                    except Exception as exc:
+                        logger.error('[PrippiHome] refresh cards row %d: %s' % (idx, str(exc)))
+                # Refresh the hero if the user is currently parked on this row.
+                if idx == self._last_focused_row and self._alive:
+                    try:
+                        self._update_hero(idx)
+                    except Exception:
+                        pass
+                xbmc.sleep(20)
+            # Passata completa senza interruzioni: riscrivi lo snapshot ora che
+            # anche le righe archive sono enrichite (_enr), così la prossima
+            # apertura dipinge subito con i poster TMDB HD corretti.
+            if self._alive and not _shutdown_event.is_set():
+                self._write_home_snapshot()
+            try:
+                from platformcode import perf
+                perf.note('home.mem_mb', '%s (post-enrich)' % xbmc.getInfoLabel('System.Memory(used)'))
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _bg_enrich_inplace: %s' % str(exc))
+
+    def _write_home_snapshot(self, host=None):
+        """Persiste le righe SC correnti (_cache['data']) su disco per la prossima
+        apertura. host opzionale: se assente lo legge dal canale SC."""
+        try:
+            if not config.get_setting('home_snapshot', default=True):
+                return
+            rows = _cache.get('data')
+            if not rows:
+                return
+            if host is None:
+                try:
+                    from channels import streamingcommunity as _sc
+                    host = getattr(_sc, 'host', '') or ''
+                except Exception:
+                    host = ''
+            _snapshot_write(rows, host)
+        except Exception as exc:
+            logger.error('[PrippiHome] _write_home_snapshot: %s' % str(exc))
+
+    def _revalidate_snapshot_silent(self):
+        """Rinfresca lo snapshot per la PROSSIMA apertura senza toccare la UI
+        corrente. Rifà il fetch SC (main+archive) e, se riesce, aggiorna
+        _cache + snapshot su disco; NON ridisegna le righe già a schermo (nessun
+        flicker né spostamento di focus). Le righe fresche compaiono alla
+        prossima apertura della home."""
+        try:
+            if not self._alive or _shutdown_event.is_set():
+                return
+            main_rows, host, homepage_data = _fetch_main_rows()
+            if not main_rows or not self._alive:
+                return
+            try:
+                archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows)) or []
+            except Exception:
+                archive_rows = []
+            full = list(main_rows) + list(archive_rows)
+            if not full:
+                return
+            # Enrich in blocco (cache TMDB su disco → per lo più letture) così lo
+            # snapshot salvato è già completo per la prossima apertura.
+            for _lbl, _items in full:
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                try:
+                    _tmdb_enrich_validated(_items)
+                    for _it in _items:
+                        _it.infoLabels['_enr'] = 1
+                except Exception:
+                    pass
+            _cache['data'] = full
+            _cache['ts'] = __import__('time').time()
+            self._write_home_snapshot(host)
+            logger.info('[PrippiHome] snapshot rivalidato in background: %d righe' % len(full))
+        except Exception as exc:
+            logger.error('[PrippiHome] _revalidate_snapshot_silent: %s' % str(exc))
+
+    def _refresh_row_cards(self, i):
+        """Re-render an already-populated row's wraplist in place, preserving the
+        selected position and focus. Used after background TMDB enrichment so the
+        cards show the official HD posters."""
+        if i not in self._populated or i >= len(self.rows_data):
+            return
+        # Wait until no modal dialog is open (avoids C++ render-engine collision).
+        self._bg_gate(15)
+        if not self._alive:
+            return
+        wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+        # Don't fight a pending position restore.
+        if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+            return
+        with self._rows_lock:
+            row_items = list(self.rows_data[i][1])
+        if not row_items:
+            return
+        try:
+            currently_focused = (self.getFocusId() == wl_id)
+            if currently_focused:
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                except Exception:
+                    pass
+            wl = self.getControl(wl_id)
+            cur_pos = int(wl.getSelectedPosition() or 0)
+            wl.reset()
+            xbmc.sleep(80)  # let the UI flush on slow ARM devices before addItems
+            wl.addItems([_item_to_li(it) for it in row_items])
+            if cur_pos > 0:
+                try:
+                    wl.selectItem(cur_pos)
+                except Exception:
+                    pass
+            if currently_focused:
+                try:
+                    self.setFocusId(wl_id)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _refresh_row_cards %d: %s' % (i, str(exc)))
+
+    def _prefetch_live_epg(self, items):
+        """Fire one batched Sky-guide "now on air" fetch for the ONLINE channels
+        in *items*, off the GUI thread.  Refreshes the hero if it is currently
+        parked on one of these live channels.  Best-effort — any failure leaves
+        the hero in its normal (no-EPG) state."""
+        # Key by the stable 'par' (e.g. 'skycinemacomedy'), NOT the display title:
+        # the backend sometimes hands back a programme name as the title, which then
+        # fails to map to a guide channel (channels silently lost their EPG).
+        keys = [getattr(it, 'sport_par', '') or getattr(it, 'fulltitle', '')
+                or getattr(it, 'title', '')
+                for it in items if getattr(it, 'is_live_channel', False)]
+        keys = [k for k in keys if k]
+        if not keys:
+            return
+
+        def _worker():
+            try:
+                skyepg.prefetch(keys)
+            except Exception as exc:
+                logger.error('[PrippiHome] EPG prefetch: %s' % str(exc))
+                return
+            if not self._alive:
+                return
+            # If the user is currently on a live channel, refresh the hero so the
+            # freshly-fetched programme info appears without needing to re-focus.
+            try:
+                row = self._last_focused_row
+                if 0 <= row < len(self.rows_data):
+                    sample = self.rows_data[row][1]
+                    if sample and getattr(sample[0], 'is_live_channel', False):
+                        self._update_hero(row)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_worker)
+        t.daemon = True
+        t.start()
+
+    # Don't re-probe a live row that was probed within this window.  onInit
+    # re-fires on every return from playback; without this each return would
+    # re-probe all ~46 channels and hammer the already-flaky backend.
+    _LIVE_PROBE_THROTTLE = 120  # seconds
+
+    def _refresh_live_rows(self):
+        """Probe SKY and Sport live channels in parallel.  Each row rerenders as
+        soon as its own probe completes — no waiting for the other row."""
+
+        # Cached rows are already painted by _assemble_initial. Sulle box ARM
+        # aspettiamo cinque secondi di quiete per non contendere CPU/rete alla
+        # home. Su PC basta un breve margine dopo il paint e la navigazione non
+        # deve rinviare continuamente il refresh delle righe live.
+        if not self._first_paint.wait(timeout=30):
+            return
+        quiet_delay = 5.0 if self._low_power else 1.0
+        deadline = time.time() + quiet_delay
+        while time.time() < deadline:
+            if not self._alive or _shutdown_event.is_set():
+                return
+            if (self._low_power and
+                    (not self._nav_idle.is_set() or not self._bg_ui_pause.is_set())):
+                deadline = time.time() + quiet_delay
+            xbmc.sleep(200)
+
+        def _refresh_one(row_key):
+            if (not self._alive or _shutdown_event.is_set()
+                    or _app_monitor.abortRequested()):
+                return
+            last = self._last_live_probe.get(row_key, 0)
+            if last and (time.time() - last) < self._LIVE_PROBE_THROTTLE:
+                logger.info('[PrippiHome] live row "%s": probe throttled (probed %.0fs ago)'
+                            % (sportchannels.row_label(row_key), time.time() - last))
+                return
+            self._last_live_probe[row_key] = time.time()
+            try:
+                parser = sportchannels._PARSERS[row_key]
+                fresh = parser()
+            except Exception as exc:
+                logger.error('[PrippiHome] live refresh %s: %s' % (row_key, exc))
+                fresh = None
+            if (not self._alive or _shutdown_event.is_set()
+                    or _app_monitor.abortRequested()):
+                return
+            # Un giro completamente fallito non deve far sparire una riga che
+            # era gia' visibile dalla cache. Manteniamo lo snapshot precedente
+            # e riproveremo alla sessione successiva.
+            cached = sportchannels._mem_cache.get(row_key, {}).get('data') or []
+            if fresh == [] and cached:
+                logger.info('[Sport] %s refresh vuoto: mantengo %d canali cached'
+                            % (row_key, len(cached)))
+                fresh = None
+            if fresh is not None:
+                if _shutdown_event.is_set():
+                    return
+                sportchannels._mem_cache[row_key]['data'] = fresh
+                sportchannels._mem_cache[row_key]['ts'] = time.time()
+                sportchannels._save_disk_cache(row_key, fresh)
+                logger.info('[Sport] %s list refreshed: %d channels' % (row_key, len(fresh)))
+            # Riga spenta dall'utente: le cache sopra restano aggiornate (per la
+            # riattivazione istantanea) ma la riga NON va rivelata a schermo.
+            # Lettura FRESCA del setting (regola live-settings Kodi 21).
+            try:
+                _tgl = {'sky': 'show_sky_row', 'sport': 'show_sport_row',
+                        'tv': 'show_tv_row'}[row_key]
+                if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool(_tgl) is False:
+                    return
+            except Exception:
+                pass
+            label = sportchannels.row_label(row_key)
+            idx = None
+            with self._rows_lock:
+                for n, (lbl, _) in enumerate(self.rows_data):
+                    if lbl == label:
+                        idx = n
+                        break
+            if idx is None:
+                return
+            try:
+                items = sportchannels.build_items(row_key)
+            except Exception as exc:
+                logger.error('[PrippiHome] build %s: %s' % (row_key, exc))
+                return
+            with self._rows_lock:
+                self.rows_data[idx] = (label, items)
+            logger.info('[PrippiHome] live row "%s" (#%d) → %d online channels'
+                        % (label, idx, len(items)))
+            self._rerender_live_row(idx, items)
+            self._prefetch_live_epg(items)
+
+        if self._low_power:
+            # Each parser already owns a bounded probe pool. Running the three
+            # pools together multiplied network threads on the 2 GB box.
+            for key in ('sport', 'sky', 'tv'):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                _refresh_one(key)
+        else:
+            threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
+                       for k in ('sport', 'sky', 'tv')]
+            for t in threads:
+                if _shutdown_event.is_set() or _app_monitor.abortRequested():
+                    return
+                t.start()
+            for t in threads:
+                while t.is_alive() and not _shutdown_event.is_set():
+                    t.join(timeout=0.2)
+
+    def _rerender_live_row(self, i, items):
+        """Replace the contents of an already-painted live row with *items*.
+        Empty *items* hides both the list and the label entirely."""
+        if i not in self._populated:
+            # First paint hasn't happened yet — let _populate_single_row do it.
+            return
+        self._bg_gate(15)
+        if not self._alive or _shutdown_event.is_set():
+            return
+        wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
+        lbl_id = ROW_LABEL_BASE   + i * ROW_STEP
+        label  = self.rows_data[i][0]
+        # Don't fight a pending position restore on this row.
+        if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+            return
+        try:
+            wl = self.getControl(wl_id)
+            if self.getFocusId() == wl_id and not items:
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                except Exception:
+                    pass
+            cur_pos = int(wl.getSelectedPosition() or 0)
+            wl.reset()
+            xbmc.sleep(80)  # let the UI flush before re-adding (slow ARM devices)
+            grp_id = ROW_GROUP_BASE + i * ROW_STEP
+            if items:
+                wl.addItems([_item_to_li(it) for it in items])
+                wl.setVisible(True)
+                self.getControl(lbl_id).setVisible(True)
+                self.getControl(lbl_id).setLabel('[B]%s[/B]' % label.upper())
+                try:
+                    self.getControl(grp_id).setVisible(True)
+                    logger.info('[PrippiHome] _rerender_live_row %d: group %d shown OK' % (i, grp_id))
+                except Exception as exc2:
+                    logger.error('[PrippiHome] _rerender_live_row %d: group %d show FAILED: %s' % (i, grp_id, exc2))
+                if 0 < cur_pos < len(items):
+                    try:
+                        wl.selectItem(cur_pos)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self.getControl(grp_id).setVisible(False)
+                    logger.info('[PrippiHome] _rerender_live_row %d: group %d hidden OK' % (i, grp_id))
+                except Exception as exc2:
+                    logger.error('[PrippiHome] _rerender_live_row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                    wl.setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+        except Exception as exc:
+            logger.error('[PrippiHome] _rerender_live_row %d: %s' % (i, str(exc)))
+
+    def _bg_fill_4k_row(self):
+        """Wait (non-blocking) for the 4K index, then fill the reserved row live."""
+        try:
+            if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool('show_4k_row') is False:
+                return
+        except Exception:
+            return
+        mon = xbmc.Monitor()
+        deadline = time.time() + 90
+        while not _fourk._ready and time.time() < deadline:
+            if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
+                return
+            if mon.waitForAbort(0.5):
+                return
+        if not _fourk._ready or not self._alive:
+            return
+        items = _build_4k_row()
+        if not items:
+            return
+        for it in items:
+            _apply_cw_to_item(it)
+        with self._rows_lock:
+            idx = None
+            for j, (label, _) in enumerate(self.rows_data):
+                if label == u'Film in 4K':
+                    idx = j
+                    break
+            if idx is None or not self._alive:
+                return
+            self.rows_data[idx] = (u'Film in 4K', items)
+            already_populated = idx in self._populated
+        if already_populated:
+            # Row was populated empty (hidden): reveal + append the cards live.
+            self._live_append_row(idx, items)
+        logger.info('[PrippiHome] 4K row filled live: %d items (row #%d)' % (len(items), idx))
+
+    def _bg_enrich_rows(self):
+        """
+        Background: enrich each SC row with extra items from matching sources.
+        SC items keep priority - extras are appended only if not already in that row.
+        Dedup is per-row only; the same title CAN appear in different rows.
+        If a row is already visible, new items are appended live (no reset/flicker).
+        If not yet visible, items are queued in rows_data for lazy population.
+        """
+        try:
+            _monitor_bg = xbmc.Monitor()
+
+            # Yield to active downloads before doing GIL-heavy enrichment fetches.
+            while _dl_active() and self._alive and not _monitor_bg.abortRequested():
+                xbmc.sleep(1500)
+            # v2 FASE 6: idem mentre un play sta partendo/riproducendo.
+            # Tier-3: e mentre l'utente naviga.
+            while ((not self._bg_ui_pause.is_set() or not self._nav_idle.is_set())
+                   and self._alive
+                   and not _monitor_bg.abortRequested() and not _shutdown_event.is_set()):
+                xbmc.sleep(300)
+
+            # Step 1: collect which content types are needed across all SC rows
+            needed_types = set()
+            for label, _ in list(self.rows_data):
+                ct = _row_content_type(label)
+                if ct:
+                    needed_types.add(ct)
+            if not needed_types or not self._alive or _monitor_bg.abortRequested():
+                return
+
+            # Step 2: pre-fetch each type in sequence. Each pool already performs
+            # its own bounded source/TMDB work; parallel pools multiplied workers.
+            for ct in needed_types:
+                if not self._alive or _monitor_bg.abortRequested():
+                    return
+                self._bg_gate(10)
+                _fetch_enrich_items(ct)
+
+            if not self._alive or _monitor_bg.abortRequested():
+                return
+
+            # Step 3: enrich each SC row using the now-cached pools
+            for i in range(len(self.rows_data)):
+                if not self._alive or _monitor_bg.abortRequested():
+                    return
+                self._bg_gate(10)   # Tier-3: non lavorare mentre si naviga/riproduce
+                with self._rows_lock:
+                    if i >= len(self.rows_data):
+                        break
+                    label, items = self.rows_data[i]
+
+                ct = _row_content_type(label)
+                if not ct:
+                    continue
+
+                extra_pool = _fetch_enrich_items(ct)   # instant (already cached)
+                if not extra_pool:
+                    continue
+
+                # Build dedup set from this row's existing SC items (they have priority)
+                row_norms = set()
+                for it in items:
+                    n = _normalize_title(_extract_item_title(it))
+                    if n:
+                        row_norms.add(n)
+
+                # Keep only extra items not already present in this row
+                new_items = []
+                for it in extra_pool:
+                    n = _normalize_title(_extract_item_title(it))
+                    if n and n not in row_norms:
+                        row_norms.add(n)
+                        new_items.append(it)
+
+                if not new_items:
+                    continue
+
+                # Apply CW data to enrichment items before adding to rows
+                for it in new_items:
+                    _apply_cw_to_item(it)
+
+                with self._rows_lock:
+                    if not self._alive:
+                        return
+                    items.extend(new_items)
+
+                xbmc.sleep(30)
+                self._live_append_row(i, new_items)
+                logger.info('[PrippiHome enrich] row "%s" (#%d) +%d items (total=%d)'
+                            % (label, i, len(new_items), len(items)))
+
+            # Trailers are intentionally lazy in FASE 2: DetailWindow already
+            # resolves one on demand. Startup no longer launches YouTube/proxy
+            # requests that can occupy the box for 30-40 seconds.
+
+        except Exception as exc:
+            logger.error('[PrippiHome] _bg_enrich_rows: %s' % str(exc))
+
+    def _live_append_row(self, i, new_items):
+        """
+        Append new_items to wraplist for row i only if the row is already on-screen.
+        If not yet populated, items are already in rows_data and will be included
+        when lazy-populated on scroll — no action needed here.
+        """
+        if i not in self._populated:
+            return
+        # Wait until no modal dialog is open (avoids C++ render-engine collision).
+        # Timeout ensures we never block forever if something goes wrong.
+        self._bg_gate(15)
+        if not self._alive:
+            return
+        wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
+        lbl_id = ROW_LABEL_BASE    + i * ROW_STEP
+        try:
+            wl = self.getControl(wl_id)
+            wl.addItems([_item_to_li(it) for it in new_items])
+            # The row may have been populated while empty (group hidden): reveal it
+            # now that it has cards, and (re)apply its label.
+            try:
+                self.getControl(ROW_GROUP_BASE + i * ROW_STEP).setVisible(True)
+            except Exception:
+                pass
+            wl.setVisible(True)
+            try:
+                lbl = self.getControl(lbl_id)
+                lbl.setVisible(True)
+                lbl.setLabel('[B]%s[/B]' % self.rows_data[i][0].upper())
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _live_append_row %d: %s' % (i, str(exc)))
+
+    def _populate_single_row(self, i):
+        """Populate wraplist for row i. Safe to call multiple times (no-op if already done)."""
+        if not self._alive or _shutdown_event.is_set():
+            return
+        # check+add atomici: il populater in background (_bg_populate_all_rows)
+        # può correre in parallelo a onFocus sulla stessa riga; senza lock la
+        # wraplist riceverebbe addItems due volte (tile duplicate).
+        with self._populate_lock:
+            if i in self._populated or i >= len(self.rows_data):
+                return
+            self._populated.add(i)
+        wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
+        lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
+        cat_name, items = self.rows_data[i]
+        # Hide any empty row entirely (collapses the space in the grouplist).
+        # Revealed by _rerender_live_row() / _live_append_row() once items arrive.
+        if not items:
+            grp_id = ROW_GROUP_BASE + i * ROW_STEP
+            try:
+                self.getControl(grp_id).setVisible(False)
+                logger.info('[PrippiHome] populate row %d: group %d hidden (empty)' % (i, grp_id))
+            except Exception as exc2:
+                logger.error('[PrippiHome] populate row %d: group %d hide FAILED: %s' % (i, grp_id, exc2))
+                try:
+                    self.getControl(wl_id).setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+                except Exception:
+                    pass
+            return
+        try:
+            logger.info('[PrippiHome] populate row %d "%s": %d items, first=%s' % (
+                i, cat_name, len(items), (items[0].fulltitle if items else '-')))
+        except Exception:
+            pass
+        try:
+            from platformcode import perf
+            _t0 = perf.mark('home.row_populate')
+            wl = self.getControl(wl_id)
+            # No reset() here: this is FIRST-TIME population — the wraplist is
+            # already empty, so reset() + sleep would waste time and cause the
+            # skin to scroll back to the top. The sleep is only needed when
+            # RE-rendering an already-populated wraplist (done in _refresh_cw_row).
+            wl.setVisible(True)
+            wl.addItems([_item_to_li(it) for it in items])
+            perf.mark('home.row_populate_ms row=%d n=%d' % (i, len(items)), _t0)
+        except Exception as exc:
+            # Only allow retry for transient errors, NOT for missing XML controls.
+            if 'Non-Existent Control' not in str(exc):
+                self._populated.discard(i)
+            logger.error('[PrippiHome] populate row %d wraplist: %s' % (i, str(exc)))
+        try:
+            lbl = self.getControl(lbl_id)
+            lbl.setVisible(True)
+            lbl.setLabel('[B]%s[/B]' % cat_name.upper())
+        except Exception as exc:
+            logger.error('[PrippiHome] populate row %d label: %s' % (i, str(exc)))
+
+    def _bg_populate_all_rows(self):
+        """Riempie TUTTE le righe in background dopo il primo paint.
+
+        Sul touch la grouplist scorre col dito SENZA spostare il focus, quindi
+        il lazy-populate di onFocus non scatta mai per le righe più sotto: si
+        vedeva solo sfondo nero finché non si toccava una riga (bug telefono).
+        Priorità alle righe VICINE alla vista (riordino ogni 6 righe), pausa
+        breve se l'utente sta navigando (0,7s max: meglio una riga popolata
+        durante lo scroll che una riga nera), mai durante play/dialoghi.
+        Esce quando tutte le righe sono piene e stabili (archive+anime arrivati).
+        """
+        xbmc.sleep(400)           # respiro minimo dopo il primo paint
+        stable = 0
+        while self._alive and not _shutdown_event.is_set():
+            missing = [i for i in range(self._num_rows)
+                       if i not in self._populated]
+            if not missing:
+                stable += 1
+                if stable >= 15:  # nessuna riga nuova da ~30s → build completa
+                    logger.info('[PrippiHome] bg populate: all %d rows done'
+                                % self._num_rows)
+                    return
+                xbmc.sleep(2000)
+                continue
+            stable = 0
+            missing.sort(key=lambda i: abs(i - self._last_focused_row))
+            for i in missing[:6]:     # max 6 per giro, poi ri-prioritizza
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                self._bg_ui_pause.wait(timeout=10)  # mai durante play/dialoghi
+                self._nav_idle.wait(timeout=0.7)    # pausa BREVE se si naviga
+                self._populate_single_row(i)
+                xbmc.sleep(25)
+
+    def _touch_row_step(self, delta):
+        """Scatto di UNA riga dal touch (pan-tracking o flick): come la rotella
+        ma senza loop-back — col dito, al bordo ci si aspetta che si fermi.
+        Skippa le righe vuote/nascoste nella direzione del movimento."""
+        step = 1 if delta > 0 else -1
+        new_row = self._last_focused_row + step
+        while (0 <= new_row < min(self._num_rows, len(self.rows_data)) and
+               not self.rows_data[new_row][1]):
+            new_row += step
+        if not (0 <= new_row < self._num_rows and new_row < len(self.rows_data)):
+            return                    # bordo raggiunto
+        wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+        try:
+            self.getControl(wl_id)
+        except Exception:
+            return                    # slot XML inesistente
+        self._populate_single_row(new_row)
+        self.setFocusId(wl_id)
+        self._last_focused_row = new_row
+        self._schedule_hero(new_row)
+
+    def _schedule_hero(self, row_idx):
+        """Defer the hero refresh until Kodi has settled the wraplist selection.
+
+        On keyboard/remote navigation the hero must read getSelectedPosition()
+        AFTER Kodi applies the move: on row change the new wraplist restores its
+        own column, and on LEFT/RIGHT the native selection moves only once
+        onAction returns. Reading immediately causes the hero to lag or show the
+        wrong card (item 0) while the carousel highlights a different one.
+        A debounce token guarantees only the most recent nav actually renders."""
+        self._hero_nav_token += 1
+        token = self._hero_nav_token
+
+        def _run():
+            # Let Kodi fully settle the wraplist selection AND its scroll
+            # animation before reading getSelectedPosition(); reading too early
+            # could return the position the carousel is still animating toward
+            # (hero showing the next card vs the highlighted one).
+            xbmc.sleep(130)
+            if token != self._hero_nav_token or not self._alive:
+                return
+            try:
+                from platformcode import perf
+                _t0 = perf.mark('home.hero')
+                self._update_hero(row_idx)
+                perf.mark('home.hero_ms', _t0)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_run)
+        t.daemon = True
+        t.start()
+
+    def _update_hero(self, row_idx, pos=None):
+        global _hero_plot_token
+        if not self._alive or _shutdown_event.is_set():
+            return
+        if row_idx >= len(self.rows_data):
+            return
+        _, items = self.rows_data[row_idx]
+        if not items:
+            return
+        if pos is None:
+            try:
+                pos = int(self.getControl(ROW_WRAPLIST_BASE + row_idx * ROW_STEP).getSelectedPosition() or 0)
+                if pos < 0 or pos >= len(items):
+                    pos = 0
+            except Exception:
+                pos = 0
+        it = items[min(pos, len(items) - 1)]
+        thumb  = it.thumbnail or ''
+        fanart = it.fanart or thumb
+        title  = it.fulltitle or it.show or it.contentSerieName or ''
+        year      = str(it.year or '')
+        lang      = getattr(it, 'language', '') or ''
+        plot      = (it.infoLabels.get('plot') or getattr(it, 'plot', '') or '').strip()
+        rating    = it.infoLabels.get('rating') or ''
+        genre     = it.infoLabels.get('genre') or ''
+        ctype_lbl = 'Film' if getattr(it, 'contentType', '') == 'movie' else (
+                    'Serie TV' if getattr(it, 'contentType', '') == 'tvshow' else '')
+        # Rating formatted as "★ 7.5"
+        rating_str = ''
+        if rating:
+            try:
+                rating_str = '\u2605 %.1f' % float(str(rating))
+            except Exception:
+                pass
+        # First genre only (TMDB returns slash-separated list)
+        genre_str = str(genre).split('/')[0].strip() if genre else ''
+
+        # Use cached Italian plot if available (may have been fetched by DetailWindow or earlier focus)
+        tmdb_id_hero = str(it.infoLabels.get('tmdb_id') or '').strip()
+        if tmdb_id_hero and tmdb_id_hero in _plot_it_cache:
+            cached_plot = _plot_it_cache[tmdb_id_hero]
+            if cached_plot:
+                plot = cached_plot
+                it.infoLabels['plot'] = cached_plot
+
+        # 4K badge for hero
+        if getattr(it, 'contentType', '') == 'movie' and tmdb_id_hero and _fourk.is_4k_available(tmdb_id_hero):
+            ctype_lbl += '  [COLOR FFE50914]4K[/COLOR]'
+
+        # Live channel "In onda adesso": override meta/plot with the currently
+        # airing programme from the Sky guide (prefetched off-thread).  Falls
+        # back to the channel's normal look when no EPG is cached for it.
+        live_meta = None
+        live_plot = None
+        if getattr(it, 'is_live_channel', False):
+            try:
+                # Look up by the stable 'par' (must match the key prefetch used).
+                epg = skyepg.now_on(getattr(it, 'sport_par', '') or title)
+            except Exception:
+                epg = None
+            if epg:
+                when = ('%s–%s' % (epg['start'], epg['end'])) if epg.get('start') else ''
+                live_meta = '  •  '.join(
+                    p for p in [u'[COLOR FFE50914]IN ONDA ADESSO[/COLOR]', when] if p)
+                # plot: show name bold, then "S2 Ep7 · episode title", the upcoming
+                # programme, the synopsis, and finally the previous programme (like a
+                # classic TV guide — prev/now/next).
+                live_plot = '[B]%s[/B]' % epg['prog']
+                ep_line = '  ·  '.join(
+                    p for p in [epg.get('ep_info', ''), epg.get('ep_title', '')] if p)
+                if ep_line:
+                    live_plot += '\n' + ep_line
+                if epg.get('next_prog'):
+                    live_plot += u'\n[COLOR FFE50914]A seguire[/COLOR]  %s  ·  %s' % (
+                        epg.get('next_start', ''), epg['next_prog'])
+                if epg.get('synopsis'):
+                    live_plot += '\n\n' + epg['synopsis']
+                if epg.get('prev_prog'):
+                    live_plot += u'\n\n[COLOR FF777777]Prima:  %s  ·  %s[/COLOR]' % (
+                        epg.get('prev_start', ''), epg['prev_prog'])
+        try:
+            img = fanart or thumb
+            if img:
+                self.getControl(BG_FANART).setImage(img)
+            self.getControl(HERO_TITLE).setLabel('[B]' + title + '[/B]')
+            meta = '  •  '.join(p for p in [year, ctype_lbl, lang, rating_str, genre_str] if p)
+            self.getControl(HERO_META).setLabel(live_meta if live_meta is not None else meta)
+            self.getControl(HERO_CATEG).setLabel(self.rows_data[row_idx][0])
+            try:
+                self.getControl(HERO_PLOT).setText(live_plot if live_plot is not None else plot)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[PrippiHome] hero: %s' % str(exc))
+
+        # Background Italian plot fetch (only if not cached/in-progress and item has a TMDB id)
+        if tmdb_id_hero and tmdb_id_hero not in _plot_it_cache and not _shutdown_event.is_set():
+            _hero_plot_token += 1
+            my_token = _hero_plot_token
+            ctype_hero = 'tv' if getattr(it, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+
+            def _bg_fetch_hero_plot(tid, ctype, item, token):
+                # Debounce: wait 600 ms then check if this request is still current.
+                # The sentinel is written AFTER the debounce so that a cancelled thread
+                # (user moved focus before 600ms) doesn't permanently block future fetches.
+                xbmc.sleep(600)
+                if token != _hero_plot_token or _shutdown_event.is_set():
+                    return
+                # Check again after debounce — another thread may have already fetched
+                if tid in _plot_it_cache and _plot_it_cache[tid]:
+                    # Already done: just update the hero if our token is still current
+                    if token == _hero_plot_token:
+                        try:
+                            self.getControl(HERO_PLOT).setText(_plot_it_cache[tid])
+                        except Exception:
+                            pass
+                    return
+                # Reserve slot so parallel threads skip this item
+                _cache_put(_plot_it_cache, tid, '')
+                try:
+                    it_ov = _get_it_overview(tid, ctype)
+                    if not it_ov or _shutdown_event.is_set():
+                        # Clear the sentinel so the next focus can retry
+                        _plot_it_cache.pop(tid, None)
+                        return
+                    _cache_put(_plot_it_cache, tid, it_ov)
+                    item.infoLabels['plot'] = it_ov
+                    # Only update the hero control if this token is still current
+                    if token == _hero_plot_token:
+                        try:
+                            self.getControl(HERO_PLOT).setText(it_ov)
+                        except Exception:
+                            pass
+                except Exception:
+                    # Clear sentinel on error so next focus can retry
+                    _plot_it_cache.pop(tid, None)
+
+            t = threading.Thread(target=_bg_fetch_hero_plot,
+                                 args=(tmdb_id_hero, ctype_hero, it, my_token),
+                                 daemon=True)
+            t.start()
+
+    def _row_from_fid(self, fid):
+        """Indice della riga se fid è la sua lista, altrimenti -1."""
+        for i in range(self._num_rows):
+            if fid == ROW_WRAPLIST_BASE + i * ROW_STEP:
+                return i
+        return -1
+
+    def _row_from_nav_fid(self, fid):
+        """Come _row_from_fid, ma riconosce anche i bottoni freccia < > della riga.
+
+        Col mouse fermo su una di quelle frecce il focus sta sul bottone (non
+        sulla lista) e l'XML non definisce <onup>/<ondown>: senza questo su/giù
+        resterebbero morti finché non si sposta il puntatore su una card.
+        """
+        i = self._row_from_fid(fid)
+        if i >= 0:
+            return i
+        for i in range(self._num_rows):
+            if fid in (ROW_LEFT_BASE + i * ROW_STEP, ROW_RIGHT_BASE + i * ROW_STEP):
+                return i
+        return -1
+
+    def _disable_mouse_overlays(self):
+        """Spegne il vecchio sistema di hover parallelo del mouse.
+
+        Prima c'erano DUE modelli di selezione indipendenti: la wraplist (mossa
+        dalle frecce, con la sua focusedlayout) e, sopra di essa, un bottone
+        trasparente "bloccamouse" (5000+) che intercettava il puntatore, più una
+        finta cornice-hover (6000+) spostata a mano. I due andavano fuori
+        sincrono (due riquadri accesi, hero e click sulla card sbagliata) perché
+        l'indice del mouse era `posizione_selezionata_all'ingresso + slot`, e la
+        posizione selezionata NON è l'indice della prima card visibile.
+
+        Rendendo invisibili quei controlli il mouse/tocco arriva direttamente
+        alla wraplist, che muove la SUA selezione: frecce, mouse e dito
+        condividono così un'unica sorgente di verità (getSelectedPosition).
+        """
+        if self._mouse_overlays_off:
+            return
+        self._mouse_overlays_off = True
+        for i in range(MAX_ROWS):
+            for base in (ROW_OVERLAY_BASE, HOVER_BOX_BASE):
+                try:
+                    c = self.getControl(base + i * ROW_STEP)
+                except Exception:
+                    continue   # riga non presente nello skin
+                try:
+                    c.setVisible(False)
+                except Exception:
+                    # fallback: parcheggia fuori schermo (vecchio comportamento)
+                    try:
+                        c.setPosition(-400, 54)
+                    except Exception:
+                        pass
+                try:
+                    c.setEnabled(False)
+                except Exception:
+                    pass
+
+    def onFocus(self, control_id):
+        """Fires when a control gains focus — always on the Kodi GUI thread."""
+        self._mark_nav()   # Tier-3: pausa i lavori bg mentre si naviga
+        # Drain any pending CW refresh requested by a background thread.
+        # Must run here (GUI thread) because wl.reset()/addItems() require it.
+        if self._cw_refresh_pending:
+            self._cw_refresh_pending = False
+            self._refresh_cw_row()
+            # After CW refresh (which may take 100-300ms and re-render rows),
+            # re-apply the pending position so any scroll caused by the refresh
+            # is overwritten.
+            if self._pending_select_pos is not None:
+                pending_wl_id, pending_pos, _ = self._pending_select_pos
+                self._pending_select_pos = None
+                xbmc.sleep(50)
+                try:
+                    self.getControl(pending_wl_id).selectItem(pending_pos)
+                except Exception:
+                    pass
+            return  # onFocus will fire again from the selectItem call above
+
+        # Restore saved wraplist position exactly when the wraplist gains focus.
+        # We keep the flag alive for several consecutive onFocus calls so that
+        # the skin's post-animation reset (which fires a second focus event and
+        # snaps the scroll back to 0 on Android TV) is also intercepted and
+        # overwritten.
+        if self._pending_select_pos is not None:
+            pending_wl_id, pending_pos, pending_left = self._pending_select_pos
+            if control_id == pending_wl_id:
+                pending_left -= 1
+                if pending_left > 0:
+                    self._pending_select_pos = (pending_wl_id, pending_pos, pending_left)
+                else:
+                    self._pending_select_pos = None
+                try:
+                    self.getControl(pending_wl_id).selectItem(pending_pos)
+                except Exception:
+                    pass
+
+        i = self._row_from_fid(control_id)
+        if i >= 0:
+            self._last_focused_row = i
+            for j in range(max(0, i-1), min(self._num_rows, i+4)):
+                self._populate_single_row(j)
+            self._schedule_hero(i)
+
+    def onAction(self, action):
+        aid = action.getId()
+        _note_touch_action(aid)
+        # Sonda diagnostica touch (solo build di test, setting perf_log): logga
+        # ogni azione NON-mouse-move per capire cosa genera davvero il telefono
+        # (long-press, swipe sui poster, ...). Da spegnere col revert diagnostica.
+        # I pan (504) arrivano a raffica (~60/s): campionati 1 su 20.
+        if self._probe and aid != ACTION_MOUSE_MOVE:
+            self._probe_n += 1
+            if aid != ACTION_GESTURE_PAN or self._probe_n % 20 == 0:
+                try:
+                    logger.info('[TouchProbe] aid=%d amt=(%.0f,%.0f) fid=%s'
+                                % (aid, action.getAmount1(), action.getAmount2(),
+                                   self.getFocusId()))
+                except Exception:
+                    pass
+
+        # ── Touch: pan-tracking, il dito guida le righe ──────────────────
+        # Il pan (504) arriva a onAction con le coordinate assolute del dito
+        # ANCHE quando il gesto parte sopra una wraplist (che nativamente ne
+        # consuma solo l'asse orizzontale). Qui l'asse dominante del gesto
+        # decide: verticale → uno scatto di riga ogni _PAN_ROW_STEP_PX di
+        # corsa, DURANTE il trascinamento (animazione grouplist 220ms);
+        # orizzontale → non si interferisce col pan nativo pixel-perfetto
+        # della riga. Costo per evento: due float e un confronto.
+        if aid == ACTION_GESTURE_PAN:
+            self._mark_nav()
+            st = self._pan_state
+            if st is None:
+                # begin perso (finestra appena aperta): aggancia da qui
+                st = self._pan_state = [action.getAmount1(), action.getAmount2(),
+                                        action.getAmount2(), None]
+                return
+            x, y = action.getAmount1(), action.getAmount2()
+            if st[3] is None:
+                dx0, dy0 = abs(x - st[0]), abs(y - st[1])
+                if max(dx0, dy0) >= 40:          # asse deciso dopo 40px di corsa
+                    st[3] = 'v' if dy0 > dx0 else 'h'
+            if st[3] == 'v':
+                dy = y - st[2]
+                if abs(dy) >= _PAN_ROW_STEP_PX:
+                    st[2] = y
+                    # dito verso il basso = righe precedenti (contenuto scende)
+                    self._touch_row_step(-1 if dy > 0 else +1)
+            return
+        if aid == ACTION_GESTURE_BEGIN:
+            self._mark_nav()
+            self._pan_state = [action.getAmount1(), action.getAmount2(),
+                               action.getAmount2(), None]
+            return
+        if aid == ACTION_GESTURE_END:
+            self._pan_state = None
+            return
+        # Flick rapido: Kodi manda lo swipe a fine gesto. Per i gesti corti è
+        # l'unico segnale (il pan non ha superato la soglia); per i lunghi fa
+        # da inerzia (+1 riga). Orizzontali: pan nativo già al lavoro, ignora.
+        if aid == ACTION_GESTURE_SWIPE_UP:
+            self._touch_row_step(+1)
+            return
+        if aid == ACTION_GESTURE_SWIPE_DOWN:
+            self._touch_row_step(-1)
+            return
+        # Long-press su una card (e tap a 2 dita): la keymap touch di Kodi li
+        # emula come CLICK DESTRO, e il click destro non gestito viene tradotto
+        # dal motore GUI in PREVIOUS_MENU (10) → la home si chiudeva ("l'addon
+        # crasha" dal telefono). Sul touch il Back vero è ACTION_BACK (92:
+        # tasto/gesture di sistema Android); il 10 diventa context-menu, che
+        # sui tile Download apre il menu Play/Elimina e altrove non fa nulla.
+        if aid == ACTION_EXIT and _is_touch_mode():
+            aid = ACTION_CONTEXT_MENU
+        if aid in (ACTION_EXIT, ACTION_BACK):
+            self._alive = False
+            self.close()
+            return
+        self._mark_nav()   # Tier-3: pausa i lavori bg mentre si naviga
+
+        # Altri eventi touch (long-press diretto, swipe orizzontali, gesti
+        # residui): il long-press diventa context-menu, il resto non deve
+        # cadere nei rami successivi.
+        if aid == ACTION_TOUCH_LONGPRESS:
+            aid = ACTION_CONTEXT_MENU
+        elif aid in _TOUCH_ACTION_IDS and aid != ACTION_TOUCH_TAP:
+            return
+
+        # PC con mouse: se all'apertura il puntatore è dentro la finestra su
+        # un'area non focusabile, Kodi (mouse-mode) lascia il focus a NESSUN
+        # controllo e le frecce non fanno nulla finché non si fa hover su una
+        # card. Prima freccia → aggancia la prima riga popolata, da lì la
+        # navigazione prosegue normale. Su TV senza mouse non scatta mai.
+        if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT) and not self.getFocusId():
+            cw_empty = not (self.rows_data and self.rows_data[0][1])
+            new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+            for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                self._populate_single_row(j)
+            self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+            self._last_focused_row = new_row
+            self._schedule_hero(new_row)
+            return
+
+        # Context menu (C / long-press) on a download tile → same Play/Delete menu
+        # as a left-click (see _show_download_menu).
+        if aid == ACTION_CONTEXT_MENU:
+            try:
+                i = self._row_from_fid(self.getFocusId())
+                if i >= 0 and i < len(self.rows_data) and \
+                        self.rows_data[i][0] == _DL_ROW_LABEL:
+                    pos = int(self.getControl(
+                        ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+                    items = self.rows_data[i][1]
+                    if 0 <= pos < len(items):
+                        self._show_download_menu(items[pos])
+            except Exception as exc:
+                logger.error('[PrippiHome] context-menu: %s' % str(exc))
+            return
+
+        # Mouse wheel → navigate between rows
+        if aid == ACTION_WHEEL_UP:
+            new_row = max(0, self._last_focused_row - 1)
+            # Skip row 0 (CW) if it is empty
+            if new_row == 0 and self.rows_data and not self.rows_data[0][1]:
+                new_row = 0 if self._last_focused_row == 0 else self._last_focused_row
+            self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+            self._last_focused_row = new_row
+            self._schedule_hero(new_row)
+            return
+        if aid == ACTION_WHEEL_DOWN:
+            next_xml_exists = False
+            new_row = self._last_focused_row + 1
+            # Skip empty rows
+            while (new_row < self._num_rows and
+                   new_row < len(self.rows_data) and
+                   not self.rows_data[new_row][1]):
+                new_row += 1
+            next_wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+            if new_row < self._num_rows:
+                try:
+                    self.getControl(next_wl_id)
+                    next_xml_exists = True
+                except Exception:
+                    pass
+            if next_xml_exists:
+                self._populate_single_row(new_row)
+                self.setFocusId(next_wl_id)
+                self._last_focused_row = new_row
+                self._schedule_hero(new_row)
+            else:
+                # last real row → loop back to first real row via background thread bounce
+                cw_empty = not (self.rows_data and self.rows_data[0][1])
+                new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                    self._populate_single_row(j)
+                self._last_focused_row = new_row
+                self._schedule_hero(new_row)
+                wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                def _wheel_loop_back(wl_id=wl_id):
+                    try:
+                        self.show()
+                        xbmc.sleep(300)
+                        self.setFocusId(CLOSE_BTN)
+                        xbmc.sleep(100)
+                        self.setFocusId(wl_id)
+                    except Exception:
+                        pass
+                t = threading.Thread(target=_wheel_loop_back)
+                t.daemon = True
+                t.start()
+            return
+
+        # Full remote-control navigation (onAction replaces XML nav entirely)
+        if aid == ACTION_UP:
+            fid = self.getFocusId()
+            i = self._row_from_nav_fid(fid)
+            if i >= 0:
+                if i > 0:
+                    new_row = i - 1
+                    # Skip empty rows going upward
+                    cw_empty = self.rows_data and not self.rows_data[0][1]
+                    while (new_row > 0 and
+                           new_row < len(self.rows_data) and
+                           not self.rows_data[new_row][1]):
+                        new_row -= 1
+                    # Skip row 0 (CW) if it is empty
+                    if new_row == 0 and cw_empty:
+                        self.setFocusId(CLOSE_BTN)
+                        return
+                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                        self._populate_single_row(j)
+                    self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+                    self._last_focused_row = new_row
+                    self._schedule_hero(new_row)
+                else:
+                    self.setFocusId(CLOSE_BTN)   # first row → EXIT button
+                return
+            return
+
+        if aid == ACTION_DOWN:
+            fid = self.getFocusId()
+            i = self._row_from_nav_fid(fid)
+            if i >= 0:
+                # Check both: more rows in data AND next XML slot actually exists
+                next_xml_exists = False
+                new_row = i + 1
+                # Skip empty rows (they can't receive wraplist focus)
+                while (new_row < self._num_rows and
+                       new_row < len(self.rows_data) and
+                       not self.rows_data[new_row][1]):
+                    new_row += 1
+                next_wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                if new_row < self._num_rows:
+                    try:
+                        self.getControl(next_wl_id)
+                        next_xml_exists = True
+                    except Exception:
+                        pass
+                if next_xml_exists:
+                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                        self._populate_single_row(j)
+                    self.setFocusId(next_wl_id)
+                    self._last_focused_row = new_row
+                    self._schedule_hero(new_row)
+                else:
+                    # last real row. By default DON'T wrap back to the top — staying put
+                    # is what most users expect (opt-in via the setting, like the grid).
+                    try:
+                        if not config.get_setting('home_loop_rows'):
+                            return
+                    except Exception:
+                        return
+                    # loop back to first real row via background thread bounce
+                    cw_empty = not (self.rows_data and self.rows_data[0][1])
+                    new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                        self._populate_single_row(j)
+                    self._last_focused_row = new_row
+                    self._schedule_hero(new_row)
+                    wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
+                    def _down_loop_back(wl_id=wl_id):
+                        try:
+                            self.show()
+                            xbmc.sleep(300)
+                            self.setFocusId(CLOSE_BTN)
+                            xbmc.sleep(100)
+                            self.setFocusId(wl_id)
+                        except Exception:
+                            pass
+                    t = threading.Thread(target=_down_loop_back)
+                    t.daemon = True
+                    t.start()
+                return
+            # DOWN from EXIT → first real row
+            if fid == CLOSE_BTN:
+                cw_empty = not (self.rows_data and self.rows_data[0][1])
+                new_row = 1 if (cw_empty and self._num_rows > 1) else 0
+                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
+                    self._populate_single_row(j)
+                self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
+                self._last_focused_row = new_row
+                self._schedule_hero(new_row)
+                return
+        # Mouse/touch: Kodi muove GIÀ nativamente la selezione della riga sotto
+        # il puntatore/dito (l'overlay che glielo impediva è disattivato in
+        # _disable_mouse_overlays). Qui aggiorniamo solo l'hero, con throttle:
+        # l'evento arriva a raffica ma la card cambia di rado.
+        if aid == ACTION_MOUSE_MOVE:
+            i = self._row_from_fid(self.getFocusId())
+            if i < 0:
+                return
+            try:
+                pos = int(self.getControl(
+                    ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+            except Exception:
+                return
+            if (i, pos) != self._hover_last:
+                self._hover_last = (i, pos)
+                self._last_focused_row = i
+                self._update_hero(i, pos=pos)
+            return
+
+        # LEFT/RIGHT sulla riga: la selezione la muove Kodi, Python aggiorna l'hero.
+        # Sui bottoni hero ci pensa l'XML <onleft>/<onright> — Python resta fuori.
+        if aid in (ACTION_LEFT, ACTION_RIGHT):
+            fid = self.getFocusId()
+            i = self._row_from_fid(fid)
+            if i < 0:
+                # BORDO RIGA. Le righe sono <list> (non più <wraplist>: quella teneva
+                # per forza l'elemento selezionato a focusposition=0, così il solo
+                # passaggio del mouse faceva scorrere il carosello). Una list, arrivata
+                # al capo, non muove la selezione: Kodi manda il focus al bottone
+                # freccia < o > della riga (<onleft>/<onright> nello skin). Da lì
+                # rientriamo dall'altro capo, ricreando il giro infinito di prima.
+                i = self._row_from_nav_fid(fid)
+                if i < 0:
+                    return
+                items = self.rows_data[i][1] if i < len(self.rows_data) else []
+                if not items:
+                    return
+                wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                try:
+                    # selectItem prima del focus: sulla lista non focalizzata la
+                    # posizione regge (stesso trucco dei bottoni freccia in onClick).
+                    self.getControl(wl_id).selectItem(
+                        len(items) - 1 if aid == ACTION_LEFT else 0)
+                    self.setFocusId(wl_id)
+                except Exception:
+                    return
+            self._last_focused_row = i
+            self._hover_last = (-1, -1)   # la selezione cambia: invalida il throttle
+            self._schedule_hero(i)
+            return
+
+    def _hero_item(self):
+        """Return the currently highlighted Item from the hero row, or None."""
+        i = self._last_focused_row
+        if i >= len(self.rows_data):
+            return None
+        _, items = self.rows_data[i]
+        if not items:
+            return None
+        # Unica sorgente di verità: la selezione della riga, mossa indifferentemente
+        # da frecce, mouse o tocco.
+        try:
+            pos = int(self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).getSelectedPosition() or 0)
+        except Exception:
+            pos = 0
+        if pos < 0 or pos >= len(items):
+            pos = 0
+        return items[pos]
+
+    def _read_live_settings(self):
+        """Read our live-applied settings FRESH (a new Addon instance), so the values
+        reflect the just-saved change — the module-level cached Addon can be stale."""
+        try:
+            a = xbmcaddon.Addon('plugin.video.prippistream')
+            return {k: a.getSetting(k) for k in _LIVE_SETTING_KEYS}
+        except Exception:
+            return {}
+
+    def _on_settings_changed(self):
+        """Addon settings were saved → apply any change to OUR options live."""
+        if not getattr(self, '_alive', True):
+            return
+        try:
+            from platformcode import perf
+            perf.refresh()  # il toggle [PERF] del build di test vale subito
+        except Exception:
+            pass
+        new = self._read_live_settings()
+        old = getattr(self, '_settings_snap', {}) or {}
+        changed = {k for k in _LIVE_SETTING_KEYS if new.get(k) != old.get(k)}
+        self._settings_snap = new
+        logger.info('[PrippiHome] onSettingsChanged — changed=%s (new=%s)' % (sorted(changed), new))
+        if changed:
+            self._apply_live_settings(changed)
+
+    def _start_settings_poll(self):
+        """Fallback for Kodi builds that notify before settings are persisted.
+
+        Kodi 21 can invoke onSettingsChanged while the settings dialog is still
+        closing; in the failing 1.9.954 session show_4k_row was therefore read as
+        the old value and the row never re-rendered. Poll only while/just after
+        this dialog, applying a change as soon as the persisted value is visible.
+        """
+        if getattr(self, '_settings_polling', False):
+            return
+        self._settings_polling = True
+
+        def _poll():
+            started = time.time()
+            seen_dialog = False
+            closed_at = None
+            try:
+                while (self._alive and not _shutdown_event.is_set()
+                       and time.time() - started < 45):
+                    active = xbmc.getCondVisibility('Window.IsActive(addonsettings)')
+                    if active:
+                        seen_dialog = True
+                        closed_at = None
+                    elif seen_dialog and closed_at is None:
+                        closed_at = time.time()
+
+                    new = self._read_live_settings()
+                    old = getattr(self, '_settings_snap', {}) or {}
+                    if new and new != old:
+                        self._on_settings_changed()
+
+                    # One extra second after close covers Kodi's delayed write.
+                    if closed_at is not None and time.time() - closed_at >= 1.0:
+                        break
+                    # Some skins do not expose the addonsettings condition; in
+                    # that case keep the bounded 45 s polling window so a user
+                    # who spends time reading the options is still covered.
+                    xbmc.sleep(200)
+            finally:
+                self._settings_polling = False
+
+        threading.Thread(target=_poll, daemon=True).start()
+
+    def _mark_nav(self):
+        """Chiamata a OGNI azione/focus di navigazione: mette in pausa i lavori
+        background finché l'utente non si ferma (~1,2s). Costo per keypress:
+        un timestamp + al più un clear/set di Event — nessun thread per tasto."""
+        self._last_nav_ts = time.time()
+        if self._nav_idle.is_set():
+            self._nav_idle.clear()
+        self._nav_kick.set()
+
+    def _nav_idle_watcher(self):
+        """Unico thread daemon: quando arriva navigazione (_nav_kick) aspetta il
+        periodo di quiete (1,2s dall'ULTIMA azione) e ri-setta _nav_idle. Da
+        fermo non consuma nulla (bloccato sul wait dell'Event)."""
+        while self._alive and not _shutdown_event.is_set():
+            if not self._nav_kick.wait(timeout=2):
+                continue
+            self._nav_kick.clear()
+            while self._alive and not _shutdown_event.is_set():
+                rem = 1.2 - (time.time() - self._last_nav_ts)
+                if rem <= 0:
+                    break
+                xbmc.sleep(max(50, int(min(rem, 0.4) * 1000)))
+            self._nav_idle.set()
+
+    def _bg_gate(self, timeout=15):
+        """Punto d'attesa unico per i lavori background che toccano UI/rete:
+        rispetta sia la pausa dura (play/dialoghi, _bg_ui_pause) sia la pausa
+        di navigazione (_nav_idle). I timeout evitano stalli permanenti."""
+        self._bg_ui_pause.wait(timeout=timeout)
+        self._nav_idle.wait(timeout=timeout)
+
+    def _apply_reduced_anim(self):
+        """Setta/pulisce Window.Property(reduced_anim), letta dalla condition
+        delle animation zoom nello skin. Setting letto FRESCO con una nuova
+        istanza Addon (quella cachata in config è stale dopo openSettings su
+        Kodi 21 — regola live-settings del progetto)."""
+        try:
+            import xbmcaddon
+            on = xbmcaddon.Addon('plugin.video.prippistream').getSetting(
+                'reduced_animations') == 'true'
+            if on:
+                self.setProperty('reduced_anim', '1')
+            else:
+                self.clearProperty('reduced_anim')
+        except Exception:
+            pass
+
+    def _apply_live_settings(self, changed):
+        """Apply our own settings to the RUNNING home without an addon reload.
+
+        - Row toggles (SKY/Sport/TV/Downloads) → re-assemble rows_data from the
+          cached SC rows + current toggles and re-render the grid in place (same
+          code path as first paint), so a hidden row disappears / a re-enabled one
+          reappears immediately (its channels are already background-cached).
+        - 18+ toggle → drop the Sfoglia anime genre cache so the next Browse
+          reflects it (Browse is a separate window; nothing to redraw here).
+        (home_loop_rows is read live on navigation, so it needs no action.)
+        """
+        logger.info('[PrippiHome] applying live settings: %s' % sorted(changed))
+        if 'reduced_animations' in changed:
+            # Le animation dello skin rileggono la condition a ogni trigger:
+            # basta aggiornare la Window property, nessun re-render.
+            self._apply_reduced_anim()
+        _row_keys = {'show_sky_row', 'show_sport_row', 'show_tv_row',
+                     'show_downloads_row', 'show_4k_row'}
+        if changed & _row_keys and _cache['data']:
+            try:
+                _cw, _need_4k_fill = self._assemble_initial(_cache['data'])
+                self._num_rows = min(len(self.rows_data), MAX_ROWS)
+                # Clean slate: empty every row wraplist + clear the populated flags
+                # (reset() on an empty wraplist is a no-op, so this is cheap).
+                for i in range(MAX_ROWS):
+                    try:
+                        self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP).reset()
+                    except Exception:
+                        pass
+                self._populated.clear()
+                xbmc.sleep(80)
+                # Show the groups that now hold a row, hide the rest (handles both a
+                # row appearing and disappearing, with the following rows shifting).
+                for i in range(MAX_ROWS):
+                    try:
+                        self.getControl(ROW_GROUP_BASE + i * ROW_STEP).setVisible(i < self._num_rows)
+                    except Exception:
+                        pass
+                # Populate the first rows now; the rest fill on scroll, as at first paint.
+                for i in range(min(6, self._num_rows)):
+                    self._populate_single_row(i)
+                # Prima riga NON vuota (gli slot riservati possono essere nascosti).
+                first_idx = 0
+                for n, (_lbl, _its) in enumerate(self.rows_data[:self._num_rows]):
+                    if _its:
+                        first_idx = n
+                        break
+                # Only grab focus if the settings dialog is already closed, so we don't
+                # steal focus from it mid-edit; otherwise Kodi restores home focus on close.
+                if not xbmc.getCondVisibility('Window.IsActive(addonsettings)'):
+                    try:
+                        self.setFocusId(ROW_WRAPLIST_BASE + first_idx * ROW_STEP)
+                        self._update_hero(first_idx)
+                    except Exception:
+                        pass
+                logger.info('[PrippiHome] live re-render done: %d rows' % self._num_rows)
+                if _need_4k_fill and self._alive:
+                    threading.Thread(target=self._bg_fill_4k_row, daemon=True).start()
+            except Exception as exc:
+                logger.error('[PrippiHome] apply live row toggles: %s' % str(exc))
+        elif changed & _row_keys:
+            logger.info('[PrippiHome] SC row cache not ready — skipping live row re-render')
+
+    def onClick(self, control_id):
+        if control_id == CLOSE_BTN:
+            self._alive = False
+            self.close()
+            return
+
+        # ── Settings button → open addon settings dialog ──
+        if control_id == SETTINGS_BTN:
+            # Just open the dialog; the _SettingsWatchMonitor (see onInit) applies any
+            # change to our custom options LIVE via onSettingsChanged — reliable on
+            # Kodi 21, unlike re-reading the cached Addon after openSettings() returns.
+            self._start_settings_poll()
+            xbmcaddon.Addon().openSettings()
+            return
+
+        # ── Search button → open Prippi-style search overlay ──
+        if control_id == SEARCH_BTN_HOME:
+            xbmc.log('[PrippiHome] onClick SEARCH_BTN_HOME (109) triggered', xbmc.LOGINFO)
+            xbmcgui.Dialog().notification('PrippiStream', 'Aprendo ricerca...', xbmcgui.NOTIFICATION_INFO, 1500)
+            _open_search(parent_window=self)
+            return
+
+        # ── Browse button → open category browser ──
+        if control_id == BROWSE_BTN_HOME:
+            xbmc.log('[PrippiHome] onClick BROWSE_BTN_HOME (106) triggered', xbmc.LOGINFO)
+            _open_browse(parent_window=self)
+            return
+
+        # (Il click del mouse/tap su una card arriva ora direttamente alla riga:
+        #  lo gestisce il ramo "Wraplist item click" in fondo, con la stessa
+        #  posizione selezionata che vedono le frecce.)
+
+        # ── Per-row left/right arrow buttons ──
+        for i in range(self._num_rows):
+            la_id = ROW_LEFT_BASE  + i * ROW_STEP
+            ra_id = ROW_RIGHT_BASE + i * ROW_STEP
+            if control_id in (la_id, ra_id):
+                wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                try:
+                    wl      = self.getControl(wl_id)
+                    pos     = int(wl.getSelectedPosition() or 0)
+                    n_items = len(self.rows_data[i][1]) if i < len(self.rows_data) else 0
+                    if n_items > 0:
+                        if control_id == la_id:
+                            new_pos = (pos - ARROW_PAGE_SIZE) % n_items
+                        else:
+                            new_pos = (pos + ARROW_PAGE_SIZE) % n_items
+                        wl.selectItem(new_pos)
+                except Exception:
+                    pass
+                return
+
+        # ── Wraplist item click (ENTER) → open detail window ──
+        for i in range(self._num_rows):
+            wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+            if control_id == wl_id:
+                try:
+                    pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
+                    if 0 <= pos < len(self.rows_data[i][1]):
+                        _it = self.rows_data[i][1][pos]
+                        if getattr(_it, 'is_live_channel', False):
+                            if getattr(_it, '_app_live_provider', False):
+                                self._play_provider_live(_it, i, pos)
+                            else:
+                                self._play_channel_stream(_it, i, pos)
+                        elif getattr(_it, 'is_download', False):
+                            self._show_download_menu(_it)
+                        else:
+                            self._open_detail(_it)
+                except Exception as exc:
+                    logger.error('[PrippiHome] onClick row %d: %s' % (i, str(exc)))
+                break
+
+    def _launch(self, item, source_window=None):
+        # source_window: when the play was started from the SEARCH overlay, this
+        # is that PrippiSearchWindow. After playback _wait_and_restore then
+        # restores focus to the search results (last-clicked card) instead of the
+        # home rows. None = normal home flow.
+        # Note: the post-playback "choose another server" popup is suppressed by
+        # default in xbmc_videolibrary.mark_auto_as_watched (Prippi-only UI), so
+        # no per-launch flag is needed here anymore. We manage resume/next-ep ourselves.
+
+        # ── 4K check (movies only) ────────────────────────────────────────
+        # _no_4k: transient flag set when the user already chose the FHD (SC)
+        # version, or by the 4K-failure fallback — skips this branch entirely
+        # so the item plays through its normal channel flow (no re-ask, no loop).
+        ct = getattr(item, 'contentType', '') or ''
+        if ct == 'movie' and not getattr(item, '_no_4k', 0):
+            _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if _tmdb:
+                _f4k = _fourk.lookup_4k(_tmdb)
+                if _f4k:
+                    _choice = '4k'
+                    if _ask_quality_enabled():
+                        _choice = _ask_4k_quality(item)
+                    if _choice is None:
+                        return  # dialog dismissed: play nothing
+                    if _choice == '4k':
+                        logger.info('[PrippiHome] 4K HIT: %s → %s' % (
+                            item.fulltitle, _f4k['stream_url'][:80]))
+                        t = threading.Thread(target=self._play_4k_stream, args=(item, _f4k))
+                        t.daemon = True
+                        t.start()
+                        return
+                    # 'fhd': a real channel card (SC or other) simply falls
+                    # through to its normal flow below; a bare 4K-row item
+                    # (no channel/url) must first be resolved to its SC
+                    # counterpart (network → background thread).
+                    logger.info('[PrippiHome] 4K disponibile ma scelto FHD: %s' % item.fulltitle)
+                    if not (getattr(item, 'channel', '') and (getattr(item, 'url', '') or '').strip()):
+                        t = threading.Thread(target=self._play_fhd_via_sc,
+                                             args=(item, _f4k),
+                                             kwargs={'source_window': source_window})
+                        t.daemon = True
+                        t.start()
+                        return
+
+        if item.action == 'findvideos':
+            # SC movie or episode: direct play via RunPlugin.
+            # Pre-clear any Kodi bookmark for this episode BEFORE RunPlugin.
+            _purl = ''
+            try:
+                _purl = (watch_history.get(_cw_key(item)) or {}).get('played_url', '')
+            except Exception:
+                pass
+            if _purl:
+                _t_pre = threading.Thread(target=_clear_kodi_resume, args=(_purl,))
+                _t_pre.daemon = True
+                _t_pre.start()
+
+            # Set locale.audiolanguage/subtitlelanguage before RunPlugin so Kodi
+            # picks the right track from frame 0 (restored immediately after onAVStarted).
+            _pre_play_set_lang(item)
+
+            # v2 FASE 6: pausa l'enrich bg mentre l'invoker risolve e il player
+            # parte (GIL condiviso tra sub-interpreti). _wait_and_restore lo
+            # ri-setta in finally su ogni uscita.
+            self._bg_ui_pause.clear()
+            xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+            t = threading.Thread(target=self._wait_and_restore, args=(item,),
+                                 kwargs={'source_window': source_window})
+            t.daemon = True
+            t.start()
+        elif item.action in _CH_MENU_ACTIONS:
+            # _select_episode uses SC's JSON API — only for SC items.
+            if getattr(item, 'channel', '') == 'streamingcommunity':
+                t = threading.Thread(target=self._select_episode, args=(item,))
+                t.daemon = True
+                t.start()
+            else:
+                # Non-SC show (AnimeUnity 'episodios', mediasetplay 'epmenu',
+                # raiplay…): play first episode by default, handled entirely
+                # inside PrippiStream (the season/episode picker in the detail
+                # card is used to choose a different episode).
+                t = threading.Thread(target=self._play_episode_direct_nonsc,
+                                     args=(item, 1))
+                t.daemon = True
+                t.start()
+        else:
+            # Non-SC item or any other action (e.g. 'check' from altadefinizione,
+            # cineblog01, etc.): dispatch via RunPlugin → launcher.actions/findvideos
+            # which handles all custom actions correctly without opening a container.
+            _pre_play_set_lang(item)
+            self._bg_ui_pause.clear()  # v2 FASE 6 (vedi ramo findvideos)
+            xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl())
+            t = threading.Thread(target=self._wait_and_restore, args=(item,),
+                                 kwargs={'source_window': source_window})
+            t.daemon = True
+            t.start()
+
+    def _open_detail(self, item):
+        """Open the detail window for item (called on the main Kodi GUI thread)."""
+        # Save exact focus position before entering modal dialog
+        saved_row = self._last_focused_row
+        saved_pos = 0
+        try:
+            wl = self.getControl(ROW_WRAPLIST_BASE + saved_row * ROW_STEP)
+            saved_pos = int(wl.getSelectedPosition() or 0)
+        except Exception:
+            pass
+
+        self._bg_ui_pause.clear()
+        try:
+            win = DetailWindow('DetailWindow.xml', config.get_runtime_path(), item=item)
+            win.doModal()
+            result      = win._result
+            sel_s       = getattr(win, '_selected_season',  None)
+            sel_e       = getattr(win, '_selected_episode', None)
+            search_item = getattr(win, '_search_item', None)
+            dl_eps      = getattr(win, '_download_eps', None)
+            del win
+        finally:
+            self._bg_ui_pause.set()
+
+        # Restore focus to the exact row + item position.
+        # When the DetailWindow was hosting a trailer (YouTube player), self.close()
+        # was called from a background thread; the window transition may not be
+        # complete by the time doModal() returns.  Mirror _restore_home()'s approach:
+        # self.show() to bring the window to front, a brief wait, then bounce focus
+        # through CLOSE_BTN before landing on the wraplist — this guarantees a real
+        # focus change even if the wraplist was already focused before the dialog.
+        try:
+            wl_id = ROW_WRAPLIST_BASE + saved_row * ROW_STEP
+            self._last_focused_row = saved_row
+            self._last_focused_pos = saved_pos
+            # Do NOT call self.show() here — the PrippiHome window never went away
+            # (DetailWindow was a dialog on top). On Android TV, self.show() re-activates
+            # the window and triggers the XML <defaultcontrol>2000</defaultcontrol> which
+            # resets focus to row 0, overwriting everything we do afterwards.
+            # Instead, just wait briefly for the dialog transition to finish and set focus.
+            xbmc.sleep(300)
+            self._pending_select_pos = (wl_id, saved_pos, 2)
+            try:
+                self.setFocusId(CLOSE_BTN)
+            except Exception:
+                pass
+            xbmc.sleep(80)
+            try:
+                self.setFocusId(wl_id)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        if result == 'play':
+            if sel_s is not None and sel_e is not None:
+                # User picked a specific episode in the EpisodePicker.
+                # _play_episode_direct uses SC's JSON API — only for SC items.
+                # CW episode items carry _cw_show_url (always SC).
+                _is_sc = getattr(item, 'channel', '') == 'streamingcommunity'
+                _item_action = getattr(item, 'action', '') or ''
+                _cw_show_url = getattr(item, '_cw_show_url', '') or ''
+                if _is_sc:
+                    t_ep = threading.Thread(target=self._play_episode_direct,
+                                            args=(item, sel_s, sel_e))
+                    t_ep.daemon = True
+                    t_ep.start()
+                elif _item_action in _CH_MENU_ACTIONS or _cw_show_url:
+                    # Non-SC show (e.g. AnimeUnity/mediasetplay), including CW items
+                    # (action='findvideos' but _cw_show_url is set).
+                    t_ep = threading.Thread(target=self._play_episode_direct_nonsc,
+                                            args=(item, sel_e))
+                    t_ep.daemon = True
+                    t_ep.start()
+                else:
+                    self._launch(item)
+            else:
+                self._launch(item)
+        elif result == 'open_channel_search':
+            if search_item is not None:
+                xbmc.executebuiltin(
+                    'ActivateWindow(10025,plugin://plugin.video.prippistream/?%s,return)'
+                    % search_item.tourl())
+        elif result == 'removed_cw':
+            # Item was removed from CW — refresh the CW row immediately
+            self._refresh_cw_row()
+        elif result == 'download':
+            # Offline download: probe qualities, ask resolution, enqueue. Runs on
+            # a background thread so the GUI stays responsive (resolve is network).
+            t_dl = threading.Thread(target=self._start_download, args=(item, dl_eps))
+            t_dl.daemon = True
+            t_dl.start()
+
+    def _enforce_scroll_pos(self, wl_id, pos):
+        """Background thread: hammer selectItem every 80ms for 0.4s to defeat skin scroll animations."""
+        with self._scroll_lock:
+            deadline = time.time() + 0.4
+            while self._alive and time.time() < deadline:
+                try:
+                    cur = self.getControl(wl_id).getSelectedPosition()
+                    if cur != pos:
+                        self.getControl(wl_id).selectItem(pos)
+                except Exception:
+                    break
+                xbmc.sleep(80)
+
+    def _restore_home(self):
+        """Bring this dialog back to front and restore keyboard focus to the last row+position."""
+        try:
+            self.show()
+            row   = self._last_focused_row
+            wl_id = ROW_WRAPLIST_BASE + row * ROW_STEP
+            try:
+                xbmc.sleep(600)
+                # Give focus to wraplist so CW refresh triggers via onFocus.
+                self._pending_select_pos = (wl_id, self._last_focused_pos, 2)
+                self.setFocusId(CLOSE_BTN)
+                xbmc.sleep(100)
+                self.setFocusId(wl_id)
+                # Also launch background thread that keeps enforcing the position
+                # for 1.5s — defeats any skin animation that resets scroll to 0.
+                t = threading.Thread(
+                    target=self._enforce_scroll_pos,
+                    args=(wl_id, self._last_focused_pos))
+                t.daemon = True
+                t.start()
+            except Exception:
+                try:
+                    self.setFocusId(CLOSE_BTN)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _restore_home: %s' % str(exc))
+
+    def _restore_search_window(self, sw):
+        """After playback that was launched from the SEARCH overlay, bring the
+        search results back to front with focus on the last-clicked card —
+        instead of stealing focus to the home rows (the default _restore_home).
+        The search WindowXML is still alive underneath (its doModal is blocking)."""
+        try:
+            xbmc.sleep(600)            # let the player-close transition settle
+            try:
+                sw.show()              # re-activate the search overlay
+            except Exception:
+                pass
+            xbmc.sleep(200)
+            pos = getattr(sw, '_last_pos', 0) or 0
+            try:
+                sw.getControl(SEARCH_WL_SC).selectItem(pos)
+                sw.setFocusId(SEARCH_WL_SC)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _restore_search_window: %s' % str(exc))
+
+    def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+        """Wrapper: garantisce che _bg_ui_pause venga ri-settato su OGNI uscita
+        (v2 FASE 6 — _launch lo cleara prima del dispatch play così l'enrich in
+        background non compete col GIL mentre il video parte/riproduce)."""
+        try:
+            self._do_wait_and_restore(item, next_ep_ctx, source_window)
+        finally:
+            self._bg_ui_pause.set()
+
+    def _do_wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+        """Wait for playback to start/end, track progress for CW, then restore the
+        home rows — or, when source_window is a search overlay, restore focus to
+        the search results (last-clicked card). CW logic is identical either way."""
+        player  = _AvReadyPlayer()
+        monitor = xbmc.Monitor()
+
+        # ── Start audio/sub preference thread IMMEDIATELY ──
+        # Must be launched BEFORE we wait for isPlaying() so the thread is already
+        # blocking on av_started.wait() when onAVStarted fires (~1-2s into startup).
+        # If called after isPlaying() is True, onAVStarted has already fired and
+        # the event would never be received (15s timeout → silent failure).
+        t_audio = threading.Thread(
+            target=_apply_audio_sub_pref,
+            args=(player, item),
+            kwargs={'av_started_event': player.av_started})
+        t_audio.daemon = True
+        t_audio.start()
+
+        # ── Wait up to 20 s for playback to actually start ──
+        for _ in range(40):
+            if not self._alive or monitor.abortRequested():
+                return
+            if player.isPlaying():
+                break
+            xbmc.sleep(500)
+        else:
+            return  # playback never started
+
+        # ── Capture the actual played URL (vixcloud/CDN) for clean CW removal later ──
+        _played_url = ''
+        try:
+            _played_url = player.getPlayingFile() or ''
+        except Exception:
+            pass
+
+        # ── Seek to saved resume position if available ──
+        cw_key = _cw_key(item) if item is not None else None
+        if cw_key:
+            entry = watch_history.get(cw_key)
+            if entry:
+                resume_t = float(entry.get('time_watched', 0))
+                # For TV shows, only resume if the saved episode matches the one playing.
+                # If the user picked a different episode, start from the beginning.
+                if resume_t > 10 and entry.get('season') is not None:
+                    _entry_s = int(entry.get('season', 0))
+                    _entry_e = int(entry.get('episode', 0))
+                    _item_s  = int(getattr(item, 'contentSeason', 0) or 0)
+                    _item_e  = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+                    if (_item_s or _item_e) and (_entry_s != _item_s or _entry_e != _item_e):
+                        resume_t = 0  # different episode → start from the beginning
+                if resume_t > 10:
+                    # Wait for the A/V pipeline to be fully ready (onAVStarted) before
+                    # seeking.  This is more reliable than a fixed 2 s sleep because it
+                    # fires exactly when the decoder has enumerated all tracks — the
+                    # earliest moment seekTime() is guaranteed to work.
+                    # Fall back to 8 s timeout for streams that never raise onAVStarted
+                    # (e.g. non-adaptive streams or old Kodi versions).
+                    player.av_started.wait(timeout=8)
+                    xbmc.sleep(500)   # brief settling pause after pipeline init
+                    try:
+                        player.seekTime(resume_t)
+                        logger.info('[CW] resumed "%s" at %.0fs' %
+                                    (entry.get('title', ''), resume_t))
+                    except Exception as exc:
+                        logger.error('[CW] seekTime: %s' % str(exc))
+                    # After seek, getTotalTime() briefly returns a small value
+                    # (only the buffered range), which can falsely trigger the
+                    # 97%-completed check and delete the CW entry.  Wait up to
+                    # 6 s for total_time to stabilise at the real episode length.
+                    for _ in range(12):
+                        xbmc.sleep(500)
+                        if not player.isPlaying():
+                            break
+                        try:
+                            _tt = player.getTotalTime()
+                        except Exception:
+                            _tt = 0
+                        if _tt > resume_t + 30:
+                            break   # total_time looks reliable
+
+        # ── Reconstruct next_ep_ctx for episodes resumed from CW ──
+        # _rebuild_ctx_from_cw makes 2 HTTP calls; runs here in the background thread
+        # well before UPNEXT_COUNTDOWN is reached, so no user-visible delay.
+        if next_ep_ctx is None and item is not None:
+            next_ep_ctx = _rebuild_ctx_from_cw(item)
+
+        logger.info('[UpNext] next_ep_ctx=%s  cw_show_url=%r  url=%r' % (
+            'OK' if next_ep_ctx else 'None',
+            getattr(item, '_cw_show_url', '') if item else '',
+            getattr(item, 'url', '') if item else ''))
+
+        # ── Track progress while playing ──
+        actual_time            = 0.0
+        total_time             = 0.0
+        last_save              = -30.0
+        _upnext_triggered      = False
+        _upnext_user_cancelled = False
+        _overlay               = None    # UpNextOverlayWindow instance
+        _overlay_np_item       = None    # next episode item
+        _overlay_np_ctx        = None    # next episode context
+        _overlay_secs_left     = 0       # Python countdown (seconds)
+        _overlay_total_secs    = 1       # initial value (avoid div-by-zero)
+
+        while player.isPlaying() and self._alive and not monitor.abortRequested():
+            try:
+                actual_time = player.getTime()
+                total_time  = player.getTotalTime()
+            except Exception:
+                pass
+
+            # ── CW save ──
+            if cw_key and total_time > 60 and actual_time > 60:
+                if actual_time - last_save >= 30:
+                    last_save = actual_time
+                    if actual_time >= total_time * 0.97:
+                        # Episode completed — advance TV series to next episode,
+                        # or remove the CW entry if this was the last episode.
+                        ct = getattr(item, 'contentType', '') or ''
+                        # Mark current episode as watched before advancing/removing
+                        if ct == 'episode' and cw_key:
+                            _ep_s = int(getattr(item, 'contentSeason', 0) or 0)
+                            _ep_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+                            if _ep_s and _ep_e:
+                                try:
+                                    watch_history.mark_episode_watched(cw_key, _ep_s, _ep_e)
+                                except Exception:
+                                    pass
+                        if ct == 'episode' and next_ep_ctx is not None:
+                            # Use already-computed next ep if overlay built it,
+                            # otherwise build it now.
+                            if _overlay_np_item is not None and _overlay_np_ctx is not None:
+                                _advance_item = _overlay_np_item
+                                _advance_ctx  = _overlay_np_ctx
+                            else:
+                                _advance_item, _advance_ctx = _build_next_ep(next_ep_ctx)
+                            if _advance_item is not None:
+                                # Save the series key pointing at the next episode (position 0)
+                                _advance_item._cw_show_url = getattr(item, '_cw_show_url', '')
+                                _save_cw(_advance_item, cw_key, 0, 0)
+                                logger.info('[CW] advanced series to S%02dE%02d' % (
+                                    getattr(_advance_item, 'contentSeason', 0),
+                                    getattr(_advance_item, 'contentEpisodeNumber', 0)))
+                            elif next_ep_ctx.get('nonsc'):
+                                # Ongoing non-SC series (e.g. One Piece): the "last"
+                                # episode is just the latest AVAILABLE one, not the
+                                # series end. Keep it in CW pointing at the NEXT
+                                # (not-yet-released) episode at 0% so it survives the
+                                # 97% auto-prune and resumes correctly once the daily
+                                # refresh adds new episodes.
+                                _next_item = item.clone()
+                                _next_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0) + 1
+                                _next_item.contentEpisodeNumber = _next_e
+                                _next_item.episode = _next_e
+                                _next_item._cw_show_url = getattr(item, '_cw_show_url', '')
+                                _save_cw(_next_item, cw_key, 0, 0)
+                                logger.info('[CW] ongoing series kept in CW at next E%d' % _next_e)
+                            else:
+                                # Last episode of last season — series is done
+                                watch_history.remove(cw_key)
+                                logger.info('[CW] series fully watched, removed key %s' % cw_key)
+                            cw_key = None
+                        else:
+                            # Movie, OR episode where we couldn't determine
+                            # next-ep context (e.g. show_url missing).
+                            # For movies: remove since there's no next episode.
+                            # For episodes without context: DON'T remove — keep
+                            # the entry so the user can resume if needed.
+                            ct = getattr(item, 'contentType', '') or ''
+                            if ct != 'episode':
+                                watch_history.remove(cw_key)
+                                cw_key = None
+                            else:
+                                # No next-ep context: advance to time=0 just as
+                                # a marker that this ep was completed, but keep
+                                # the entry until context is rebuilt on next launch.
+                                _save_cw(item, cw_key, total_time, total_time,
+                                         played_url=_played_url)
+                                cw_key = None
+                    else:
+                        _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
+
+            # ── Trigger Up Next overlay ──
+            if (not _upnext_triggered
+                    and next_ep_ctx is not None
+                    and actual_time > 60):
+                remaining = (total_time - actual_time) if total_time > 60 else float('inf')
+                if 0 < remaining <= UPNEXT_COUNTDOWN:
+                    logger.info('[UpNext] triggering at %.0fs / %.0fs (%.0fs left)' % (
+                        actual_time, total_time, remaining))
+                    _upnext_triggered = True
+                    np_item, np_ctx = _build_next_ep(next_ep_ctx)
+                    if np_item is not None:
+                        _overlay_np_item    = np_item
+                        _overlay_np_ctx     = np_ctx
+                        _overlay_secs_left  = max(10, int(remaining))
+                        _overlay_total_secs = _overlay_secs_left
+                        s_n  = getattr(np_item, '_upnext_season',  0)
+                        e_n  = getattr(np_item, '_upnext_episode', 0)
+                        e_nm = (getattr(np_item, '_upnext_name', '') or '').strip()
+                        ep_lbl = u'[B]S%02dE%02d[/B]' % (s_n, e_n)
+                        if e_nm:
+                            ep_lbl += u'  \u2014  ' + e_nm
+                        try:
+                            _overlay = UpNextOverlayWindow(
+                                'UpNextOverlay.xml', config.get_runtime_path(),
+                                ep_label=ep_lbl)
+                            _overlay.show()
+                        except Exception as exc:
+                            logger.error('[UpNext] overlay show: %s' % str(exc))
+                            _overlay = None
+
+            # ── Update / check overlay ──
+            if _overlay is not None:
+                if _overlay.is_done():
+                    # User clicked a button
+                    result = _overlay._result
+                    try:
+                        _overlay.close()
+                    except Exception:
+                        pass
+                    _overlay = None
+                    if result == 'play':
+                        if cw_key and total_time > 60:
+                            watch_history.remove(cw_key)
+                            cw_key = None
+                        # Fully release the old decoder before starting the next
+                        # episode (weak Android boxes buffer otherwise).
+                        _await_player_teardown(player)
+                        _pre_play_set_lang(_overlay_np_item)
+                        xbmc.executebuiltin(
+                            'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                            % _overlay_np_item.tourl())
+                        t_nx = threading.Thread(
+                            target=self._wait_and_restore,
+                            args=(_overlay_np_item,),
+                            kwargs={'next_ep_ctx': _overlay_np_ctx})
+                        t_nx.daemon = True
+                        t_nx.start()
+                        return
+                    else:
+                        _upnext_user_cancelled = True
+                        _overlay_np_item = _overlay_np_ctx = None
+                else:
+                    # Still showing — update countdown
+                    pct = max(0, min(100, int(
+                        (_overlay_total_secs - _overlay_secs_left) * 100
+                        / _overlay_total_secs)))
+                    _overlay.update(_overlay_secs_left, pct)
+                    _overlay_secs_left -= 1
+                    if _overlay_secs_left < 0:
+                        # Countdown expired → auto-play
+                        try:
+                            _overlay.close()
+                        except Exception:
+                            pass
+                        _overlay = None
+                        if cw_key and total_time > 60:
+                            watch_history.remove(cw_key)
+                            cw_key = None
+                        # Fully release the old decoder before starting the next
+                        # episode (weak Android boxes buffer otherwise).
+                        _await_player_teardown(player)
+                        _pre_play_set_lang(_overlay_np_item)
+                        xbmc.executebuiltin(
+                            'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                            % _overlay_np_item.tourl())
+                        t_nx = threading.Thread(
+                            target=self._wait_and_restore,
+                            args=(_overlay_np_item,),
+                            kwargs={'next_ep_ctx': _overlay_np_ctx})
+                        t_nx.daemon = True
+                        t_nx.start()
+                        return
+
+            xbmc.sleep(1000)
+
+        # ── Video ended (while loop exited) ──
+
+        # Determine if the episode finished naturally or was manually stopped.
+        # Any stop before 97% of the total duration is treated as a manual stop:
+        # no Up Next popup, no auto-play — just save CW and restore home.
+        _finished_naturally = total_time > 60 and actual_time >= total_time * 0.97
+
+        # Close overlay if still visible
+        if _overlay is not None:
+            try:
+                _overlay.close()
+            except Exception:
+                pass
+            _overlay = None
+            # Only auto-play if the episode actually ended (not manually stopped)
+            if _finished_naturally and _overlay_np_item is not None and not _upnext_user_cancelled:
+                if cw_key and total_time > 60:
+                    watch_history.remove(cw_key)
+                    cw_key = None
+                if not self._alive or monitor.abortRequested():
+                    return
+                # Fully release the old decoder before starting the next episode
+                # (weak Android boxes buffer otherwise).
+                _await_player_teardown(player)
+                _pre_play_set_lang(_overlay_np_item)
+                xbmc.executebuiltin(
+                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                    % _overlay_np_item.tourl())
+                t_nx = threading.Thread(
+                    target=self._wait_and_restore,
+                    args=(_overlay_np_item,),
+                    kwargs={'next_ep_ctx': _overlay_np_ctx})
+                t_nx.daemon = True
+                t_nx.start()
+                return
+
+        # ── Final CW save ──
+        if cw_key and total_time > 60:
+            if _finished_naturally and not _upnext_user_cancelled:
+                # Only remove CW if user didn't cancel (still has episodes to watch)
+                watch_history.remove(cw_key)
+            elif actual_time > 60:
+                _save_cw(item, cw_key, actual_time, total_time, played_url=_played_url)
+
+        if not self._alive or monitor.abortRequested():
+            return
+
+        xbmc.sleep(800)
+
+        # ── Fallback: overlay never shown (e.g. total_time was unreliable) ──
+        # Only fires when the episode ended naturally AND ≥80% was watched.
+        # Never fires on manual stop.
+        _watched_enough = (
+            total_time <= 60                          # total_time unknown → trust actual_time
+            or actual_time >= total_time * 0.80       # watched ≥80 %
+        )
+        if (_finished_naturally
+                and next_ep_ctx is not None
+                and not _upnext_triggered
+                and not _upnext_user_cancelled
+                and actual_time >= UPNEXT_COUNTDOWN
+                and _watched_enough):
+            np_item, np_ctx = _build_next_ep(next_ep_ctx)
+            if np_item is not None:
+                s_n  = getattr(np_item, '_upnext_season',  0)
+                e_n  = getattr(np_item, '_upnext_episode', 0)
+                e_nm = (getattr(np_item, '_upnext_name', '') or '').strip()
+                ep_lbl = u'[B]S%02dE%02d[/B]' % (s_n, e_n)
+                if e_nm:
+                    ep_lbl += u'  \u2014  ' + e_nm
+                win_fb = None
+                try:
+                    win_fb = UpNextOverlayWindow(
+                        'UpNextOverlay.xml', config.get_runtime_path(),
+                        ep_label=ep_lbl)
+                    fb_secs = 10
+                    win_fb.show()
+                    while fb_secs >= 0 and not win_fb.is_done():
+                        mins = fb_secs // 60
+                        secs = fb_secs % 60
+                        pct = int((10 - fb_secs) * 100 / 10)
+                        win_fb.update(fb_secs, pct)
+                        xbmc.sleep(1000)
+                        fb_secs -= 1
+                    if not win_fb.is_done():
+                        win_fb._result = 'play'
+                    result = win_fb._result
+                    win_fb.close()
+                    win_fb = None
+                except Exception as exc:
+                    logger.error('[UpNext] fallback overlay: %s' % str(exc))
+                    result = 'play'  # default to play on error
+                if result == 'play':
+                    # Fully release the old decoder before starting the next
+                    # episode (weak Android boxes buffer otherwise).
+                    _await_player_teardown(player)
+                    _pre_play_set_lang(np_item)
+                    xbmc.executebuiltin(
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                        % np_item.tourl())
+                    t_nx = threading.Thread(
+                        target=self._wait_and_restore,
+                        args=(np_item,),
+                        kwargs={'next_ep_ctx': np_ctx})
+                    t_nx.daemon = True
+                    t_nx.start()
+                    return
+
+        # When the play was launched from the SEARCH overlay, restore focus to the
+        # search results (last-clicked card) instead of the home rows. All CW
+        # tracking above already ran identically; only the window restore differs.
+        if source_window is not None and getattr(source_window, '_alive', True):
+            self._restore_search_window(source_window)
+            if _played_url and self._alive:
+                xbmc.sleep(1500)
+                try:
+                    _clear_kodi_resume(_played_url)
+                except Exception as exc:
+                    logger.error('[CW] post-watch _clear_kodi_resume: %s' % str(exc))
+            return
+
+        # Set the pending flag BEFORE _restore_home() / setFocusId() so that
+        # onFocus (which fires when setFocusId posts its message to the GUI thread)
+        # always finds the flag already True — eliminating the race condition where
+        # onFocus fired before the flag was set and missed the refresh.
+        if self._alive:
+            self._cw_refresh_pending = True
+
+        self._restore_home()
+
+        # Always clear Kodi's own bookmark after watching — we manage resume
+        # ourselves via CW. Wait 1.5s so Kodi finishes its own final-bookmark
+        # write before we delete it.
+        if _played_url and self._alive:
+            xbmc.sleep(1500)
+            try:
+                _clear_kodi_resume(_played_url)
+            except Exception as exc:
+                logger.error('[CW] post-watch _clear_kodi_resume: %s' % str(exc))
+
+        # Refresh the CW row + genre row progress bars.
+        # _restore_home() bounces focus through CLOSE_BTN so onFocus always fires
+        # and drains _cw_refresh_pending on the GUI thread. The sleep+check below
+        # is a last-resort safety net: if onFocus still didn't fire (e.g. window
+        # not yet active), poke focus again to trigger it. Never call
+        # _refresh_cw_row() directly from this BG thread — all wl.reset()/
+        # addItems() calls MUST run on the GUI thread via onFocus.
+        xbmc.sleep(600)
+        if self._alive and self._cw_refresh_pending:
+            logger.warning('[CW] pending flag still set 600ms after restore — retrying focus bounce')
+            try:
+                self.setFocusId(CLOSE_BTN)  # triggers onFocus on GUI thread
+            except Exception:
+                pass
+
+    def _refresh_cw_row(self):
+        """Rebuild the Continue Watching row in-place without full home reload.
+        rows_data[0] is always the CW row — just update its items list.
+        Also re-applies CW progress data to any SC rows already rendered, so
+        that progress bars appear in genre carousels even when CW was empty at load.
+        """
+        try:
+            logger.info('[CW] _refresh_cw_row: start (populated=%s)' % sorted(self._populated))
+            cw_items = _build_cw_items()   # also rebuilds _cw_lookup_by_tmdb/title
+            logger.info('[CW] _refresh_cw_row: cw_items=%d tmdb_keys=%d title_keys=%d' % (
+                len(cw_items), len(_cw_lookup_by_tmdb), len(_cw_lookup_by_title)))
+            with self._rows_lock:
+                self.rows_data[0] = (_CW_ROW_LABEL, cw_items)
+
+            # Refresh CW row itself.
+            # Must reset() the wraplist explicitly here because _populate_single_row
+            # no longer calls reset() (removing it fixed the scroll-to-top bug on TV).
+            wl_cw_id = ROW_WRAPLIST_BASE  # row 0 → base id, no offset
+            try:
+                self.getControl(wl_cw_id).reset()
+                xbmc.sleep(100)
+            except Exception:
+                pass
+            self._populated.discard(0)
+            self._populate_single_row(0)
+
+            # Re-apply (or clear) CW data on all SC rows already rendered.
+            # SC rows start at index 1.
+            # We always do this — even when cw_items is empty — so that items
+            # removed from CW lose their progress bar immediately.
+            rows_changed = []
+            for i in range(1, len(self.rows_data)):
+                row_label, row_items = self.rows_data[i]
+                changed = False
+                n_matched = 0
+                n_cleared = 0
+                for it in row_items:
+                    # Use __dict__.get — Item.__getattr__ returns '' for unknowns,
+                    # causing '' > 0 TypeError.
+                    old_time = float(it.__dict__.get('cw_time_watched', 0) or 0)
+                    matched = _apply_cw_to_item(it)
+                    new_time = float(it.__dict__.get('cw_time_watched', 0) or 0)
+                    if matched:
+                        n_matched += 1
+                        if new_time != old_time:
+                            changed = True
+                    elif old_time > 0:
+                        _clear_cw_from_item(it)
+                        n_cleared += 1
+                        changed = True
+                if changed:
+                    rows_changed.append(i)
+                    logger.info('[CW] row %d "%s": matched=%d cleared=%d → re-render(in_populated=%s)' % (
+                        i, row_label, n_matched, n_cleared, i in self._populated))
+                if changed and i in self._populated:
+                    # Re-render the wraplist for this row to update bar steps.
+                    # SKIP if a position restore is pending: the reset() would zero out
+                    # the wraplist's internal scroll position, fighting the restore.
+                    # The updated item data is already in rows_data[i]; the re-render
+                    # will happen naturally next time the user focuses that row.
+                    wl_id = ROW_WRAPLIST_BASE + i * ROW_STEP
+                    if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
+                        logger.info('[CW] row %d re-render SKIPPED (position restore pending)' % i)
+                        self._populated.discard(i)  # force re-render next time row is focused
+                        continue
+                    try:
+                        currently_focused = (self.getFocusId() == wl_id)
+                        if currently_focused:
+                            try:
+                                self.setFocusId(CLOSE_BTN)
+                            except Exception:
+                                pass
+                        wl = self.getControl(wl_id)
+                        cur_pos = int(wl.getSelectedPosition() or 0)
+                        wl.reset()
+                        xbmc.sleep(100)  # let the UI flush on slow ARM devices before addItems
+                        wl.addItems([_item_to_li(it) for it in row_items])
+                        if cur_pos > 0:
+                            try:
+                                wl.selectItem(cur_pos)
+                            except Exception:
+                                pass
+                        if currently_focused:
+                            try:
+                                self.setFocusId(wl_id)
+                            except Exception:
+                                pass
+                        logger.info('[CW] row %d re-render done (items=%d pos=%d)' % (
+                            i, len(row_items), cur_pos))
+                    except Exception as exc:
+                        logger.error('[CW] _refresh_cw_row re-render row %d: %s' % (i, str(exc)))
+
+            logger.info('[CW] _refresh_cw_row: done (rows_changed=%s)' % rows_changed)
+
+        except Exception as exc:
+            logger.error('[PrippiHome] _refresh_cw_row: %s' % str(exc))
+
+    # ── Offline downloads: row refresh + local playback + removal ────────────
+
+    def _refresh_dl_row(self):
+        """Rebuild the Downloads row in place (it is reserved after CW at load)."""
+        try:
+            dl_items = _build_dl_items()
+            # Riga spenta dal setting: resta al suo slot ma vuota/nascosta
+            # (lettura fresca, regola live-settings Kodi 21).
+            try:
+                if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool(
+                        'show_downloads_row') is False:
+                    dl_items = []
+            except Exception:
+                pass
+            idx = None
+            with self._rows_lock:
+                for i, (lbl, _items) in enumerate(self.rows_data):
+                    if lbl == _DL_ROW_LABEL:
+                        idx = i
+                        break
+                if idx is not None:
+                    self.rows_data[idx] = (_DL_ROW_LABEL, dl_items)
+                elif dl_items:
+                    idx = len(self.rows_data)
+                    self.rows_data.append((_DL_ROW_LABEL, dl_items))
+                    self._num_rows = min(len(self.rows_data), MAX_ROWS)
+            if idx is None or idx >= self._num_rows:
+                return
+            try:
+                self.getControl(ROW_WRAPLIST_BASE + idx * ROW_STEP).reset()
+                xbmc.sleep(60)
+            except Exception:
+                pass
+            self._populated.discard(idx)
+            self._populate_single_row(idx)
+            # Reveal the row group if it now has items (it collapses while empty).
+            if dl_items:
+                try:
+                    self.getControl(ROW_GROUP_BASE + idx * ROW_STEP).setVisible(True)
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _refresh_dl_row: %s' % str(exc))
+
+    def _show_download_menu(self, item):
+        """Clicking a downloaded tile (left-click or context menu) opens a small
+        Play/Delete menu instead of playing directly. Delete confirms via
+        _delete_download_item (which already shows a yesno prompt)."""
+        try:
+            title = (getattr(item, 'fulltitle', '') or getattr(item, 'title', '')
+                     or u'Download')
+            idx = xbmcgui.Dialog().select(
+                title, [u'Riproduci', u'Elimina'])
+            if idx == 0:
+                self._play_download(item)
+            elif idx == 1:
+                self._delete_download_item(item)
+        except Exception as exc:
+            logger.error('[PrippiHome] _show_download_menu: %s' % str(exc))
+
+    def _play_download(self, item):
+        """Play a downloaded item from disk. Movies play directly; series tiles
+        open a list of their downloaded episodes."""
+        try:
+            if getattr(item, 'dl_show_key', ''):
+                self._play_download_series(item)
+                return
+            # Re-read live state from the DB: the home-row item is cached and can
+            # predate completion (a download that just finished would otherwise
+            # still show "in corso" and offer to cancel it).
+            from platformcode import downloads_db
+            key = getattr(item, 'dl_db_key', '')
+            entry = (downloads_db.get(key) if key else None) or {}
+            status = entry.get('status') or getattr(item, 'dl_status', '') or ''
+            if status != 'done':
+                # Download still running/queued → offer to cancel it.
+                if xbmcgui.Dialog().yesno(
+                        u'PrippiStream',
+                        u'Download in corso. Vuoi annullarlo ed eliminarlo?'):
+                    self._cancel_download(key)
+                return
+            self._play_local_file(
+                entry.get('file_path') or getattr(item, 'dl_file_path', ''),
+                entry.get('protection') or getattr(item, 'dl_protection', 'none'),
+                key,
+                getattr(item, 'fulltitle', '') or getattr(item, 'title', ''))
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_download: %s' % str(exc))
+
+    def _play_download_series(self, item):
+        from platformcode import downloads_db
+        show_key = getattr(item, 'dl_show_key', '')
+        eps = downloads_db.get_by_show(show_key)
+        if not eps:
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Nessun episodio scaricato',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+            self._refresh_dl_row()
+            return
+        labels = []
+        for e in eps:
+            code = u'S%02dE%02d' % (int(e.get('season', 0) or 0),
+                                    int(e.get('episode', 0) or 0))
+            tag = (u'100%' if e.get('status') == 'done'
+                   else u'%d%%' % int(e.get('progress', 0) or 0))
+            labels.append(u'%s  %s  %s' % (code, tag, e.get('title', '')))
+        labels.append(u'Elimina tutta la serie')
+        idx = xbmcgui.Dialog().select(getattr(item, 'dl_show_title', u'Episodi'), labels)
+        if idx < 0:
+            return
+        if idx == len(labels) - 1:
+            if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                      u'Eliminare tutti gli episodi scaricati di questa serie?'):
+                downloads_db.remove_show(show_key)
+                self._refresh_dl_row()
+            return
+        e = eps[idx]
+        if e.get('status') != 'done':
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Episodio ancora in corso',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+            return
+        self._play_local_file(e.get('file_path', ''), e.get('protection', 'none'),
+                              e.get('key', ''), e.get('title', ''))
+
+    def _play_local_file(self, file_path, protection, db_key, title):
+        """Play a local download. A multi-track bundle plays via its local HLS
+        master (Kodi muxes video + audio + subtitle renditions, native track
+        selection); a single encrypted .ts streams through the loopback decrypt
+        server; a plaintext .ts plays straight from disk."""
+        import os as _os
+        try:
+            from platformcode import local_stream_server
+            is_bundle = local_stream_server.is_bundle(db_key)
+        except Exception:
+            is_bundle = False
+        if not is_bundle and (not file_path or not _os.path.exists(file_path)):
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'File non trovato (forse rimosso)',
+                xbmcgui.NOTIFICATION_WARNING, 3000)
+            return
+        try:
+            _VMIME = {'.mp4': 'video/mp4', '.m4v': 'video/mp4',
+                      '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+                      '.avi': 'video/x-msvideo', '.ts': 'video/mp2t'}
+            vmime = _VMIME.get(_os.path.splitext(file_path or '')[1].lower(),
+                               'video/mp2t')
+            if is_bundle:
+                play_url = local_stream_server.url_for(db_key)  # …/master.m3u8
+                mime = 'application/vnd.apple.mpegurl'
+            elif protection in ('aes', 'xor'):
+                play_url = local_stream_server.url_for(db_key)
+                mime = vmime
+            else:
+                play_url = file_path
+                mime = vmime
+            li = xbmcgui.ListItem(title or u'Download', path=play_url)
+            li.setMimeType(mime)
+            li.setContentLookup(False)
+            xbmc.Player().play(play_url, li)
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_local_file: %s' % str(exc))
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Errore di riproduzione',
+                xbmcgui.NOTIFICATION_WARNING, 3000)
+
+    def _delete_download_item(self, item):
+        """Remove a focused download (movie tile or whole series), cancelling any
+        active job first."""
+        from platformcode import downloads_db, download_manager
+        try:
+            mgr = download_manager.get_manager()
+            if getattr(item, 'dl_show_key', ''):
+                if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                          u'Eliminare tutti gli episodi scaricati di questa serie?'):
+                    for e in downloads_db.get_by_show(item.dl_show_key):
+                        mgr.cancel(e['key'])
+                    downloads_db.remove_show(item.dl_show_key)
+                    self._refresh_dl_row()
+            elif getattr(item, 'dl_db_key', ''):
+                if xbmcgui.Dialog().yesno(u'PrippiStream',
+                                          u'Eliminare questo download?'):
+                    mgr.cancel(item.dl_db_key)
+                    downloads_db.remove(item.dl_db_key)
+                    self._refresh_dl_row()
+        except Exception as exc:
+            logger.error('[PrippiHome] _delete_download_item: %s' % str(exc))
+
+    def _cancel_download(self, key):
+        """Cancel an in-progress/queued download and drop it from the library."""
+        from platformcode import downloads_db, download_manager
+        try:
+            if not key:
+                return
+            mgr = download_manager.get_manager()
+            mgr.cancel(key)
+            downloads_db.remove(key)
+            self._refresh_dl_row()
+            # Close/refresh the background progress bar now the entry is gone.
+            try:
+                mgr._update_bg()
+            except Exception:
+                pass
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Download annullato',
+                xbmcgui.NOTIFICATION_INFO, 2000)
+        except Exception as exc:
+            logger.error('[PrippiHome] _cancel_download: %s' % str(exc))
+
+    def _select_episode(self, item):
+        """Episode picker for TV shows (runs in a background thread)."""
+        try:
+            # --- Fetch title page (has props.title.seasons) ---
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            try:
+                data = _get_data(item.url)
+            finally:
+                if busy:
+                    busy.close()
+
+            seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+            if not seasons:
+                xbmcgui.Dialog().notification(
+                    'Errore', 'Nessuna stagione trovata',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # --- Season selection (skip if only 1) ---
+            if len(seasons) == 1:
+                season_idx = 0
+                chosen = seasons[0]
+            else:
+                sl = ['Stagione %d  (%s ep.)' % (
+                    s['number'], s.get('episodes_count', '?')) for s in seasons]
+                season_idx = xbmcgui.Dialog().select('[B]%s[/B]' % item.fulltitle, sl)
+                if season_idx < 0:
+                    return
+                chosen = seasons[season_idx]
+
+            # --- Fetch episode list for chosen season ---
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            try:
+                sdata = _get_data(item.url + '/season-%d' % chosen['number'])
+            finally:
+                if busy:
+                    busy.close()
+
+            episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            if not episodes:
+                xbmcgui.Dialog().notification(
+                    'Errore', 'Nessun episodio trovato',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # --- Episode selection ---
+            el = ['%dx%02d  %s' % (
+                chosen['number'], e['number'], e.get('name') or '') for e in episodes]
+            ei = xbmcgui.Dialog().select(
+                '[B]%s[/B]  –  Stagione %d' % (item.fulltitle, chosen['number']), el)
+            if ei < 0:
+                return
+
+            ep = episodes[ei]
+            title_id = str(chosen.get('title_id', ''))
+
+            next_ep_ctx = {
+                'show_item':  item,
+                'seasons':    seasons,
+                'season_idx': season_idx,
+                'episodes':   episodes,
+                'ep_idx':     ei,
+                'title_id':   title_id,
+            }
+
+            import channels.streamingcommunity as _sc
+            ep_item = item.clone(
+                action='findvideos',
+                contentType='episode',
+                season=chosen['number'],
+                episode=ep['number'],
+                contentSeason=chosen['number'],
+                contentEpisodeNumber=ep['number'],
+                contentTitle='',
+                url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, ep['id'])
+            )
+            ep_item._cw_show_url = item.url   # preserve show URL for overlay when resumed from CW
+            _pre_play_set_lang(ep_item)
+            xbmc.executebuiltin('RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
+            t2 = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                  kwargs={'next_ep_ctx': next_ep_ctx})
+            t2.daemon = True
+            t2.start()
+
+        except Exception as exc:
+            logger.error('[PrippiHome] _select_episode: %s' % str(exc))
+
+    def _play_4k_stream(self, item, f4k):
+        """Play a 4K stream directly (bypasses SC entirely).  CW tracking via _wait_and_restore."""
+        try:
+            _pre_play_set_lang(item)
+            # Resolve final CDN URL (follow redirect to get token, avoid Kodi pipe-header issues)
+            _stream_url = _fourk.get_resolved_url(f4k)
+            li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url)
+            li.setArt({'thumb': item.thumbnail or f4k.get('poster', ''),
+                        'fanart': item.fanart or ''})
+            try:
+                _il = dict(item.infoLabels or {})
+                if _il:
+                    li.setInfo('video', {k: v for k, v in _il.items()
+                                         if v is not None and isinstance(v, (str, int, float))})
+            except Exception:
+                pass
+            li.setProperty('IsPlayable', 'true')
+            self._bg_ui_pause.clear()  # v2 FASE 6: _wait_and_restore lo ri-setta
+            xbmc.Player().play(_stream_url, li)
+            t = threading.Thread(target=self._wait_and_restore, args=(item,))
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_4k_stream: %s' % str(exc))
+            # Fallback to SC. _no_4k prevents _launch from re-entering the 4K
+            # branch (previously this could loop on a persistent 4K failure);
+            # bare 4K-row items (no channel/url) are resolved to their SC
+            # counterpart first.
+            if getattr(item, 'channel', '') and (getattr(item, 'url', '') or '').strip():
+                item._no_4k = 1
+                self._launch(item)
+            else:
+                self._play_fhd_via_sc(item, None, allow_4k_fallback=False)
+
+    def _play_fhd_via_sc(self, item, f4k, source_window=None, allow_4k_fallback=True):
+        """Play the Full HD (SC) version of a bare 4K-row movie item.
+
+        Resolves the SC counterpart with one SC search (network → runs on a
+        background thread, busy spinner shown), then routes it through the
+        normal _launch flow so it behaves exactly like any other SC title
+        (CW/resume, language restore, focus restore). If SC does not have the
+        title, falls back to the 4K stream (when available) with a notification.
+        """
+        busy = None
+        try:
+            busy = xbmcgui.DialogBusy()
+            busy.create()
+        except Exception:
+            busy = None
+        sc_item = None
+        try:
+            sc_item = _resolve_sc_movie(item)
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_fhd_via_sc: %s' % str(exc))
+        try:
+            if busy:
+                busy.close()
+        except Exception:
+            pass
+        if sc_item is not None:
+            logger.info('[PrippiHome] FHD via SC: %s → %s' % (
+                item.fulltitle, (sc_item.url or '')[:80]))
+            sc_item._no_4k = 1
+            # Keep the 4K card's artwork when SC has none (player OSD).
+            if not (sc_item.thumbnail or '').strip():
+                sc_item.thumbnail = item.thumbnail
+            if not (sc_item.fanart or '').strip():
+                sc_item.fanart = item.fanart
+            self._launch(sc_item, source_window=source_window)
+            return
+        if allow_4k_fallback and f4k:
+            platformtools.dialog_notification(
+                'PrippiStream', 'Versione Full HD non trovata: avvio in 4K')
+            self._play_4k_stream(item, f4k)
+        else:
+            platformtools.dialog_notification(
+                'PrippiStream', 'Versione Full HD non trovata')
+            # Terminale senza play: assicura che l'enrich bg non resti in pausa
+            # se un chiamante aveva già clearato _bg_ui_pause (v2 FASE 6).
+            self._bg_ui_pause.set()
+
+    def _start_live_remote_session(self, row_idx, pos):
+        """Publish an owned SKY/Sport/TV session and watch keymap commands."""
+        if not config.get_setting('live_remote_enabled', default=True):
+            return
+        try:
+            from platformcode import live_remote
+            with self._rows_lock:
+                label, items = self.rows_data[row_idx]
+                snapshot = list(items)
+            row_key = next((rk for rk in ('sky', 'sport', 'tv')
+                            if label == sportchannels.row_label(rk)), None)
+            if not row_key or not snapshot:
+                return
+            self._live_remote_active = True
+            self._live_remote_row = row_idx
+            self._live_remote_pos = int(pos or 0)
+            self._live_remote_gen += 1
+            session_gen = self._live_remote_gen
+            if not live_remote.activate_keymap():
+                logger.info('[LiveRemote] sessione non avviata: mappatura assente')
+                self._live_remote_active = False
+                return
+            live_remote.start_session(row_key, snapshot, self._live_remote_pos)
+
+            def _watch():
+                last = 0.0
+                monitor = xbmc.Monitor()
+                while (self._alive and self._live_remote_active
+                       and session_gen == self._live_remote_gen
+                       and not monitor.abortRequested()):
+                    command = live_remote.consume_command()
+                    if command:
+                        now = time.time()
+                        direction = command.get('direction')
+                        if direction in ('next', 'previous') and now - last >= 0.65:
+                            last = now
+                            self._zap_live_channel(direction)
+                    monitor.waitForAbort(0.12)
+
+            threading.Thread(target=_watch, daemon=True).start()
+            logger.info('[LiveRemote] sessione %s: %d canali, indice %d'
+                        % (row_key, len(snapshot), self._live_remote_pos))
+        except Exception as exc:
+            logger.error('[LiveRemote] start session: %s' % str(exc))
+
+    def _end_live_remote_session(self):
+        self._live_remote_active = False
+        self._live_remote_gen += 1
+        self._live_zap_busy = False
+        try:
+            from platformcode import live_remote
+            live_remote.clear_session()
+        except Exception:
+            pass
+
+    def _zap_live_channel(self, direction, attempt=0):
+        if not self._live_remote_active:
+            return
+        with self._live_zap_lock:
+            if self._live_zap_busy:
+                return
+            self._live_zap_busy = True
+        try:
+            row_idx = self._live_remote_row
+            with self._rows_lock:
+                items = list(self.rows_data[row_idx][1])
+            if len(items) < 2 or attempt >= len(items):
+                self._live_zap_busy = False
+                xbmcgui.Dialog().notification('PrippiStream', 'Nessun altro canale disponibile',
+                                              xbmcgui.NOTIFICATION_WARNING, 2500)
+                return
+            step = 1 if direction == 'next' else -1
+            pos = (self._live_remote_pos + step) % len(items)
+            self._live_remote_pos = pos
+            self._last_focused_pos = pos
+            from platformcode import live_remote
+            live_remote.update_session_index(pos)
+            item = items[pos]
+            logger.info('[LiveRemote] %s -> %s (%d/%d), tentativo=%d'
+                        % (direction, item.fulltitle or item.title, pos + 1, len(items), attempt))
+            if config.get_setting('live_remote_overlay', default=True):
+                xbmcgui.Dialog().notification(
+                    item.fulltitle or item.title or 'Canale live',
+                    '%s · %d/%d · Connessione…' %
+                    ('AVANTI' if direction == 'next' else 'INDIETRO', pos + 1, len(items)),
+                    item.thumbnail or xbmcgui.NOTIFICATION_INFO, 2500)
+            if getattr(item, '_app_live_provider', False):
+                self._play_provider_live(item, row_idx, pos, _from_zap=True,
+                                         _zap_direction=direction,
+                                         _zap_attempt=attempt)
+            else:
+                self._play_channel_stream(item, row_idx, pos, _from_zap=True,
+                                          _zap_direction=direction, _zap_attempt=attempt)
+        except Exception as exc:
+            self._live_zap_busy = False
+            logger.error('[LiveRemote] zap: %s' % str(exc))
+
+    def _play_provider_live(self, item, row_idx, pos, _from_zap=False,
+                            _zap_direction='next', _zap_attempt=0):
+        """Play an official TV provider item while retaining LiveRemote ownership.
+
+        Provider channels retain their native Rai/Mediaset/La7/Discovery
+        HLS/DASH/DRM resolver, but run it in-process so Player.play can replace
+        the current stream without exposing the Home between channels.
+        """
+        self._last_focused_row = row_idx
+        self._last_focused_pos = pos
+        if not _from_zap:
+            self._end_live_remote_session()
+            self._start_live_remote_session(row_idx, pos)
+        else:
+            self._live_remote_pos = pos
+
+        self._play_gen = getattr(self, '_play_gen', 0) + 1
+        my_gen = self._play_gen
+        def _watch_provider():
+            from platformcode import tvchannels
+            player = xbmc.Player()
+            monitor = xbmc.Monitor()
+            try:
+                self._bg_ui_pause.clear()
+                li = tvchannels.resolve_listitem(item)
+                if (not li or not self._alive or monitor.abortRequested()
+                        or my_gen != self._play_gen):
+                    self._live_zap_busy = False
+                    if _from_zap and self._alive and my_gen == self._play_gen:
+                        self._zap_live_channel(_zap_direction, _zap_attempt + 1)
+                    elif not _from_zap:
+                        self._end_live_remote_session()
+                    return
+
+                # Do not stop first: replacing the playing item directly keeps
+                # fullscreen active, matching SKY zapping without a Home flash.
+                player.play(li.getPath(), li)
+                started = False
+                for _ in range(40):
+                    if (not self._alive or monitor.abortRequested()
+                            or my_gen != self._play_gen):
+                        return
+                    if player.isPlaying():
+                        started = True
+                        break
+                    xbmc.sleep(500)
+                self._live_zap_busy = False
+                if not started:
+                    logger.info('[LiveRemote] provider TV non avviato: %s' %
+                                (item.fulltitle or item.title or ''))
+                    if _from_zap:
+                        self._zap_live_channel(_zap_direction, _zap_attempt + 1)
+                    else:
+                        self._end_live_remote_session()
+                    return
+                if _from_zap and config.get_setting('live_remote_overlay', default=True):
+                    xbmcgui.Dialog().notification(
+                        item.fulltitle or item.title or 'Canale TV',
+                        '%d/%d · In riproduzione' %
+                        (self._live_remote_pos + 1,
+                         len(self.rows_data[row_idx][1])),
+                        item.thumbnail or xbmcgui.NOTIFICATION_INFO, 1800)
+                while player.isPlaying():
+                    if (not self._alive or monitor.abortRequested()
+                            or my_gen != self._play_gen):
+                        return
+                    xbmc.sleep(500)
+                if self._alive and my_gen == self._play_gen:
+                    self._end_live_remote_session()
+                    self._restore_home()
+            finally:
+                self._live_zap_busy = False
+                self._bg_ui_pause.set()
+
+        threading.Thread(target=_watch_provider, daemon=True).start()
+
+    def _play_channel_stream(self, item, row_idx=None, pos=None, _from_zap=False,
+                             _zap_direction='next', _zap_attempt=0):
+        """Resolve a live channel (SKY/DAZN/FIFA+/Cinema) and play it directly.
+
+        Runs the network resolve on a background thread (shows a busy spinner)
+        so the GUI never blocks; SKY uses the heroku ClearKey endpoint with an
+        automatic freeshot fallback (handled inside sportchannels.resolve_listitem).
+        Saves the clicked row+position and restores home focus there after
+        playback ends (so Back returns to the channel you launched, not CW).
+        """
+        # Remember where we were so _restore_home() returns focus here.
+        if row_idx is not None:
+            self._last_focused_row = row_idx
+        if pos is not None:
+            self._last_focused_pos = pos
+        if row_idx is not None and pos is not None:
+            if _from_zap:
+                self._live_remote_pos = pos
+            else:
+                self._end_live_remote_session()
+                self._start_live_remote_session(row_idx, pos)
+
+        # Play generation: each click supersedes any in-flight play worker so an
+        # older worker can't mistake a NEWER channel's playback for its own (all
+        # workers share one xbmc.Player()).  Captured per worker below.
+        self._play_gen = getattr(self, '_play_gen', 0) + 1
+        my_gen = self._play_gen
+
+        def _worker():
+            busy = None
+
+            def _remove_dead():
+                """Remove the channel from cache + re-render its row."""
+                par = getattr(item, 'sport_par', None)
+                if not par or row_idx is None:
+                    return
+                lbl = None
+                with self._rows_lock:
+                    if row_idx < len(self.rows_data):
+                        lbl = self.rows_data[row_idx][0]
+                row_key = next((rk for rk in ('sky', 'sport', 'tv')
+                                if lbl == sportchannels.row_label(rk)), None)
+                if not row_key:
+                    return
+                sportchannels.remove_channel(row_key, par)
+                new_items = sportchannels.build_items(row_key)
+                with self._rows_lock:
+                    if row_idx < len(self.rows_data):
+                        self.rows_data[row_idx] = (lbl, new_items)
+                self._rerender_live_row(row_idx, new_items)
+
+            try:
+                try:
+                    busy = xbmcgui.DialogBusy()
+                    busy.create()
+                except Exception:
+                    busy = None
+                par  = getattr(item, 'sport_par', None)
+                kind = getattr(item, 'sport_kind', '')
+                player = _LivePlayer()
+
+                def _dismiss_error_dialog():
+                    """A failed player.play() pops Kodi's modal 'Playback failed' OK
+                    dialog.  Left up it (a) blocks the next candidate's playback
+                    ('Activate of window 13000 refused — active modal dialogs') and
+                    (b) invites a stray keypress that bumps _play_gen and silently
+                    kills this worker before the fallback runs.  Close it so the
+                    candidate chain can proceed cleanly."""
+                    try:
+                        for _w in ('okdialog', 'yesnodialog'):
+                            if xbmc.getCondVisibility('Window.IsVisible(%s)' % _w):
+                                xbmc.executebuiltin('Dialog.Close(%s, true)' % _w)
+                        xbmc.sleep(60)
+                    except Exception:
+                        pass
+
+                def _play_and_verify(_li):
+                    """Play *_li* and confirm it GENUINELY runs.  Must open
+                    (isPlaying within ≤6 s) and then prove it really plays:
+                      • ClearKey/DASH (sky@@) can open but stay FROZEN-black on a
+                        key mismatch → require decode PROGRESS (getTime advances).
+                      • plain HLS (DaddyLive/freeshot) cannot freeze-black like
+                        that; some CDNs just need a few seconds to buffer the first
+                        segment, so 'keeps playing ~3 s' is enough — don't
+                        false-fail a good-but-slow stream (which used to drop us
+                        onto the broken primary and kill the channel).
+                    If the USER stops/exits while we're still verifying, that's NOT
+                    a failure (the channel was fine, they just left) → return True
+                    so we never deny-list/remove a working channel.
+                    Returns True/False, or None if aborted/superseded."""
+                    clearkey = bool(_li.getProperty('inputstream.adaptive.drm_legacy'))
+                    player.reset_flags()
+                    _dismiss_error_dialog()                   # clear a leftover modal from a prior candidate
+                    player.play(_li.getPath(), _li)
+                    mon = xbmc.Monitor()
+                    opened = False
+                    for _ in range(12):                       # ≤6 s to open
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if player.isPlaying():
+                            opened = True
+                            break
+                        if player.user_stopped:
+                            return True                       # user backed out — not a failure
+                        if player.playback_error or player.playback_ended:
+                            return False                      # open failed fast → fall through to the next candidate now
+                        xbmc.sleep(500)
+                    if not opened:
+                        # Never opened.  A user exit during buffering isn't a failure;
+                        # give the callback a beat so the exit isn't misread as one.
+                        for _ in range(6):                    # ≤600 ms grace
+                            if player.user_stopped or player.playback_error or player.playback_ended:
+                                break
+                            xbmc.sleep(100)
+                        return True if player.user_stopped else False
+                    base_t = None
+                    stable = 0
+                    # The ARM box can finish parsing the MPD quickly but need
+                    # another 10-15 s before MediaCodec renders/advances.  The
+                    # old fixed 8 s window removed channels that started moments
+                    # later and also tore down their LiveRemote session.
+                    proof_checks = 40 if deviceprofile.is_low_power() else 16
+                    for _ in range(proof_checks):
+                        xbmc.sleep(500)
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if not player.isPlaying():
+                            # isPlaying() flips False a beat before the onPlayBack*
+                            # callback lands (they fire on another thread), so reading
+                            # user_stopped immediately races: a user who exits a WORKING
+                            # channel would look like a failure and get deny-listed
+                            # (the SkyTG24 'canale non disponibile on Back' bug).  Wait
+                            # for the callback, then only a real EOF/error counts as a
+                            # failure.
+                            for _ in range(8):                # ≤800 ms grace for the callback
+                                if player.user_stopped or player.playback_error or player.playback_ended:
+                                    break
+                                xbmc.sleep(100)
+                            if player.user_stopped:
+                                return True                   # user watched/left → keep the channel
+                            if player.playback_error or player.playback_ended:
+                                return False                  # genuine EOF/error → failed
+                            return True                       # opened & ran, no failure signal → keep
+                        stable += 1
+                        try:
+                            t = player.getTime()
+                        except Exception:
+                            t = 0
+                        if base_t is None:
+                            base_t = t
+                        elif t - base_t > 0.5:
+                            return True                       # decoding & advancing → real
+                        if not clearkey and stable >= 6:      # ~3 s uninterrupted HLS = OK
+                            return True
+                    return False                              # ClearKey never advanced (frozen)
+
+                def _close_busy():
+                    if busy is not None:
+                        try:
+                            busy.close()
+                        except Exception:
+                            pass
+
+                # Ordered candidate sources, most-likely-good first, learned per
+                # channel and persisted:
+                #   • prefer_daddy → the primary (sky@@/freeshot) chronically fails
+                #     at play (Sky Cinema ClearKey key-rotation, Zona DAZN DNS) so
+                #     DaddyLive goes first — no repeated black screen.
+                #   • prefer_ff → that DaddyLive feed needs inputstream.ffmpegdirect
+                #     (muxed-TS that ISA can't decode, e.g. Zona DAZN).
+                _prim = ('validated', lambda: sportchannels.resolve_validated_listitem(item))
+                _dad  = ('daddy',    lambda: sportchannels.daddy_listitem(item))
+                _dadf = ('daddy_ff', lambda: sportchannels.daddy_ff_listitem(item))
+                _route = getattr(item, 'sport_validated_route', '')
+                if _route == 'daddy':
+                    # Stessa sorgente validata, con due decoder possibili.
+                    candidates = [_dadf, _prim] if sportchannels.is_prefer_ff(par) else [_prim, _dadf]
+                else:
+                    # Non provare fallback diversi da quello verificato.
+                    candidates = [_prim]
+
+                played = False
+                for _src, _resolve in candidates:
+                    if my_gen != self._play_gen:
+                        _close_busy()
+                        return
+                    _dismiss_error_dialog()                   # kill any leftover 'playback failed' modal before the next try
+                    try:
+                        _li = _resolve()
+                    except Exception as exc:
+                        logger.error('[PrippiHome] resolve %s %s: %s' % (par, _src, str(exc)))
+                        _li = None
+                    if not _li:
+                        continue                              # this source unavailable → next
+                    _close_busy()                             # reveal the player
+                    logger.info('[PrippiHome] play %s via %s' % (par, _src))
+                    res = _play_and_verify(_li)
+                    if res is None:
+                        return                                # superseded/aborted
+                    if res:
+                        played = True
+                        # Learn what actually worked so next play starts there.
+                        # Preference learning, honouring "always prefer the classic
+                        # NowTV ClearKey (primary) whenever it's online":
+                        #  • ffmpegdirect is a last-resort DECODER for muxed-TS ISA
+                        #    can't handle (Zona DAZN — curated in _PREFER_FF_DEFAULT),
+                        #    never a learned pref (it plays almost any HLS, so it'd
+                        #    steal normal channels from ISA).
+                        #  • daddy (ISA) is NOT pinned either: the ClearKey primary
+                        #    must be re-tried FIRST on every play, so a channel that's
+                        #    back online on ClearKey is used instead of DaddyLive.
+                        # Only a primary win clears any stale daddy pin.
+                        if _src == 'validated':
+                            sportchannels.unprefer_daddy(par)
+                        sportchannels.unprefer_ff(par)
+                        break
+                _close_busy()
+
+                if not played:
+                    # Every source failed → deny-list + remove from the row.  Notify
+                    # only if the user is still waiting on this channel.
+                    if par:
+                        sportchannels.mark_dead(par)
+                    _remove_dead()
+                    _dismiss_error_dialog()                   # hide Kodi's own 'playback failed' modal; we show our toast instead
+                    if my_gen == self._play_gen:
+                        if _from_zap:
+                            self._live_zap_busy = False
+                            self._zap_live_channel(_zap_direction, _zap_attempt + 1)
+                        else:
+                            self._end_live_remote_session()
+                            xbmcgui.Dialog().notification(
+                                'PrippiStream', 'Canale non disponibile',
+                                xbmcgui.NOTIFICATION_WARNING, 4000)
+                    return
+
+                if _from_zap:
+                    self._live_zap_busy = False
+                    if config.get_setting('live_remote_overlay', default=True):
+                        xbmcgui.Dialog().notification(
+                            item.fulltitle or item.title or 'Canale live',
+                            '%d/%d · In riproduzione' %
+                            (self._live_remote_pos + 1,
+                             len(self.rows_data[row_idx][1]) if row_idx is not None else 0),
+                            item.thumbnail or xbmcgui.NOTIFICATION_INFO, 1800)
+
+                # Good channel — wait for it to end, then restore the home (never
+                # remove a channel the user actually watched).
+                monitor = xbmc.Monitor()
+                while player.isPlaying():
+                    if not self._alive or monitor.abortRequested():
+                        return
+                    if my_gen != self._play_gen:
+                        return  # another channel took over
+                    xbmc.sleep(500)
+                if self._alive and my_gen == self._play_gen:
+                    self._end_live_remote_session()
+                    self._restore_home()
+            except Exception as exc:
+                logger.error('[PrippiHome] _play_channel_stream: %s' % str(exc))
+                if busy:
+                    try:
+                        busy.close()
+                    except Exception:
+                        pass
+        t = threading.Thread(target=_worker)
+        t.daemon = True
+        t.start()
+
+    def _play_episode_direct(self, item, season_num, ep_num):
+        """Play a specific episode (season_num, ep_num) directly from the show item.
+
+        Mirrors _select_episode but skips the interactive dialogs, using the
+        pre-selected season/episode from EpisodePickerDialog instead.
+        Only works for StreamingCommunity items (action='episodios').
+        """
+        try:
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            # For CW episode items use the stored show URL; fall back to item.url
+            _show_url = getattr(item, '_cw_show_url', '') or item.url
+            try:
+                data = _get_data(_show_url)
+            finally:
+                if busy:
+                    busy.close()
+
+            seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+            if not seasons:
+                xbmcgui.Dialog().notification(
+                    u'Errore', u'Nessuna stagione trovata',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find requested season
+            chosen     = None
+            season_idx = 0
+            for _si, _s in enumerate(seasons):
+                if _s.get('number') == season_num:
+                    chosen     = _s
+                    season_idx = _si
+                    break
+            if not chosen:
+                chosen     = seasons[0]
+                season_idx = 0
+
+            # Fetch episode list for chosen season — use _show_url (show page), NOT item.url
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                busy = None
+            try:
+                sdata = _get_data(_show_url + '/season-%d' % chosen['number'])
+            finally:
+                if busy:
+                    busy.close()
+
+            episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            if not episodes:
+                xbmcgui.Dialog().notification(
+                    u'Errore', u'Nessun episodio trovato',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find requested episode
+            ep     = None
+            ep_idx = 0
+            for _ei, _ep in enumerate(episodes):
+                if _ep.get('number') == ep_num:
+                    ep     = _ep
+                    ep_idx = _ei
+                    break
+            if not ep:
+                # Fall back to first episode
+                ep     = episodes[0]
+                ep_idx = 0
+
+            title_id   = str(chosen.get('title_id', ''))
+            next_ep_ctx = {
+                'show_item':  item,
+                'seasons':    seasons,
+                'season_idx': season_idx,
+                'episodes':   episodes,
+                'ep_idx':     ep_idx,
+                'title_id':   title_id,
+            }
+
+            import channels.streamingcommunity as _sc
+            ep_item = item.clone(
+                action='findvideos',
+                contentType='episode',
+                season=chosen['number'],
+                episode=ep['number'],
+                contentSeason=chosen['number'],
+                contentEpisodeNumber=ep['number'],
+                contentTitle='',
+                url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, ep['id'])
+            )
+            ep_item._cw_show_url = _show_url  # show page URL, never the iframe URL
+            _pre_play_set_lang(ep_item)
+            xbmc.executebuiltin(
+                'RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
+            t2 = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                  kwargs={'next_ep_ctx': next_ep_ctx})
+            t2.daemon = True
+            t2.start()
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_episode_direct: %s' % str(exc))
+
+    def _play_episode_direct_nonsc(self, item, ep_num):
+        """Play episode *ep_num* of a non-SC show directly (no separate Kodi window).
+
+        Mirrors _play_episode_direct (the SC path) but sources the episode list from
+        the channel's own episodios(). Used for AnimeUnity etc. so anime behave
+        exactly like SC series: GUARDA plays the chosen (or default S01E01) episode,
+        all handled inside PrippiStream.
+        """
+        busy = None
+        try:
+            try:
+                busy = xbmcgui.DialogBusy()
+                busy.create()
+            except Exception:
+                pass
+
+            # CW episode items have url=episode-URL and _cw_show_url=show-URL.
+            # episodios() uses item.url as the base for building episode URLs,
+            # so we must pass the show-level item, not the episode item.
+            _show_url = getattr(item, '_cw_show_url', '') or ''
+            if _show_url and getattr(item, 'action', '') not in _CH_MENU_ACTIONS:
+                import re as _re_sh2
+                _show_item = item.clone(url=_show_url, action='episodios')
+                if not getattr(_show_item, 'api_ep_url', ''):
+                    _aid = _re_sh2.search(r'/anime/(\d+)-', _show_url)
+                    _hst = _re_sh2.match(r'(https?://[^/]+)', _show_url)
+                    if _aid and _hst:
+                        _show_item.api_ep_url = '%s/info_api/%s/' % (
+                            _hst.group(1), _aid.group(1))
+            else:
+                _show_item = item
+
+            ep_list = _get_channel_episodes(_show_item)
+
+            if busy:
+                try:
+                    busy.close()
+                except Exception:
+                    pass
+                busy = None
+
+            if not ep_list:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Nessun episodio trovato',
+                    xbmcgui.NOTIFICATION_WARNING, 3000)
+                return
+
+            # Find the requested episode by number; fall back to the first one.
+            ep_item = None
+            ep_idx  = 0
+            for _i, ep in enumerate(ep_list):
+                try:
+                    if int(getattr(ep, 'episode', 0) or 0) == int(ep_num):
+                        ep_item = ep
+                        ep_idx  = _i
+                        break
+                except Exception:
+                    pass
+            if ep_item is None:
+                # Requested episode not in the list (e.g. a CW pointer to the next,
+                # not-yet-released episode of an ongoing series): clamp to the
+                # highest available episode <= ep_num, else the first.
+                _below = [(_i, ep) for _i, ep in enumerate(ep_list)
+                          if int(getattr(ep, 'episode', 0) or 0) <= int(ep_num)]
+                if _below:
+                    ep_idx, ep_item = _below[-1]
+                else:
+                    ep_item = ep_list[0]
+                    ep_idx  = 0
+
+            # Carry season/episode + show identity so Continue-Watching tracking and
+            # the "Continua" resume label key match the DetailWindow show item.
+            _show_name = (getattr(item, 'fulltitle', '') or
+                          getattr(item, 'show', '') or
+                          getattr(item, 'contentSerieName', '') or '')
+            try:
+                ep_item.contentSeason = 1
+                ep_item.contentEpisodeNumber = int(getattr(ep_item, 'episode', ep_num) or ep_num)
+            except Exception:
+                pass
+            if _show_name:
+                ep_item.contentSerieName = _show_name
+                ep_item.show = _show_name
+                ep_item.fulltitle = _show_name
+            ep_item._cw_show_url = getattr(item, 'url', '') or ''
+
+            # Build Up Next context so the next episode is offered near the end,
+            # exactly like SC series. The whole episode list is cached, so advancing
+            # chains through the entire season without further API calls.
+            next_ep_ctx = {
+                'nonsc':     True,
+                'show_item': item,
+                'ep_list':   ep_list,
+                'ep_idx':    ep_idx,
+            }
+
+            _pre_play_set_lang(ep_item)
+            xbmc.executebuiltin(
+                'RunPlugin(plugin://plugin.video.prippistream/?%s)' % ep_item.tourl())
+            t = threading.Thread(target=self._wait_and_restore, args=(ep_item,),
+                                 kwargs={'next_ep_ctx': next_ep_ctx})
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            logger.error('[PrippiHome] _play_episode_direct_nonsc: %s' % str(exc))
+            if busy:
+                try:
+                    busy.close()
+                except Exception:
+                    pass
+
+    # ── Offline download orchestration ──────────────────────────────────────
+
+    def _start_download(self, item, dl_eps):
+        """Resolve quality and enqueue download(s). Runs on a background thread.
+        For a series, dl_eps is the list of (season, episode, title) chosen in the
+        multiselect; a single quality is asked once and applied to all."""
+        try:
+            from platformcode import download_manager
+            # If the user picked episodes (series, incl. a series opened from CW),
+            # build per-episode jobs regardless of the item's contentType (a CW
+            # series item is an 'episode', not a 'tvshow').
+            if dl_eps:
+                jobs = self._build_episode_jobs(item, dl_eps)
+            else:
+                page_url = self._download_page_url(item)
+                jobs = [(item, page_url)] if page_url else []
+            if not jobs:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Impossibile preparare il download',
+                    xbmcgui.NOTIFICATION_WARNING, 3500)
+                return
+
+            # Probe available resolutions from the first job and ask the user.
+            try:
+                busy = xbmcgui.DialogBusy(); busy.create()
+            except Exception:
+                busy = None
+            try:
+                _j0 = jobs[0]
+                tracks = download_manager.probe_tracks(
+                    _j0[1], channel=(getattr(_j0[0], 'channel', '') or ''),
+                    item=_j0[0])
+            finally:
+                if busy:
+                    try: busy.close()
+                    except Exception: pass
+            variants = (tracks or {}).get('variants') or []
+            if not variants:
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream', u'Stream non disponibile per il download',
+                    xbmcgui.NOTIFICATION_WARNING, 4000)
+                return
+
+            target_height = self._ask_quality(variants)
+            if target_height is None:
+                return
+
+            # Always download ALL available audio + subtitle tracks (None = keep
+            # all in download_manager._select_tracks). No track-selection prompt.
+            audio_langs, sub_langs = None, None
+
+            mgr = download_manager.get_manager()
+            mgr.on_change = self._refresh_dl_row
+            for (jitem, page_url) in jobs:
+                entry = download_manager._entry_from_item(jitem)
+                mgr.enqueue(jitem.clone(url=page_url), target_height,
+                            db_entry=entry, audio_langs=audio_langs,
+                            sub_langs=sub_langs)
+
+            xbmcgui.Dialog().notification(
+                u'PrippiStream',
+                (u'Download avviato' if len(jobs) == 1
+                 else u'%d episodi in coda' % len(jobs)),
+                xbmcgui.NOTIFICATION_INFO, 3000)
+            # Refresh the downloads row so the new entries appear.
+            try:
+                self._refresh_dl_row()
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[PrippiHome] _start_download: %s' % str(exc))
+
+    def _ask_quality(self, variants):
+        """Show the resolution picker. Returns the chosen height (0 = auto/best)
+        or None if cancelled."""
+        labels, heights = [], []
+        for v in variants:
+            h = int(v.get('height', 0) or 0)
+            labels.append((u'%dp' % h) if h else u'Auto')
+            heights.append(h)
+        idx = xbmcgui.Dialog().select(u'Qualità del download', labels)
+        if idx is None or idx < 0:
+            return None
+        return heights[idx]
+
+    def _download_page_url(self, item):
+        """Resolvable page URL for a movie / single item, per channel convention."""
+        ch  = (getattr(item, 'channel', '') or '').lower()
+        url = getattr(item, 'url', '') or ''
+        if ch == 'streamingcommunity' or (not ch and '/watch/' in url):
+            return url.replace('/watch/', '/iframe/')
+        return url
+
+    def _build_episode_jobs(self, item, dl_eps):
+        """Build (episode_item, page_url) jobs for the chosen episodes."""
+        jobs = []
+        tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+        channel = (getattr(item, 'channel', '') or '').lower()
+        show_name = (getattr(item, 'fulltitle', '') or getattr(item, 'show', '') or
+                     getattr(item, 'contentSerieName', '') or '')
+        show_name = re.sub(r'\[/?[A-Za-z][^\]]*\]', '', show_name).strip()
+
+        # Channel-based show (e.g. AnimeUnity): episode page URL is ep.url.
+        if not tmdb_id and channel and channel != 'streamingcommunity':
+            show_item = item if getattr(item, 'action', '') == 'episodios' \
+                else item.clone(action='episodios')
+            by_num = {}
+            for ep in _get_channel_episodes(show_item):
+                try:
+                    by_num[int(getattr(ep, 'episode', 0) or 0)] = ep
+                except Exception:
+                    pass
+            for (s, e, title) in dl_eps:
+                ep = by_num.get(e)
+                if not ep:
+                    continue
+                jitem = item.clone(
+                    contentType='episode', contentSeason=1, season=1,
+                    contentEpisodeNumber=e, episode=e,
+                    contentSerieName=show_name, contentTitle=title,
+                    url=ep.url, action='findvideos',
+                    thumbnail=getattr(ep, 'thumbnail', '') or getattr(item, 'thumbnail', ''))
+                jobs.append((jitem, ep.url))
+            return jobs
+
+        # StreamingCommunity: fetch each needed season once, build iframe URLs.
+        import channels.streamingcommunity as _sc
+        _show_url = getattr(item, '_cw_show_url', '') or item.url
+        try:
+            data = _get_data(_show_url)
+            seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+        except Exception as exc:
+            logger.error('[DL] seasons fetch: %s' % str(exc))
+            seasons = []
+        season_meta = {}
+        for s in sorted(set(_s for (_s, _e, _t) in dl_eps)):
+            chosen = next((x for x in seasons if x.get('number') == s), None)
+            if not chosen:
+                continue
+            try:
+                sdata = _get_data(_show_url + '/season-%d' % s)
+                episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            except Exception as exc:
+                logger.error('[DL] season %d fetch: %s' % (s, str(exc)))
+                continue
+            season_meta[s] = {
+                'title_id': str(chosen.get('title_id', '')),
+                'eps': {int(ep.get('number', 0) or 0): ep for ep in episodes},
+            }
+        for (s, e, title) in dl_eps:
+            meta = season_meta.get(s)
+            if not meta:
+                continue
+            ep = meta['eps'].get(e)
+            if not ep:
+                continue
+            page_url = '%s/it/iframe/%s?episode_id=%s' % (
+                _sc.host, meta['title_id'], ep['id'])
+            jitem = item.clone(
+                contentType='episode', contentSeason=s, season=s,
+                contentEpisodeNumber=e, episode=e,
+                contentSerieName=show_name, contentTitle=title,
+                url=page_url, action='findvideos')
+            jitem._cw_show_url = _show_url
+            jobs.append((jitem, page_url))
+        return jobs
+
+# ── Non-SC channel episode list (shared by picker + direct play) ──
+
+_nonsc_ep_cache = {}   # show_url -> (timestamp, [episode Items])
+
+def _animeunity_fallback_episodes(item):
+    """Resolve a show's episodes via AnimeUnity when its own channel can't.
+
+    CB01 lists some anime (e.g. "One Piece: Saga del Paese di Wa") under
+    /serietv/ with an anime-specific page layout (blocks titled SAGHE / SERIE -
+    ITA / OAV instead of "STAGIONE n") that the generic cineblog01.episodios()
+    scraper cannot parse → it returns 0 episodes → "non disponibile". AnimeUnity
+    is the authoritative anime source (same engine as the home Anime row), so we
+    match the show by title there and return its playable episode Items.
+
+    Returns episode Items (action='findvideos') or [] when there is no confident
+    match. Never raises.
+    """
+    title = _extract_item_title(item)
+    if not title:
+        return []
+    try:
+        import channels.animeunity as au
+        from core.item import Item
+        # CB01 anime titles often carry an arc suffix ("One Piece: Saga del
+        # Paese di Wa") that AnimeUnity won't match verbatim; also try the base
+        # title (text before the first ':' / '-' / '–').
+        base = re.split(r'\s*[:\-–]\s*', title, 1)[0].strip()
+        queries = [title] + ([base] if base and base.lower() != title.lower() else [])
+        want = _normalize_title(base or title)
+        best = None
+        for q in queries:
+            seed = Item(channel='animeunity', url=au.host, args={},
+                        contentType='tvshow')
+            results = au.search(seed, q) or []
+            cand = [r for r in results
+                    if getattr(r, 'action', '') in ('findvideos', 'episodios')]
+            # prefer an exact / containment normalized-title match, else first.
+            for r in cand:
+                rt = _normalize_title(_extract_item_title(r))
+                if rt and (rt == want or want in rt or rt in want):
+                    best = r
+                    break
+            if best is None and cand:
+                best = cand[0]
+            if best is not None:
+                break
+        if best is None:
+            logger.error('[NonSC-EP] animeunity fallback: no match for "%s"' % title)
+            return []
+        if not getattr(best, 'channel', ''):
+            best.channel = 'animeunity'
+        if getattr(best, 'action', '') == 'findvideos':
+            # single-part anime (movie/OAV): the item itself is the playable unit
+            return [best]
+        eps = au.episodios(best) or []
+        eps = [ep for ep in eps if getattr(ep, 'action', '') == 'findvideos']
+        logger.info('[NonSC-EP] animeunity fallback for "%s" → %d episodes'
+                    % (title, len(eps)))
+        return eps
+    except Exception as exc:
+        logger.error('[NonSC-EP] animeunity fallback failed for "%s": %s'
+                     % (title, str(exc)))
+        return []
+
+
+# Azioni che rappresentano un livello-menu di un canale (stagioni, sottobrand)
+# e non ancora episodi playabili: mediasetplay usa 'epmenu', raiplay 'epMenu',
+# e raiplay può restituire menù di stagioni da episodios() stesso.
+_CH_MENU_ACTIONS = ('episodios', 'epmenu', 'epMenu')
+
+
+def _expand_channel_menu(ch_module, item, depth=0, parent_title=''):
+    """Espande ricorsivamente i livelli-menu di un canale (epmenu Mediaset:
+    stagioni → sottobrand; epMenu Rai: blocchi → stagioni) fino alla lista
+    piatta di episodi playabili (action='findvideos'). Ogni episodio riceve
+    `_leaf_menu` = titolo del menu che lo conteneva DIRETTAMENTE (la stagione
+    Mediaset, il set 'Stagione 2' Rai) e `_leaf_parent` = il menu sopra (il
+    blocco Rai 'Episodi'/'Highlights'/'Extra'): sono le stagioni del picker,
+    col padre usato per disambiguare i nomi duplicati."""
+    action = getattr(item, 'action', '') or ''
+    if action not in _CH_MENU_ACTIONS:
+        action = 'episodios'
+    fn = getattr(ch_module, action, None)
+    if fn is None:
+        return []
+    out = []
+    leaf_name = None
+    for it in (fn(item) or []):
+        sub = getattr(it, 'action', '')
+        if sub == 'findvideos':
+            if leaf_name is None:
+                leaf_name = re.sub(r'\[/?[^\]]+\]', '',
+                                   (getattr(item, 'title', '') or '')).strip()
+            it._leaf_menu = leaf_name
+            it._leaf_parent = parent_title
+            out.append(it)
+        elif depth < 3 and sub in _CH_MENU_ACTIONS:
+            _par = re.sub(r'\[/?[^\]]+\]', '',
+                          (getattr(item, 'title', '') or '')).strip()
+            out.extend(_expand_channel_menu(ch_module, it, depth + 1, _par))
+    return out
+
+
+def _get_channel_episodes(item):
+    """Fetch (and cache for 5 min) the episode list for a non-SC show *item*.
+
+    Calls the owning channel's episodios() (expanding the season/menu levels
+    of channels like mediasetplay/raiplay) and returns the list of playable
+    episode Items (action='findvideos'). Cached so the episode picker and the
+    subsequent direct-play don't fetch the API twice.
+    """
+    url = getattr(item, 'url', '') or ''
+    # channel may be missing on items built outside the routing engine (e.g. a
+    # cineblog01 newest() Item); fall back to the search-channel tag, then bail
+    # cleanly so we never import 'channels.' (empty → ImportError "channels.").
+    channel = (getattr(item, 'channel', '') or
+               getattr(item, '_search_channel', '') or '')
+    if channel == 'sc':
+        channel = 'streamingcommunity'
+    # Cache key MUST include the channel: One Piece [ITA] (channel='onepiece',
+    # TMDB-enriched episodes) and the raw AnimeUnity show share the same AU URL.
+    # Keying by URL alone let a CW/up-next rebuild (channel='animeunity', plain
+    # episodes with the show poster/plot for ALL episodes) poison the picker's
+    # cache → every ITA episode showed the same image/plot.
+    ckey = '%s|%s' % (channel, url)
+    now = time.time()
+    cached = _nonsc_ep_cache.get(ckey)
+    if cached and (now - cached[0]) < 300:
+        return cached[1]
+    ep_list = []
+    if not channel:
+        logger.error('[NonSC-EP] episodios skipped: item has no channel (url=%s)'
+                     % (url[:90] if url else ''))
+        return ep_list
+    try:
+        import importlib
+        ch_module = importlib.import_module('channels.%s' % channel)
+        ep_list = _expand_channel_menu(ch_module, item)
+        if channel == 'la7':
+            # La7's nested nodes are programme sections and pagination pages,
+            # not seasons. Keep one coherent episode list for the programme.
+            for ep in ep_list:
+                ep._leaf_menu = 'Puntate'
+                ep._leaf_parent = ''
+        # Stagioni: ogni episodio porta _leaf_menu = titolo del menu che lo
+        # conteneva direttamente. Run consecutivi di (_leaf_menu, _leaf_parent)
+        # diversi = le stagioni del picker (_disp_season/_disp_ep/_season_name).
+        # Nomi duplicati (Rai: 'Stagione 5' sia in Episodi che in Highlights/
+        # Extra) vengono disambiguati col menu padre. Canali piatti
+        # (AnimeUnity…): un solo run → nessun attributo, il picker mostra la
+        # singola 'Stagione 1' come sempre.
+        runs = []
+        for ep in ep_list:
+            key = (getattr(ep, '_leaf_menu', '') or '',
+                   getattr(ep, '_leaf_parent', '') or '')
+            if not runs or runs[-1][0] != key:
+                runs.append((key, []))
+            runs[-1][1].append(ep)
+        if len(runs) > 1:
+            name_count = {}
+            for (name, _par), _sub in runs:
+                name_count[name] = name_count.get(name, 0) + 1
+            for gi, ((name, par), sub) in enumerate(runs, 1):
+                disp_name = name
+                if name and name_count[name] > 1 and par and par != name:
+                    disp_name = u'%s · %s' % (par, name)
+                for j, ep in enumerate(sub, 1):
+                    ep._disp_season = gi
+                    ep._disp_ep = j
+                    ep._season_name = disp_name or (u'Stagione %d' % gi)
+        # Mediaset/Rai non numerano le puntate (episode assente o duplicato tra
+        # stagioni appiattite): rinumera in sequenza così il picker e il
+        # play-by-number puntano allo stesso episodio (la numerazione GLOBALE
+        # resta la chiave di selezione; quella per-stagione è solo display).
+        # I canali con numerazione propria e univoca (AnimeUnity, One Piece)
+        # restano intatti.
+        nums = []
+        for ep in ep_list:
+            try:
+                nums.append(int(getattr(ep, 'episode', 0) or 0))
+            except Exception:
+                nums.append(0)
+        nonzero = [n for n in nums if n > 0]
+        if ep_list and (len(nonzero) != len(ep_list)
+                        or len(set(nonzero)) != len(nonzero)):
+            for i, ep in enumerate(ep_list):
+                ep.episode = i + 1
+    except Exception as exc:
+        logger.error('[NonSC-EP] episodios(%s) failed: %s' % (channel, str(exc)))
+    # CB01 lists some anime under /serietv/ with a layout episodios() can't read
+    # (0 episodes). Retry via AnimeUnity by title so those titles still play.
+    if not ep_list and channel == 'cineblog01':
+        ep_list = _animeunity_fallback_episodes(item)
+    if ep_list and url:
+        _nonsc_ep_cache[ckey] = (now, ep_list)
+    return ep_list
+
+
+# ── Continue Watching save helper ────────────────────────────────
+
+def _save_cw(item, key, actual_time, total_time, played_url=''):
+    """Persist a watch-progress entry for *item* to the CW database."""
+    try:
+        if (getattr(item, 'is_live_channel', False)
+                or getattr(item, '_app_live_provider', False)
+                or getattr(item, 'channel', '') in
+                ('raiplay', 'mediasetplay', 'la7', 'discoveryplus')):
+            logger.info('[CW] live ignorato: %s' %
+                        (getattr(item, 'fulltitle', '') or item.title or ''))
+            return
+        title = (getattr(item, 'fulltitle', '') or
+                 getattr(item, 'show', '') or
+                 getattr(item, 'contentSerieName', '') or '')
+        ct    = getattr(item, 'contentType', '') or ''
+        s     = 0
+        e_num = 0
+        ep_title = ''
+        if ct == 'episode':
+            s     = int(getattr(item, 'contentSeason', 0) or 0)
+            e_num = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+            ep_title = (getattr(item, 'contentTitle', '') or
+                        getattr(item, '_upnext_name', '') or '')
+            if s or e_num:
+                title = '%s  S%02dE%02d' % (title, s, e_num)
+        thumb    = getattr(item, 'thumbnail', '') or ''
+        fanart   = getattr(item, 'fanart', '') or thumb
+        show_url = getattr(item, '_cw_show_url', '') or ''
+        watch_history.save_progress(
+            key, title, thumb, fanart,
+            actual_time, total_time,
+            item.tourl(),
+            show_url=show_url,
+            played_url=played_url,
+            season=s if (ct == 'episode' and s) else None,
+            episode=e_num if (ct == 'episode' and e_num) else None,
+            episode_title=ep_title,
+        )
+    except Exception as exc:
+        logger.error('[CW] _save_cw: %s' % str(exc))
+
+
+# ── Up Next helpers ────────────────────────────────────────────────────────────
+
+def _rebuild_ctx_from_cw(item):
+    """
+    Reconstruct next_ep_ctx for an episode item that was launched from the CW row.
+    Requires item._cw_show_url to be set (the SC titles page URL for the series).
+    Makes 2 HTTP calls; called from the background _wait_and_restore thread.
+    Returns a next_ep_ctx dict, or None on failure / non-episode.
+    """
+    try:
+        if getattr(item, 'contentType', '') != 'episode':
+            return None
+
+        # ── Non-SC channels (e.g. AnimeUnity): rebuild the flat episode list ──
+        _channel = getattr(item, 'channel', '') or ''
+        if _channel and _channel != 'streamingcommunity':
+            show_url = getattr(item, '_cw_show_url', '') or ''
+            if not show_url:
+                return None
+            cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+            show_item = item.clone(action='episodios', contentType='tvshow', url=show_url)
+            # AnimeUnity episodios() needs api_ep_url — derive it from the show URL
+            # ( .../anime/{id}-{slug} → .../info_api/{id}/ ) when not already present.
+            if not getattr(item, 'api_ep_url', ''):
+                _m = re.search(r'/anime/(\d+)', show_url)
+                _hm = re.match(r'(https?://[^/]+)', show_url)
+                if _m and _hm:
+                    show_item.api_ep_url = '%s/info_api/%s/' % (_hm.group(1), _m.group(1))
+            ep_list = _get_channel_episodes(show_item)
+            if not ep_list:
+                return None
+            ep_idx = 0
+            for _i, _ep in enumerate(ep_list):
+                try:
+                    if int(getattr(_ep, 'episode', 0) or 0) == cur_e:
+                        ep_idx = _i
+                        break
+                except Exception:
+                    pass
+            logger.info('[UpNext] rebuilt nonsc ctx from CW: ch=%s E%02d, %d eps'
+                        % (_channel, cur_e, len(ep_list)))
+            return {
+                'nonsc':     True,
+                'show_item': show_item,
+                'ep_list':   ep_list,
+                'ep_idx':    ep_idx,
+            }
+
+        show_url = getattr(item, '_cw_show_url', '') or ''
+        cur_s = int(getattr(item, 'contentSeason', 0) or 0)
+        cur_e = int(getattr(item, 'contentEpisodeNumber', 0) or 0)
+        url   = getattr(item, 'url', '') or ''
+        m = re.search(r'/iframe/(\d+)', url)
+        if not m:
+            return None
+        title_id = m.group(1)
+
+        # If show_url is missing, reconstruct it from the iframe URL + SC host.
+        # show_url is like  https://streamingcommunityz.ooo/it/titles/1243-new-girl
+        # SC REQUIRES the slug — /it/titles/1243 alone returns no data-page.
+        # We build the slug from item.show / item.fulltitle (e.g. "New Girl" → "new-girl").
+        if not show_url:
+            try:
+                import channels.streamingcommunity as _sc_mod
+                _sc_host = _sc_mod.host
+            except Exception:
+                _m = re.match(r'(https?://[^/]+)', url)
+                _sc_host = _m.group(1) if _m else ''
+            show_name = (getattr(item, 'show', '') or
+                         getattr(item, 'contentSerieName', '') or
+                         getattr(item, 'fulltitle', '') or '')
+            slug = re.sub(r'[^a-z0-9]+', '-',
+                          show_name.lower().strip()).strip('-') if show_name else ''
+            if _sc_host and slug:
+                show_url = '%s/it/titles/%s-%s' % (_sc_host, title_id, slug)
+                logger.info('[UpNext] _rebuild_ctx: guessed show_url=%s' % show_url)
+        if not show_url:
+            return None
+
+        # Fetch seasons list
+        data    = _get_data(show_url)
+        seasons = (data.get('props') or {}).get('title', {}).get('seasons', [])
+        if not seasons:
+            return None
+
+        # Find current season index
+        season_idx = 0
+        for si, s in enumerate(seasons):
+            if s.get('number') == cur_s:
+                season_idx = si
+                break
+
+        # Fetch episode list for current season
+        chosen   = seasons[season_idx]
+        sdata    = _get_data(show_url + '/season-%d' % chosen['number'])
+        episodes = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+        if not episodes:
+            return None
+
+        # Find current episode index
+        ep_idx = 0
+        for ei, ep in enumerate(episodes):
+            if ep.get('number') == cur_e:
+                ep_idx = ei
+                break
+
+        show_item = item.clone(action='episodios', contentType='tvshow', url=show_url)
+        logger.info('[UpNext] rebuilt ctx from CW: S%02dE%02d, %d seasons, %d eps in S%d'
+                    % (cur_s, cur_e, len(seasons), len(episodes), cur_s))
+        return {
+            'show_item':  show_item,
+            'seasons':    seasons,
+            'season_idx': season_idx,
+            'episodes':   episodes,
+            'ep_idx':     ep_idx,
+            'title_id':   title_id,
+        }
+    except Exception as exc:
+        logger.error('[UpNext] _rebuild_ctx_from_cw: %s' % str(exc))
+        return None
+
+
+def _apply_cw_to_item(it):
+    """
+    If 'it' matches a CW entry (by TMDB ID or normalised show name), copy the
+    CW progress data onto it and make it act as a direct episode play — identical
+    to clicking the same item in the CW row.
+    Modifies 'it' in-place; no-op when there is no match.
+    Returns True if a CW match was found and applied, False otherwise.
+    """
+    global _cw_lookup_by_tmdb, _cw_lookup_by_title
+    tmdb = str(it.infoLabels.get('tmdb_id') or '').strip()
+    cw_match = _cw_lookup_by_tmdb.get(tmdb) if tmdb else None
+    if cw_match is None:
+        show_name = (getattr(it, 'show', '') or
+                     getattr(it, 'contentSerieName', '') or
+                     getattr(it, 'fulltitle', '') or '')
+        norm = _normalize_title(show_name)
+        cw_match = _cw_lookup_by_title.get(norm) if norm else None
+    if cw_match is None:
+        return False
+    # Save original state the first time we modify this item so it can be restored later
+    if not hasattr(it, '_orig_cw_state'):
+        it._orig_cw_state = {
+            # Use __dict__.get (not getattr) — Item.__getattr__ returns '' for unknowns,
+            # which would corrupt the saved state and cause '' > 0 TypeError later.
+            'cw_time_watched':      float(it.__dict__.get('cw_time_watched', 0) or 0),
+            'cw_total_time':        float(it.__dict__.get('cw_total_time', 0) or 0),
+            'action':               getattr(it, 'action', ''),
+            'url':                  getattr(it, 'url', ''),
+            '_cw_show_url':         getattr(it, '_cw_show_url', ''),
+        }
+    # Apply progress bar data
+    it.cw_time_watched = cw_match.cw_time_watched
+    it.cw_total_time   = cw_match.cw_total_time
+    # Make it play the same episode (direct video play, bypassing season picker).
+    # NOTE: we deliberately do NOT touch contentType / contentSeason /
+    # contentEpisodeNumber here. Setting those would map to infoLabels
+    # season/episode/mediatype, which makes TMDB enrichment fetch the EPISODE
+    # still image instead of the series portrait poster — so the same title in a
+    # genre carousel would show the wrong (or SC) poster once it is in CW.
+    # The direct-play url + action below are enough to resume the right episode;
+    # the saved resume position is matched via the CW database key.
+    it.action               = cw_match.action
+    it.url                  = cw_match.url
+    it._cw_show_url         = getattr(cw_match, '_cw_show_url', '')
+    return True
+
+
+def _clear_cw_from_item(it):
+    """
+    Undo a previous _apply_cw_to_item call: restore the item to its original
+    state (action, url, contentType, etc.) and zero progress bar fields.
+    """
+    orig = getattr(it, '_orig_cw_state', None)
+    if orig:
+        it.cw_time_watched      = orig['cw_time_watched']
+        it.cw_total_time        = orig['cw_total_time']
+        it.action               = orig['action']
+        it.url                  = orig['url']
+        it._cw_show_url         = orig['_cw_show_url']
+        del it._orig_cw_state
+    else:
+        it.cw_time_watched = 0
+        it.cw_total_time   = 0
+
+
+def _build_next_ep(ctx):
+    """
+    Given a next_ep_ctx dict describing the current episode, return
+    (ep_item, new_ctx) for the immediately following episode, or (None, None)
+    if no next episode exists or on network error.
+
+    ctx keys:
+      show_item  – original SC Item (action='seasons' or similar)
+      seasons    – list of all season dicts from the SC API
+      season_idx – int index of current season in `seasons`
+      episodes   – list of episode dicts for the current season
+      ep_idx     – int index of current episode in `episodes`
+      title_id   – str, the SC series title id
+    """
+    # ── Non-SC channels (e.g. AnimeUnity): flat episode list, single season ──
+    if ctx.get('nonsc'):
+        try:
+            ep_list   = ctx['ep_list']
+            ei        = int(ctx['ep_idx'])
+            show_item = ctx.get('show_item')
+            if ei + 1 >= len(ep_list):
+                return None, None   # last episode
+            next_ei = ei + 1
+            next_ep = ep_list[next_ei]
+            try:
+                _epn = int(getattr(next_ep, 'episode', 0) or 0) or (next_ei + 1)
+            except Exception:
+                _epn = next_ei + 1
+            ep_item = next_ep.clone()
+            ep_item.contentSeason         = 1
+            ep_item.contentEpisodeNumber  = _epn
+            _name = (getattr(show_item, 'fulltitle', '') or
+                     getattr(show_item, 'show', '') or '')
+            if _name:
+                ep_item.contentSerieName = ep_item.show = ep_item.fulltitle = _name
+            ep_item._cw_show_url    = getattr(show_item, 'url', '') or ''
+            ep_item._upnext_season  = 1
+            ep_item._upnext_episode = _epn
+            ep_item._upnext_name    = re.sub(r'\[/?[^\]]+\]', '',
+                                             getattr(next_ep, 'title', '') or '').strip()
+            return ep_item, dict(ctx, ep_idx=next_ei)
+        except Exception as exc:
+            logger.error('[UpNext] _build_next_ep (nonsc): %s' % str(exc))
+            return None, None
+
+    try:
+        show_item  = ctx['show_item']
+        seasons    = ctx['seasons']
+        si         = int(ctx['season_idx'])
+        episodes   = ctx['episodes']
+        ei         = int(ctx['ep_idx'])
+        title_id   = ctx['title_id']
+
+        import channels.streamingcommunity as _sc
+
+        # ── next episode in the same season ──────────────────────────────────
+        if ei + 1 < len(episodes):
+            next_ei     = ei + 1
+            next_ep     = episodes[next_ei]
+            next_season = seasons[si]
+            new_ctx     = dict(ctx, ep_idx=next_ei)
+
+        # ── first episode of the next season ─────────────────────────────────
+        elif si + 1 < len(seasons):
+            next_si     = si + 1
+            next_season = seasons[next_si]
+            try:
+                sdata = _get_data(show_item.url + '/season-%d' % next_season['number'])
+            except Exception as exc:
+                logger.error('[UpNext] fetch next season: %s' % str(exc))
+                return None, None
+            next_eps = (sdata.get('props') or {}).get('loadedSeason', {}).get('episodes', [])
+            if not next_eps:
+                return None, None
+            next_ep = next_eps[0]
+            new_ctx = dict(ctx, season_idx=next_si, episodes=next_eps, ep_idx=0)
+
+        else:
+            return None, None   # last episode of last season
+
+        ep_item = show_item.clone(
+            action='findvideos',
+            contentType='episode',
+            season=next_season['number'],
+            episode=next_ep['number'],
+            contentSeason=next_season['number'],
+            contentEpisodeNumber=next_ep['number'],
+            contentTitle='',
+            url='%s/it/iframe/%s?episode_id=%s' % (_sc.host, title_id, next_ep['id'])
+        )
+        ep_item._upnext_season  = next_season['number']
+        ep_item._upnext_episode = next_ep['number']
+        ep_item._upnext_name    = (next_ep.get('name') or '').strip()
+        return ep_item, new_ctx
+
+    except Exception as exc:
+        logger.error('[UpNext] _build_next_ep: %s' % str(exc))
+        return None, None
+
+
+# ── Module-level helpers ────────────────────────────────────────────────────────
+
+def _apply_audio_sub_pref(player, item, av_started_event=None):
+    """
+    Apply the user's saved subtitle preference for this content after onAVStarted.
+    Audio track selection is now handled by setting locale.audiolanguage BEFORE
+    RunPlugin (see _launch), so Kodi picks the right track from frame 0 with no skip.
+    This function only handles subtitles (on/off/language).
+    """
+    try:
+        if item is None:
+            return
+        addon   = xbmcaddon.Addon()
+        tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+        key     = tmdb_id or re.sub(r'[^a-z0-9]', '',
+                                    (item.fulltitle or item.show or '').lower())
+        if not key:
+            return
+
+        audio_pref = addon.getSetting('audiolang_%s' % key) or ''
+        sub_pref   = addon.getSetting('sublang_%s'   % key) or ''
+        if not sub_pref:
+            return   # no subtitle preference → leave as-is
+
+        # Wait for A/V pipeline ready before touching subtitle tracks
+        if av_started_event is not None:
+            av_started_event.wait(timeout=15)
+        else:
+            for _ in range(50):
+                xbmc.sleep(100)
+                if not player.isPlaying():
+                    return
+                if player.getAvailableAudioStreams():
+                    break
+
+        if not player.isPlaying():
+            return
+
+        # ── Subtitles ──
+        if sub_pref == u'Nessun sottotitolo':
+            player.showSubtitles(False)
+        else:
+            target_sub = None
+            if 'Italiano' in sub_pref:
+                target_sub = 'ital'
+            elif 'Inglese' in sub_pref:
+                target_sub = 'engl'
+            elif 'Come audio' in sub_pref:
+                if audio_pref and 'Italiano' in audio_pref:
+                    target_sub = 'ital'
+                elif audio_pref and 'Inglese' in audio_pref:
+                    target_sub = 'engl'
+            if target_sub:
+                sub_streams = player.getAvailableSubtitleStreams()
+                chosen = None
+                for idx, s in enumerate(sub_streams):
+                    sl = s.lower()
+                    if target_sub in sl or \
+                            (target_sub == 'ital' and sl in ('it', 'ita')) or \
+                            (target_sub == 'engl' and sl in ('en', 'eng')):
+                        chosen = idx
+                        break
+                if chosen is not None:
+                    player.setSubtitleStream(chosen)
+                    player.showSubtitles(True)
+    except Exception as exc:
+        logger.error('[CW] _apply_audio_sub_pref: %s' % str(exc))
+
+
+def _clear_kodi_resume(ep_url):
+    """Delete Kodi's internal resume/progress data for a StreamingCommunity episode.
+
+    Kodi stores resume points in MyVideosXXX.db.  For SC/vixcloud content:
+        path.strPath   = 'https://vixcloud.co/playlist/'
+        files.strFilename = '<episode_id>'  (just the number)
+    We extract episode_id from the iframe URL (?episode_id=NNN) and:
+      1. Delete all bookmarks for that file  (removes the "Resume from" dialog)
+      2. Delete the files row itself         (removes it from Kodi's own In-Progress list)
+    """
+    try:
+        import glob as _glob
+        import os   as _os
+        import sqlite3 as _sqlite3
+
+        logger.info('[CW] _clear_kodi_resume called with url: %s' % (ep_url or '(none)'))
+
+        # played_url is the vixcloud URL: https://vixcloud.co/playlist/697221?token=...
+        # Extract the numeric ID from the path segment (not ?episode_id= param).
+        m = re.search(r'/playlist/(\d+)', ep_url or '')
+        if not m:
+            logger.info('[CW] _clear_kodi_resume: no playlist ID in url, skipping')
+            return
+        ep_id = m.group(1)
+        logger.info('[CW] _clear_kodi_resume: vixcloud_id=%s' % ep_id)
+
+        db_dir = xbmc.translatePath('special://database/')
+        dbs = _glob.glob(_os.path.join(db_dir, 'MyVideos*.db'))
+        if not dbs:
+            logger.warning('[CW] _clear_kodi_resume: no MyVideos*.db found in %s' % db_dir)
+            return
+        db_path = max(dbs, key=_os.path.getmtime)  # highest version = active DB
+        logger.info('[CW] _clear_kodi_resume: using db=%s' % db_path)
+
+        conn = _sqlite3.connect(db_path, timeout=8)
+        try:
+            # Find idFile(s) matching this episode
+            id_rows = conn.execute(
+                "SELECT f.idFile FROM files f"
+                " JOIN path p ON p.idPath=f.idPath"
+                " WHERE p.strPath='https://vixcloud.co/playlist/'"
+                "   AND f.strFilename=?",
+                (ep_id,)
+            ).fetchall()
+            if not id_rows:
+                logger.info('[CW] _clear_kodi_resume: ep_id=%s not found in files table' % ep_id)
+                return
+            id_list = [r[0] for r in id_rows]
+            placeholders = ','.join('?' * len(id_list))
+            # 1. Delete all bookmarks for this file
+            c1 = conn.execute("DELETE FROM bookmark WHERE idFile IN (%s)" % placeholders, id_list)
+            # 2. Delete the files entry itself (removes it from Kodi In-Progress)
+            c2 = conn.execute("DELETE FROM files  WHERE idFile IN (%s)" % placeholders, id_list)
+            conn.commit()
+            logger.info('[CW] Kodi cleared ep_id=%s: bookmarks=%d files=%d'
+                        % (ep_id, c1.rowcount, c2.rowcount))
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.error('[CW] _clear_kodi_resume: %s' % str(exc))
+
+
+def _nuke_all_vixcloud_bookmarks():
+    """Delete ALL Kodi resume bookmarks for vixcloud content.
+
+    We manage our own resume system (CW DB). Kodi's built-in bookmarks only
+    cause stale "Resume from" dialogs when replaying or navigating episodes.
+    Called at PrippiHome open time (fire-and-forget background thread), but
+    throttled to once per 24h via a marker file: it is SELECT+DELETE+commit on
+    Kodi's main MyVideos.db — flash I/O we should not pay at EVERY open. The
+    per-play cleanup (_clear_kodi_resume) still covers in-session bookmarks.
+    """
+    try:
+        import glob as _glob
+        import os   as _os
+        import sqlite3 as _sqlite3
+        import time as _time
+
+        marker = _os.path.join(config.get_data_path(), '.vixnuke_last')
+        try:
+            if _os.path.exists(marker) and (_time.time() - _os.path.getmtime(marker)) < 86400:
+                logger.info('[CW] startup nuke: throttled (<24h), skipping')
+                return
+        except Exception:
+            pass
+
+        def _touch(path):
+            try:
+                with open(path, 'a'):
+                    pass
+                _os.utime(path, None)
+            except Exception:
+                pass
+
+        db_dir = xbmc.translatePath('special://database/')
+        dbs = _glob.glob(_os.path.join(db_dir, 'MyVideos*.db'))
+        if not dbs:
+            return
+        db_path = max(dbs, key=_os.path.getmtime)
+
+        conn = _sqlite3.connect(db_path, timeout=5)
+        try:
+            id_rows = conn.execute(
+                "SELECT f.idFile FROM files f"
+                " JOIN path p ON p.idPath=f.idPath"
+                " WHERE p.strPath='https://vixcloud.co/playlist/'"
+            ).fetchall()
+            if not id_rows:
+                logger.info('[CW] startup nuke: no vixcloud files found, skipping')
+                _touch(marker)
+                return
+            id_list = [r[0] for r in id_rows]
+            placeholders = ','.join('?' * len(id_list))
+            c1 = conn.execute("DELETE FROM bookmark WHERE idFile IN (%s)" % placeholders, id_list)
+            c2 = conn.execute("DELETE FROM files   WHERE idFile IN (%s)" % placeholders, id_list)
+            conn.commit()
+            logger.info('[CW] startup nuke: cleared vixcloud bookmarks=%d files=%d'
+                        % (c1.rowcount, c2.rowcount))
+            _touch(marker)
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.error('[CW] _nuke_all_vixcloud_bookmarks: %s' % str(exc))
+
+
+def _cdnthumb(img_dict, host):
+    url = (img_dict.get('original_url') or '').strip()
+    if url:
+        return url
+    fname = (img_dict.get('filename') or '').strip()
+    if fname:
+        domain = host.split('://', 1)[-1]
+        if domain.startswith('www.'):
+            domain = domain[4:]
+        return 'https://cdn.' + domain + '/images/' + fname
+    return ''
+
+
+def _build_item(raw, host):
+    title = (raw.get('name') or '').strip()
+    if not title:
+        return None
+    item_id   = raw.get('id', '')
+    slug      = raw.get('slug') or str(item_id)
+    item_type = (raw.get('type') or 'movie').replace('tv', 'tvshow')
+    lang      = 'Sub-ITA' if raw.get('sub_ita', 0) == 1 else 'ITA'
+    dstr      = raw.get('last_air_date') or raw.get('release_date') or ''
+    year      = str(dstr).split('-')[0] if dstr else ''
+    # Extract TMDB/IMDB IDs from SC raw data so TMDB can search by ID (faster + includes videos)
+    tmdb_id   = str(raw.get('tmdb_id') or raw.get('tmdb') or '')
+    imdb_id   = str(raw.get('imdb_id') or raw.get('imdb') or '')
+
+    thumb = fanart = ''
+    for img in (raw.get('images') or []):
+        itype = (img.get('type') or '').lower()
+        url   = _cdnthumb(img, host)
+        if not url:
+            continue
+        if itype in ('poster', 'cover') and not thumb:
+            thumb = url
+        elif itype in ('backdrop', 'background', 'banner') and not fanart:
+            fanart = url
+        elif not thumb:
+            thumb = url
+    if not fanart:
+        fanart = thumb
+
+    plot = (raw.get('plot') or raw.get('description') or raw.get('overview') or '').strip()
+
+    if item_type == 'movie':
+        it = Item(
+            channel='streamingcommunity',
+            action='findvideos',
+            contentType='movie',
+            fulltitle=title, show=title, contentTitle=title,
+            url=host + '/it/watch/%s' % item_id,
+            thumbnail=thumb, fanart=fanart,
+            year=year, language=lang,
+        )
+        it.infoLabels['title'] = title
+        if year:
+            it.infoLabels['year'] = year
+        if plot:
+            it.infoLabels['plot'] = plot
+        if tmdb_id:
+            it.infoLabels['tmdb_id'] = tmdb_id
+        if imdb_id:
+            it.infoLabels['imdb_id'] = imdb_id
+    else:
+        it = Item(
+            channel='streamingcommunity',
+            action='episodios',
+            contentType='tvshow',
+            fulltitle=title, show=title, contentSerieName=title,
+            url=host + '/it/titles/%s-%s' % (item_id, slug),
+            thumbnail=thumb, fanart=fanart,
+            year=year, language=lang,
+        )
+        it.infoLabels['title'] = title
+        it.infoLabels['tvshowtitle'] = title
+        if year:
+            it.infoLabels['year'] = year
+        if plot:
+            it.infoLabels['plot'] = plot
+        if tmdb_id:
+            it.infoLabels['tmdb_id'] = tmdb_id
+        if imdb_id:
+            it.infoLabels['imdb_id'] = imdb_id
+    return it
+
+
+def _item_to_li(item):
+    title  = item.fulltitle or item.show or item.contentSerieName or ''
+    thumb  = item.thumbnail or ''
+    fanart = item.fanart or thumb
+    plot   = (item.infoLabels.get('plot') or getattr(item, 'plot', '') or '').strip()
+    li = xbmcgui.ListItem(title)
+    li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': fanart})
+    li.setProperty('thumbnail',    thumb)
+    li.setProperty('fanart_image', fanart)
+    li.setProperty('title',        title)
+    li.setProperty('year',         str(item.year or ''))
+    li.setProperty('lang',         getattr(item, 'language', '') or '')
+    li.setProperty('plot',         plot)
+    li.setProperty('rating',       str(item.infoLabels.get('rating') or ''))
+    li.setProperty('genre',        str(item.infoLabels.get('genre') or ''))
+    # Kodi 21 deprecates per-card setInfo() and emitted hundreds of warnings on
+    # the box. The skin reads the lightweight ListItem properties above; set the
+    # basic VideoInfoTag fields directly only for consumers outside the skin.
+    # This also avoids setInfo reinitialising the tag before the resume point.
+    try:
+        vt = li.getVideoInfoTag()
+        _basic = (
+            ('setTitle', title),
+            ('setPlot', plot),
+            ('setYear', item.infoLabels.get('year') or item.year or 0),
+            ('setTvShowTitle', item.infoLabels.get('tvshowtitle') or ''),
+            ('setSeason', item.infoLabels.get('season')),
+            ('setEpisode', item.infoLabels.get('episode')),
+        )
+        for _method, _value in _basic:
+            if _value in (None, ''):
+                continue
+            try:
+                getattr(vt, _method)(_value)
+            except (AttributeError, TypeError, ValueError):
+                pass
+    except Exception:
+        vt = None
+    # Continue Watching progress bar — AFTER setInfo so resume point is preserved.
+    # Uses bar_step (1-9) for a 10-step image-based bar in the XML.
+    cw_time  = float(getattr(item, 'cw_time_watched', 0) or 0)
+    cw_total = float(getattr(item, 'cw_total_time', 0) or 0)
+    if cw_time > 0 and cw_total > 0:
+        pct  = max(0, min(96, int(cw_time / cw_total * 100)))
+        step = pct // 10   # 0..9  (step 0 = <10%, no bar shown)
+        if step >= 1:
+            li.setProperty('has_progress', '1')
+            li.setProperty('bar_step',     str(step))
+        try:
+            vt = vt or li.getVideoInfoTag()
+            vt.setResumePoint(cw_time, cw_total)
+            vt.setPlaycount(0)
+        except Exception:
+            pass
+    return li
+
+
+def _extract_data_page(html):
+    """
+    Extract the data-page JSON object using brace-balanced scanning.
+    Neither regex [^"]+ nor html.parser work because the raw HTML has literal "
+    chars inside the data-page attribute value (SVG xmlns="..." etc.).
+    Brace-counting ignores quotes entirely and finds the balanced {…} object.
+    """
+    marker = 'data-page="'
+    idx = html.find(marker)
+    if idx < 0:
+        marker = "data-page='"
+        idx = html.find(marker)
+    if idx < 0:
+        return ''
+    start = html.find('{', idx + len(marker))
+    if start < 0:
+        return ''
+    depth = 0
+    for i in range(start, len(html)):
+        c = html[i]
+        if c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return html[start:i + 1]
+    return ''
+
+
+def _strip_html_fields(s):
+    """
+    Remove "html":"..." JSON string values that contain SVG with unescaped ".
+    The real JSON-closing " is identified by being followed by , } or ].
+    SVG attribute " chars are followed by HTML chars (letters, /, >, backslash) not those.
+    """
+    result = []
+    i = 0
+    field = '"html":"'
+    flen = len(field)
+    while i < len(s):
+        if s[i:i + flen] == field:
+            result.append('"html":""')
+            i += flen
+            while i < len(s):
+                c = s[i]
+                if c == '\\' and i + 1 < len(s):
+                    i += 2          # valid JSON escape, skip both chars
+                elif c == '"':
+                    j = i + 1
+                    while j < len(s) and s[j] in ' \t\r\n':
+                        j += 1
+                    if j < len(s) and s[j] in ',}]':
+                        i += 1      # real JSON-closing "
+                        break
+                    else:
+                        i += 1      # bare " inside SVG, skip
+                else:
+                    i += 1
+        else:
+            result.append(s[i])
+            i += 1
+    return ''.join(result)
+
+
+_cf_scraper = None
+
+
+def _cf_scrape(url):
+    """Last-resort SC fetch: cloudscraper (solves Cloudflare's JS challenge) over
+    the DoH + browser-cipher adapter, so archive rows don't vanish when the Google
+    Translate proxy is blocked/slow on the user's network. Shared scraper; returns
+    the page text or '' on any failure."""
+    global _cf_scraper
+    if _shutdown_event.is_set():
+        return ''
+    if _cf_scraper is None:
+        from lib import cloudscraper
+        s = cloudscraper.create_scraper()
+        try:
+            from core import resolverdns
+            try:
+                from urllib.parse import urlsplit as _us
+            except Exception:
+                from urlparse import urlsplit as _us
+            s.mount('https://', resolverdns.CipherSuiteAdapter(
+                domain=_us(url).netloc,
+                override_dns=config.get_setting('resolver_dns'),
+                verify_ssl=False))
+        except Exception as _me:
+            logger.error('[PrippiHome] cf adapter mount: %s' % str(_me))
+        s.verify = False
+        _cf_scraper = s
+    r = _cf_scraper.get(url, timeout=25)
+    return r.text if getattr(r, 'status_code', 0) < 400 else ''
+
+
+def _get_data(url):
+    """
+    Extract data-page JSON from SC HTML page.
+    Pipeline (each tier only runs if the previous returned nothing):
+      1. httptools.downloadpage  — direct (DoH + browser ciphers)
+      2. proxytranslate          — Google Translate CF-bypass proxy
+      3. _cf_scrape              — cloudscraper + DoH (solves CF directly, no
+                                   dependency on translate.google.com)
+    then: brace-count the data-page JSON, unescape, strip SVG fields, json.loads.
+    """
+    import json as _json
+    import html as _html
+    from core import httptools
+
+    if _shutdown_event.is_set():
+        return {}
+    try:
+        resp = httptools.downloadpage(url, ignore_response_code=True)
+        raw_html = resp.data if resp else ''
+        if not raw_html:
+            logger.info('[PrippiHome] empty response, trying proxytranslate CF bypass for %s' % url)
+            try:
+                from lib import proxytranslate
+                proxy_result = proxytranslate.process_request_proxy(url)
+                raw_html = proxy_result.get('data', '') if proxy_result else ''
+            except Exception as _pte:
+                logger.error('[PrippiHome] proxytranslate failed: %s' % str(_pte))
+                raw_html = ''
+        if not raw_html:
+            logger.info('[PrippiHome] proxytranslate empty, trying cloudscraper for %s' % url)
+            try:
+                raw_html = _cf_scrape(url) or ''
+            except Exception as _cfe:
+                logger.error('[PrippiHome] cloudscraper fallback failed: %s' % str(_cfe)[:140])
+                raw_html = ''
+        if not raw_html:
+            logger.error('[PrippiHome] empty response for %s' % url)
+            return {}
+
+        json_str = _extract_data_page(raw_html)
+        if not json_str:
+            logger.error('[PrippiHome] no data-page in html (len=%d) for %s' % (len(raw_html), url))
+            return {}
+
+        logger.info('[PrippiHome] json_str len=%d for %s' % (len(json_str), url))
+        decoded   = _html.unescape(json_str)
+        cleaned   = _strip_html_fields(decoded)
+        try:
+            result = _json.loads(cleaned)
+        except Exception as e:
+            logger.error('[PrippiHome] json.loads failed for %s: %s' % (url, str(e)[:120]))
+            return {}
+
+        if isinstance(result, dict) and result:
+            logger.info('[PrippiHome] OK for %s sliders=%d' % (
+                url, len(result.get('props', {}).get('sliders', []))))
+            return result
+    except Exception as exc:
+        logger.error('[PrippiHome] exception for %s: %s' % (url, str(exc)))
+    return {}
+
+
+def _translate_to_it(text):
+    """Translate text to Italian using Google Translate free endpoint (no API key).
+    Returns Italian text on success, original text on any error.
+    Handles up to 1000 chars; strips leading/trailing whitespace."""
+    if not text or len(text.strip()) < 10:
+        return text
+    try:
+        import urllib.parse as _urlparse
+        import json as _json
+        from core import httptools as _ht
+        q   = _urlparse.quote(text.strip()[:1000])
+        url = ('https://translate.googleapis.com/translate_a/single'
+               '?client=gtx&sl=auto&tl=it&dt=t&q=%s' % q)
+        resp = _ht.downloadpage(url, timeout=6)
+        if not (resp and resp.ok):
+            return text
+        data  = _json.loads(resp.data)
+        parts = data[0] if data else []
+        translated = ''.join(p[0] for p in parts if p and p[0]).strip()
+        return translated if translated else text
+    except Exception:
+        return text
+
+
+_IT_STOPWORDS = (' il ', ' la ', ' di ', ' che ', ' un ', ' una ', ' della ',
+                 ' gli ', ' più ', ' è ', ' anche ', ' nel ', ' con ', ' per ')
+_EN_MARKERS = (' the ', ' and ', ' with ', ' his ', ' her ', ' they ')
+
+
+def _looks_italian(text):
+    """Euristica economica: True se *text* sembra italiano (>=2 stopword IT
+    distinte e nessun marker inglese forte). Conservativa: in dubbio -> False,
+    così il chiamante ricade sul confronto en-US come prima."""
+    try:
+        t = ' ' + text.lower() + ' '
+        hits = sum(1 for w in _IT_STOPWORDS if w in t)
+        if hits < 2:
+            return False
+        return not any(w in t for w in _EN_MARKERS)
+    except Exception:
+        return False
+
+
+def _get_it_overview(tmdb_id, ctype, it_data=None):
+    """Return an Italian overview string for the given TMDB id.
+
+    Strategy:
+      1. Use it_data (already fetched it-IT response) if provided, else fetch it.
+      2. If the it-IT overview already LOOKS Italian, return it (v2 FASE 9b:
+         saves the en-US reference request — half the network per first focus).
+      3. Otherwise fetch en-US as reference; if it-IT is empty OR identical to
+         en-US (TMDB fallback): translate the English text.
+      4. Return the best available Italian string (or '' on failure).
+    """
+    try:
+        from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+        if it_data is None:
+            url_it = '%s/%s/%s?api_key=%s&language=it-IT' % (
+                      _tmdb_host, ctype, tmdb_id, _tmdb_api)
+            it_data = _Tmdb.get_json(url_it) or {}
+        it_ov = (it_data.get('overview') or '').strip()
+        if it_ov and _looks_italian(it_ov):
+            return it_ov
+        # Fetch en-US to detect TMDB fallback (it-IT == en-US means no Italian on TMDB)
+        url_en = '%s/%s/%s?api_key=%s&language=en-US' % (
+                  _tmdb_host, ctype, tmdb_id, _tmdb_api)
+        en_data = _Tmdb.get_json(url_en) or {}
+        en_ov   = (en_data.get('overview') or '').strip()
+        # If TMDB returned English as fallback for it-IT, translate it
+        if not it_ov or it_ov == en_ov:
+            if en_ov:
+                return _translate_to_it(en_ov)
+            return ''
+        return it_ov
+    except Exception:
+        return ''
+
+
+def _normalize_title(title):
+    """Normalize a title for deduplication: lowercase, ASCII-only, strip articles."""
+    import unicodedata
+    if not title:
+        return ''
+    s = unicodedata.normalize('NFKD', title).encode('ascii', 'ignore').decode('ascii')
+    s = re.sub(r'[^a-z0-9\s]', '', s.lower())
+    s = re.sub(r'^(il|la|lo|gli|le|i|un|una|uno|the|a|an)\s+', '', s.strip())
+    return s.strip()
+
+
+def _extract_item_title(it):
+    """Get the display title from any Item, stripping Kodi markup tags."""
+    title = (
+        getattr(it, 'fulltitle', '') or
+        getattr(it, 'show', '') or
+        getattr(it, 'contentSerieName', '') or
+        getattr(it, 'contentTitle', '') or
+        getattr(it, 'title', '') or ''
+    ).strip()
+    return re.sub(r'\[/?[A-Za-z][^\]]*\]', '', title).strip()
+
+
+def _onepiece_curate(items, want_extras=False, at_front=False, force=False):
+    """Special One Piece handling: collapse the dozens of scattered One Piece
+    results into the unified provider items (One Piece [Sub-ITA] / [ITA] + extras).
+
+    Drops the anime/CB01 One Piece SERIES clutter while KEEPING One Piece films
+    and the SC Live Action (a separate title), then injects the curated provider
+    items (channels/onepiece.py). Idempotent: if the curated items are already in
+    the list it only drops clutter. Never raises.
+
+    - want_extras: include OAV/specials/spin-offs (search) or just the 2 mains.
+    - at_front:    place the curated mains at position 0 (search) vs in place.
+    - force:       inject even if no One Piece item is present (search query=OP).
+    """
+    try:
+        import channels.onepiece as _op
+    except Exception as _e_imp:
+        logger.error('[OnePiece] curate import failed: %s' % str(_e_imp))
+        return items
+    logger.info('[OnePiece] curate ENTER force=%s at_front=%s want_extras=%s items=%d'
+                % (force, at_front, want_extras, len(items)))
+    kept = []
+    op_pos = None
+    op_present = False
+    for it in items:
+        # Drop any raw provider item (channel=onepiece) that leaked in — they are
+        # re-injected cleanly below, so the curated set is always well-ordered and
+        # never partial.
+        if (getattr(it, 'channel', '') or '').lower() == 'onepiece':
+            op_present = True
+            if op_pos is None:
+                op_pos = len(kept)
+            continue
+        nt = _normalize_title(_extract_item_title(it))
+        if not (nt.startswith('one piece') or nt == 'onepiece'):
+            kept.append(it)
+            continue
+        op_present = True
+        if op_pos is None:
+            op_pos = len(kept)
+        src   = (getattr(it, '_search_channel', '') or getattr(it, 'channel', '') or '').lower()
+        stype = getattr(it, '_search_type', '') or ''
+        ct    = (getattr(it, 'contentType', '') or '').lower()
+        # KEEP One Piece films (movies) and the SC Live Action series; only the
+        # anime/CB01 series duplicates get replaced by the unified provider items.
+        if ct == 'movie' or stype == 'film':
+            kept.append(it)
+            continue
+        if src in ('sc', 'streamingcommunity') and stype != 'anime':
+            kept.append(it)          # SC One Piece Live Action stays separate
+            continue
+        # else: anime/CB01 One Piece series clutter → drop (replaced below)
+    if not op_present and not force:
+        return items                 # no One Piece here and not forcing
+    try:
+        curated = _op.get_curated_items(want_extras=want_extras) or []
+    except Exception as exc:
+        import traceback as _tb
+        logger.error('[OnePiece] curate get_curated_items raised: %s\n%s'
+                     % (str(exc), _tb.format_exc()))
+        curated = []
+    logger.info('[OnePiece] curate get_curated_items=%d → [%s]'
+                % (len(curated), ', '.join(getattr(c, 'title', '?') for c in curated)))
+    if not curated:
+        # Index not ready yet (cold start / build in progress): leave the original
+        # items untouched rather than dropping One Piece without a replacement.
+        return items
+    # Tag so the search filter buckets them as anime and the play routing treats
+    # them as non-SC (channel flow → _play_episode_direct_nonsc).
+    for c in curated:
+        try:
+            c._search_channel = 'onepiece'
+            c._search_type = 'anime'
+        except Exception:
+            pass
+    mains  = [c for c in curated if getattr(c, 'op_key', '') in ('ITA', 'SUB')]
+    extras = [c for c in curated if getattr(c, 'op_key', '') not in ('ITA', 'SUB')]
+    if at_front:
+        # Search: a clean, ordered, One-Piece-ONLY layout —
+        #   One Piece [Sub-ITA], One Piece [ITA]  (the 2 main series)
+        #   → the films in number / release order
+        #   → other One Piece spin-offs / specials
+        #   → OAV / specials / spin-offs from the provider.
+        # Everything that is NOT One Piece (SC fuzzy noise like "One Day",
+        # "One Direction", …) is dropped from this dedicated view.
+        def _filmkey(it):
+            title = _extract_item_title(it)
+            mnum = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', title, re.I)
+            if mnum:
+                return (0, int(mnum.group(1)))
+            try:
+                y = int(str(getattr(it, 'year', '') or
+                            (getattr(it, 'infoLabels', {}) or {}).get('year') or 0)[:4])
+            except Exception:
+                y = 0
+            return (1, y or 9999)
+        op_kept = [it for it in kept
+                   if _normalize_title(_extract_item_title(it)).startswith('one piece')]
+        films, others = [], []
+        for it in op_kept:
+            ct2    = (getattr(it, 'contentType', '') or '').lower()
+            stype2 = getattr(it, '_search_type', '') or ''
+            title2 = _extract_item_title(it).lower()
+            is_film = (ct2 == 'movie' or stype2 == 'film'
+                       or 'movie' in title2 or 'film' in title2)
+            (films if is_film else others).append(it)
+        films.sort(key=_filmkey)
+        logger.info('[OnePiece] search curate: mains=%d films=%d others=%d extras=%d (dropped %d non-OP)'
+                    % (len(mains), len(films), len(others), len(extras), len(kept) - len(op_kept)))
+        return mains + films + others + extras
+    pos = op_pos if op_pos is not None else 0
+    return kept[:pos] + curated + kept[pos:]
+
+
+def _op_film_key(it):
+    """Sort key for One Piece films: by movie number when present, else by year."""
+    title = _extract_item_title(it)
+    m = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', title, re.I)
+    if m:
+        return (0, int(m.group(1)))
+    try:
+        y = int(str(getattr(it, 'year', '') or
+                    (getattr(it, 'infoLabels', {}) or {}).get('year') or 0)[:4])
+    except Exception:
+        y = 0
+    return (1, y or 9999)
+
+
+# One Piece Live Action (StreamingCommunity series id 6654 → TMDB 111110).
+_OP_LA_SC_PATH = '/it/titles/6654-one-piece'
+_OP_LA_TMDB    = '111110'
+_OP_LA_POSTER  = 'https://image.tmdb.org/t/p/w500/mgrEi9VfRoN3bAuhf863f0sWC6A.jpg'
+
+
+def _op_live_action_item():
+    """Build the One Piece Live Action SERIE item, sourced explicitly from
+    StreamingCommunity (id 6654) since its global search does not surface it.
+    Plays through the normal SC episodes flow; TMDB 111110 drives the picker."""
+    try:
+        from channels import streamingcommunity as _sc
+        from core.item import Item as _I
+        host = (getattr(_sc, 'host', '') or '').rstrip('/')
+        if not host:
+            return None
+        la = _I(channel='streamingcommunity', action='episodios', contentType='tvshow',
+                url='%s%s' % (host, _OP_LA_SC_PATH),
+                title=u'One Piece (Live Action)', fulltitle=u'One Piece (Live Action)',
+                show=u'One Piece (Live Action)', contentSerieName=u'One Piece (Live Action)',
+                thumbnail=_OP_LA_POSTER, fanart=_OP_LA_POSTER)
+        la.infoLabels = {'tmdb_id': _OP_LA_TMDB, 'mediatype': 'tvshow'}
+        la._search_channel = 'sc'
+        la._search_type = 'serie'
+        return la
+    except Exception as exc:
+        logger.error('[OnePiece] live action build: %s' % str(exc))
+        return None
+
+
+def _onepiece_groups(items, sc_items=None):
+    """Split a One Piece search result into ordered carousel groups for the rows
+    layout:
+        [('SERIE', [Sub-ITA, ITA, Live Action]),
+         ('FILM',  [the 15 films in order]),
+         ('SPECIALI · OVA · SPIN-OFF', [provider extras + spin-off series])]
+
+    The SC Live Action (real-actors Prippi series) is added to SERIE. Drops the
+    anime/CB01 main-series duplicates (the provider replaces them), the loose
+    single-episode packagings (Mediaset "One Piece 17 - Ep. 96 …") and every
+    non-One-Piece result (SC fuzzy noise like "One Day", "One Direction", …); the
+    Speciali row is de-duplicated. Returns [] if the provider index isn't ready.
+    """
+    try:
+        import channels.onepiece as _op
+        curated = _op.get_curated_items(want_extras=True) or []
+    except Exception as exc:
+        logger.error('[OnePiece] groups failed: %s' % str(exc))
+        return []
+    if not curated:
+        return []
+    for c in curated:
+        try:
+            c._search_channel = 'onepiece'
+            c._search_type = 'anime'
+        except Exception:
+            pass
+    mains  = [c for c in curated if getattr(c, 'op_key', '') in ('ITA', 'SUB')]
+    extras = [c for c in curated if getattr(c, 'op_key', '') not in ('ITA', 'SUB')]
+
+    # ── Live Action (real-actors Prippi series): sourced explicitly from SC
+    # (id 6654), since SC's global search does not return it for "one piece".
+    live_action = _op_live_action_item()
+
+    _DROP_TITLES = ('one piece', 'one piece ita', 'one piece subita', 'one piece sub ita')
+    films, others = [], []
+    for it in items:
+        if (getattr(it, 'channel', '') or '').lower() == 'onepiece':
+            continue   # raw provider leak — curated already covers it
+        if live_action is not None and it is live_action:
+            continue   # already placed in SERIE
+        title = _extract_item_title(it)
+        nt = _normalize_title(title)
+        if not nt.startswith('one piece'):
+            continue   # noise (One Day, One Direction, …)
+        if nt in _DROP_TITLES:
+            continue   # bare main-series duplicate (provider replaces it)
+        if re.search(r'one\s*piece\s+\d+\s*-\s*ep', title, re.I):
+            continue   # Mediaset single-episode packaging
+        ct    = (getattr(it, 'contentType', '') or '').lower()
+        stype = getattr(it, '_search_type', '') or ''
+        tl    = title.lower()
+        is_film = (ct == 'movie' or stype == 'film'
+                   or 'movie' in tl or 'film' in tl or 'the movie' in tl)
+        (films if is_film else others).append(it)
+    # De-duplicate films: the same movie shows up from several anime channels
+    # (e.g. "Movie 11" from both AnimeUnity and AnimeSaturn). Collapse by movie
+    # number when present, else by normalized title.
+    films.sort(key=_op_film_key)
+    seen_film, uniq_films = set(), []
+    for it in films:
+        ttl = _extract_item_title(it)
+        mnum = re.search(r'(?:movie|film)\D*?(\d{1,2})\b', ttl, re.I)
+        fkey = ('m', int(mnum.group(1))) if mnum else ('t', _normalize_title(ttl))
+        if fkey in seen_film:
+            continue
+        seen_film.add(fkey)
+        uniq_films.append(it)
+    films = uniq_films
+
+    # ── Speciali row, de-duplicated: provider extras first, then the spin-off
+    # series, skipping exact-title repeats and themes already covered by a
+    # provider extra (Fish-Man Island, In Love, OAV).
+    prov_themes = [_normalize_title(_extract_item_title(c)) for c in extras]
+    def _covered(nt):
+        if 'fish' in nt and any('fish' in p for p in prov_themes):
+            return True
+        if 'in love' in nt and any('love' in p for p in prov_themes):
+            return True
+        if ('oav' in nt or 'ova' in nt) and any('oav' in p or 'ova' in p for p in prov_themes):
+            return True
+        return False
+    speciali = list(extras)
+    seen = set(_normalize_title(_extract_item_title(c)) for c in extras)
+    for it in others:
+        nt = _normalize_title(_extract_item_title(it))
+        if nt in seen or _covered(nt):
+            continue
+        seen.add(nt)
+        speciali.append(it)
+
+    serie = list(mains) + ([live_action] if live_action is not None else [])
+    groups = []
+    if serie:
+        groups.append((u'SERIE', serie))
+    if films:
+        groups.append((u'FILM', films))
+    if speciali:
+        groups.append((u'SPECIALI · OVA · SPIN-OFF', speciali))
+    logger.info('[OnePiece] groups: serie=%d (LA=%s) film=%d speciali=%d'
+                % (len(serie), live_action is not None, len(films), len(speciali)))
+    return groups
+
+
+def _dl_active():
+    """True while a download is running. The home pauses its GIL-heavy
+    background work (TMDB enrichment, YouTube trailer search) during downloads
+    so the download worker threads are not starved of the Python GIL.
+
+    Reads a Kodi window property (set by download_manager) rather than a module
+    global, so the flag is observed reliably across threads/modules."""
+    try:
+        return xbmcgui.Window(10000).getProperty('prippistream_dl_active') == '1'
+    except Exception:
+        return False
+
+
+def _tmdb_get_trailer_candidates(tmdb_id, ctype='movie'):
+    """Return ordered, de-duplicated YouTube IDs from TMDB (IT then EN)."""
+    if not tmdb_id or _shutdown_event.is_set() or _dl_active():
+        return []
+    try:
+        from core import httptools
+        import json as _json
+
+        _TMDB_HOST = 'https://api.themoviedb.org/3'
+        _TMDB_API = 'a1ab8b8669da03637a4b98fa39c39228'
+        media_type = 'tv' if str(ctype) == 'tv' else 'movie'
+        found = []
+        for lang in ('it', 'en'):
+            if _shutdown_event.is_set():
+                break
+            url = '{}/{}/{}/videos?api_key={}&language={}'.format(
+                _TMDB_HOST, media_type, tmdb_id, _TMDB_API, lang)
+            resp = httptools.downloadpage(url, timeout=3, ignore_response_code=True)
+            if not resp.success:
+                continue
+            videos = _json.loads(resp.data or '{}').get('results', [])
+            # Official trailers first, then other trailers, then clips/teasers.
+            videos.sort(key=lambda v: (
+                0 if v.get('type') == 'Trailer' and v.get('official') else
+                1 if v.get('type') == 'Trailer' else 2,
+                -(v.get('size') or 0),
+            ))
+            hint = 'it' if lang == 'it' else ''
+            for video in videos:
+                key = video.get('key')
+                if video.get('site') != 'YouTube' or not key or key in found:
+                    continue
+                found.append(key)
+                _cache_put(_trailer_lang_hint, key, hint)
+                if len(found) >= 8:
+                    return found
+        return found
+    except Exception as exc:
+        logger.error('[TMDBTrailers] %s' % str(exc)[:100])
+        return []
+
+
+def _tmdb_get_trailer(tmdb_id, ctype='movie'):
+    """
+    Fetch the official YouTube trailer ID from the TMDB /videos endpoint.
+    TMDB-sourced IDs are official uploads — never age-restricted.
+    Returns YouTube video_id string, or None.
+    Prefers Italian; falls back to English.
+    """
+    candidates = _tmdb_get_trailer_candidates(tmdb_id, ctype)
+    return candidates[0] if candidates else None
+
+
+# Public Invidious instances used as YouTube search API (tried in order, first success wins)
+def _youtube_search_trailer(title, year='', kind=''):
+    """
+    Search YouTube for a trailer using the YouTube internal API (youtubei v1).
+    No API key required. Returns the YouTube video_id string or None.
+    *kind* tunes the query: 'anime' looks for the OPENING (far easier to find than an
+    Italian trailer), 'kdrama' uses plain/English trailer queries (IT trailers rarely
+    exist); anything else keeps the proven Italian-trailer queries for film/serie.
+    """
+    if _dl_active():
+        return None
+    try:
+        from core import httptools
+        import json as _json
+        try:
+            from urllib import quote_plus          # Py2 (Kodi 18)
+        except ImportError:
+            from urllib.parse import quote_plus    # Py3 (Kodi 19+)
+
+        def _yt_search(query):
+            # Exit immediately if Kodi is shutting down — prevents blocking
+            # the CPythonInvoker for the full socket-timeout duration.
+            if _shutdown_event.is_set():
+                return None
+            body = _json.dumps({
+                'query': query,
+                'context': {
+                    'client': {
+                        'clientName': 'WEB',
+                        'clientVersion': '2.20240101.00.00',
+                        'hl': 'it',
+                        'gl': 'IT',
+                    }
+                }
+            })
+            resp = httptools.downloadpage(
+                'https://www.youtube.com/youtubei/v1/search',
+                post=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+                    'Accept-Language': 'it-IT,it;q=0.9',
+                },
+                ignore_response_code=True,
+                timeout=3   # short timeout so threads exit within Kodi's 5-s kill window
+            )
+            if not resp.success:
+                return None
+            data = _json.loads(resp.data or '{}')
+            videos = []
+            for section in (data.get('contents', {})
+                            .get('twoColumnSearchResultsRenderer', {})
+                            .get('primaryContents', {})
+                            .get('sectionListRenderer', {})
+                            .get('contents', [])):
+                for item in section.get('itemSectionRenderer', {}).get('contents', []):
+                    vr = item.get('videoRenderer', {})
+                    vid = vr.get('videoId')
+                    if not vid:
+                        continue
+                    # Skip age-restricted / sign-in required videos.
+                    # YouTube may signal this in two different places in the API response:
+                    # 1) badges list (metadataBadgeRenderer label)
+                    # 2) overlayTimeStatusRenderer style = "LIVE" or in
+                    #    videoRenderer.videoRequiresLogin (older responses)
+                    badges = vr.get('badges', [])
+                    age_gated = any(
+                        b.get('metadataBadgeRenderer', {}).get('label', '').lower()
+                        in ('age-restricted', 'age restricted', '18+', 'solo per adulti', 'contenuto per adulti')
+                        for b in badges
+                    )
+                    # Also check overlayBadges (second field YouTube sometimes uses)
+                    if not age_gated:
+                        for b in vr.get('ownerBadges', []):
+                            lbl = b.get('metadataBadgeRenderer', {}).get('label', '').lower()
+                            if 'age' in lbl or '18+' in lbl:
+                                age_gated = True
+                                break
+                    if age_gated:
+                        continue
+                    # Parse duration string "M:SS" -> seconds
+                    dur_str = vr.get('lengthText', {}).get('simpleText', '') or ''
+                    secs = 0
+                    if dur_str:
+                        parts = dur_str.split(':')
+                        try:
+                            secs = int(parts[-2]) * 60 + int(parts[-1]) if len(parts) >= 2 else int(parts[0])
+                        except Exception:
+                            pass
+                    videos.append((vid, secs))
+            # Prefer 45s-7min (real trailers)
+            for vid, secs in videos:
+                if 45 <= secs <= 420:
+                    return vid
+            # Fallback: first result
+            return videos[0][0] if videos else None
+
+        # Build the query list by content kind. Each query carries the audio
+        # language it implies: Italian-intent queries almost always land on an
+        # Italian-audio upload, which often reports language 'und' — the hint
+        # lets _maybe_set_subtitles skip the (redundant) Italian subtitles.
+        if kind == 'anime':
+            queries = [('%s opening' % title, ''), ('%s sigla' % title, ''),
+                       ('%s anime opening' % title, ''), ('%s trailer' % title, '')]
+        elif kind == 'kdrama':
+            queries = [('%s trailer' % title, ''), ('%s kdrama trailer' % title, ''),
+                       ('%s korean drama trailer' % title, '')]
+        else:
+            queries = [
+                (' '.join([title] + ([year] if year else []) + ['trailer ufficiale italiano']), 'it'),
+                ('%s trailer italiano' % title, 'it'),
+                ('%s%s trailer official' % (title, (' ' + year) if year else ''), ''),
+            ]
+        for i, (q, hint) in enumerate(queries, 1):
+            vid = _yt_search(q)
+            if vid:
+                _cache_put(_trailer_lang_hint, vid, hint)
+                logger.info('[YTSearch] "%s" (%s) → q%d → %s' % (title, kind or 'std', i, vid))
+                return vid
+        return None
+
+    except Exception as exc:
+        logger.error('[YTSearch] %s' % str(exc)[:100])
+        return None
+
+
+def _fetch_trailers_small(rows_snapshot, per_row=10, max_total=20, gate=None):
+    """
+    Fetch trailers via YouTube search (youtubei internal API).
+    gate: callable opzionale (es. _bg_gate della home) chiamata tra un avvio
+    worker e l'altro — Tier-3: non cercare trailer mentre l'utente naviga.
+    Results are cached in the module-level _trailer_cache dict so that
+    repeated window opens never re-fetch the same id.
+    per_row: max items to take from each row.
+    max_total: hard cap on new searches per call.
+    """
+    global _trailer_cache
+
+    # Pass 1: apply cached results immediately (no network)
+    for _, items in rows_snapshot:
+        for it in items:
+            tid = str(it.infoLabels.get('tmdb_id') or it.fulltitle or it.show or '').strip()
+            if not tid or it.infoLabels.get('trailer'):
+                continue
+            cached = _trailer_cache.get(tid)
+            if cached:
+                it.infoLabels['trailer'] = cached
+
+    # Pass 2: collect items that still need fetching
+    seen = {}   # key -> Item  (key = tmdb_id if available, else title)
+    for _, items in rows_snapshot:
+        row_count = 0
+        for it in items:
+            if row_count >= per_row:
+                break
+            if it.infoLabels.get('_enr'):
+                continue  # live channels — no trailer search
+            tid = str(it.infoLabels.get('tmdb_id') or it.fulltitle or it.show or '').strip()
+            if not tid:
+                continue
+            if tid in _trailer_cache:
+                row_count += 1
+                continue
+            if not it.infoLabels.get('trailer') and tid not in seen:
+                seen[tid] = it
+            row_count += 1
+            if len(seen) >= max_total:
+                break
+        if len(seen) >= max_total:
+            break
+
+    if not seen:
+        return
+
+    logger.info('[PrippiHome trailers] fetching %d new ids (daemon threads)' % len(seen))
+    results = {}   # tmdb_id -> url str
+    lock    = threading.Lock()
+
+    def _one(tid):
+        try:
+            # Bail out immediately if Kodi is shutting down — no need to
+            # fetch trailers when the window is being closed.
+            if _shutdown_event.is_set():
+                return
+            it_obj  = seen[tid]
+            title   = it_obj.fulltitle or it_obj.show or it_obj.contentSerieName or ''
+            year    = str(it_obj.infoLabels.get('year') or '')
+            item_tmdb_id = str(it_obj.infoLabels.get('tmdb_id') or '').strip()
+            item_ctype   = 'tv' if getattr(it_obj, 'contentType', '') == 'tvshow' else 'movie'
+
+            def _make_url(video_id):
+                return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
+
+            # YouTube search primary (kind tunes anime→opening / kdrama→trailer)
+            vid = _youtube_search_trailer(title, year, _trailer_kind(it_obj))
+            # TMDB fallback: if YouTube finds nothing (all restricted or no results)
+            if not vid and item_tmdb_id:
+                vid = _tmdb_get_trailer(item_tmdb_id, item_ctype)
+            with lock:
+                results[tid] = _make_url(vid) if vid else False
+        except Exception as exc:
+            logger.error('[PrippiHome trailers] %s: %s' % (tid, str(exc)[:60]))
+
+    # Use daemon threads so they don't block addon shutdown (prevents the
+    # "script didn't stop in 5 seconds" kill that was crashing Kodi).
+    import time as _time
+    threads = [threading.Thread(target=_one, args=(tid,), daemon=True)
+               for tid in list(seen.keys())]
+    # Throttle: start 2 at a time to avoid flooding YouTube
+    _abort_monitor = xbmc.Monitor()
+    active = []
+    pending = list(threads)
+    deadline = _time.time() + 30
+    while (pending or active) and _time.time() < deadline:
+        # Exit immediately if Kodi is shutting down — prevents this loop from
+        # blocking the CPythonInvoker past Kodi's 5-second kill timeout.
+        if _abort_monitor.abortRequested() or _shutdown_event.is_set():
+            return
+        # Refill active pool up to 2
+        while pending and len(active) < 2:
+            if gate is not None:
+                try:
+                    gate(10)   # Tier-3: aspetta che l'utente si fermi
+                except Exception:
+                    pass
+            t = pending.pop(0)
+            t.start()
+            active.append(t)
+        active = [t for t in active if t.is_alive()]
+        if active:
+            # Use Event.wait() instead of xbmc.sleep() so we wake IMMEDIATELY when
+            # _shutdown_event.set() is called (e.g. from onAbortRequested), rather
+            # than blocking the full 150 ms in a Kodi API call that may no longer be
+            # safe after Kodi's C++ objects start tearing down.
+            _shutdown_event.wait(timeout=0.15)
+    # Wait briefly for any still-running threads (up to remaining deadline)
+    remaining = max(0.1, deadline - _time.time())
+    for t in threads:
+        if t.is_alive():
+            t.join(timeout=min(remaining, 1.0))
+
+    # Store results in module cache and apply to items
+    for tid, val in results.items():
+        _cache_put(_trailer_cache, tid, val)
+
+    found = sum(1 for v in results.values() if v)
+    logger.info('[PrippiHome trailers] done: %d/%d got trailer (cache size: %d)'
+                 % (found, len(seen), len(_trailer_cache)))
+
+    for _, items in rows_snapshot:
+        for it in items:
+            tid = str(it.infoLabels.get('tmdb_id') or it.fulltitle or it.show or '').strip()
+            if tid and not it.infoLabels.get('trailer'):
+                val = _trailer_cache.get(tid)
+                if val:
+                    it.infoLabels['trailer'] = val
+
+
+def _row_content_type(label):
+    """
+    Determine the content type of a row from its label.
+    Returns 'peliculas', 'series', or 'anime'.
+    Returns None for ambiguous rows (e.g. 'In evidenza', 'Azione' without suffix).
+    """
+    l = label.lower()
+    # The 4K row is a curated Xtream-Codes feed: never enrich it with generic
+    # SC content or it gets polluted with non-4K movies.
+    if '4k' in l:
+        return None
+    if 'anime' in l:
+        return 'anime'
+    if 'serie' in l or ' tv' in l or 'show' in l:
+        return 'series'
+    if 'film' in l or 'movie' in l or 'pellicol' in l:
+        return 'peliculas'
+    return None
+
+
+def _fetch_anime_row(limit=20):
+    """Fetch popular anime titles from AnimeUnity for the dedicated home row.
+
+    Reuses the existing channels/animeunity.py engine (peliculas → /archivio/
+    get-animes with order=Popolarità), so the domain auto-update, CSRF handling
+    and the streamingcommunityws resolver all keep working unchanged.
+
+    Returns a list of ready-to-render Items:
+      - movies  → action='findvideos'  (direct play on click)
+      - series  → action='episodios'   (opens the channel episode list)
+    Each item gets infoLabels['_enr']=1 so the TMDB enrichment pass skips it and
+    AnimeUnity's own posters are preserved. Results are cached for _CACHE_TTL.
+    Never raises — returns [] on any failure so the home is unaffected.
+    """
+    from time import time as _now
+    global _anime_row_cache
+
+    cached = _anime_row_cache.get('items')
+    if cached is not None and (_now() - _anime_row_cache.get('ts', 0)) < _CACHE_TTL:
+        return cached
+
+    items = []
+    try:
+        import channels.animeunity as au
+        from core.item import Item
+        # order is passed explicitly in args; the channel only overrides it from
+        # its per-channel setting when that setting is non-zero (default 0).
+        seed = Item(channel='animeunity', url=au.host,
+                    args={'order': u'Popolarità'}, page=0)
+        raw = au.peliculas(seed) or []
+        for it in raw:
+            act = getattr(it, 'action', '') or ''
+            if act not in ('findvideos', 'episodios'):
+                continue  # drops the trailing "next page" pagination entry
+            if not _extract_item_title(it):
+                continue
+            if not getattr(it, 'channel', ''):
+                it.channel = 'animeunity'
+            # Keep AnimeUnity's native poster — skip TMDB enrichment for this item.
+            try:
+                it.infoLabels['_enr'] = 1
+            except Exception:
+                pass
+            # AnimeUnity lists ITA (dubbed) and Sub-ITA versions of the same show
+            # as separate entries with the SAME clean title (e.g. two "One Piece"
+            # with different posters). peliculas() puts the language only in
+            # item.title, but the home renders item.fulltitle/show — so both look
+            # identical. Tag the display title with the language so they are
+            # distinguishable (and CW tracks them separately).
+            _lang = getattr(it, 'contentLanguage', '') or ''
+            if _lang:
+                _suffix = u' [%s]' % _lang
+                for _attr in ('fulltitle', 'show', 'contentSerieName', 'contentTitle'):
+                    _val = getattr(it, _attr, '') or ''
+                    if _val and _suffix not in _val:
+                        setattr(it, _attr, _val + _suffix)
+            items.append(it)
+            if len(items) >= limit:
+                break
+        logger.info('[PrippiHome anime] popular: %d items' % len(items))
+    except Exception as exc:
+        logger.error('[PrippiHome anime] fetch failed: %s' % str(exc)[:160])
+
+    # Special One Piece handling: swap the AnimeUnity One Piece entries for the
+    # unified provider items (complete ITA 1–926 / SUB 1–1167).
+    try:
+        items = _onepiece_curate(items, want_extras=False, at_front=False)
+    except Exception as exc:
+        logger.error('[PrippiHome anime] one piece curate: %s' % str(exc)[:120])
+
+    if items:
+        _anime_row_cache = {'items': items, 'ts': _now()}
+    return items
+
+
+def _fetch_enrich_items(ctype):
+    """Cached and in-flight-deduplicated entry point for enrichment pools."""
+    now = time.time()
+    cached = _enrich_cache.get(ctype)
+    if cached and (now - cached['ts']) < _CACHE_TTL:
+        return cached['items']
+
+    disk_items = _enrich_disk_read(ctype)
+    if disk_items:
+        _enrich_cache[ctype] = {'items': disk_items, 'ts': now}
+        logger.info('[PrippiHome enrich] %s pool loaded from disk: %d items'
+                    % (ctype, len(disk_items)))
+        return disk_items
+
+    with _enrich_cache_lock:
+        event = _enrich_inflight.get(ctype)
+        owner = event is None
+        if owner:
+            event = threading.Event()
+            _enrich_inflight[ctype] = event
+    if not owner:
+        event.wait(timeout=_EXTRA_TIMEOUT + 10)
+        cached = _enrich_cache.get(ctype)
+        return cached['items'] if cached else []
+
+    try:
+        return _fetch_enrich_items_uncached(ctype)
+    finally:
+        with _enrich_cache_lock:
+            _enrich_inflight.pop(ctype, None)
+            event.set()
+
+
+def _fetch_enrich_items_uncached(ctype):
+    """
+    Fetch all items of the given content type from _ENRICH_SOURCE_MAP.
+    Results are cached per-type for _CACHE_TTL seconds.
+    Returns a raw list of Items; dedup is NOT done here — it is per-row in the caller.
+    """
+    from time import time
+    global _enrich_cache
+
+    # Yield to active downloads (heavy network + JSON parsing competes for GIL).
+    if _dl_active():
+        return []
+
+    now = time()
+    cached = _enrich_cache.get(ctype)
+    if cached and (now - cached['ts']) < _CACHE_TTL:
+        return cached['items']
+
+    sources = _ENRICH_SOURCE_MAP.get(ctype, [])
+    if not sources:
+        return []
+
+    import importlib
+    all_items = []
+    lock = threading.Lock()
+
+    def _fetch_one(channel_name, categoria):
+        try:
+            mod = importlib.import_module('channels.%s' % channel_name)
+            if not hasattr(mod, 'newest'):
+                return
+            items = mod.newest(categoria) or []
+            valid = []
+            for it in items[:40]:
+                act = getattr(it, 'action', '') or ''
+                if act not in _VALID_ACTIONS:
+                    continue
+                if _extract_item_title(it):
+                    # Ensure channel is set so the plugin dispatcher can
+                    # import the right module (e.g. animesaturn, animeunity).
+                    if not getattr(it, 'channel', ''):
+                        it.channel = channel_name
+                    valid.append(it)
+            if valid:
+                with lock:
+                    all_items.extend(valid)
+            logger.info('[PrippiHome enrich] %s/%s: %d items fetched'
+                         % (channel_name, categoria, len(valid)))
+        except Exception as exc:
+            logger.error('[PrippiHome enrich] %s/%s failed: %s'
+                         % (channel_name, categoria, str(exc)[:120]))
+
+    threads = []
+    for ch, cat in sources:
+        t = threading.Thread(target=_fetch_one, args=(ch, cat))
+        t.daemon = True
+        threads.append(t)
+        t.start()
+    _mon_enr = xbmc.Monitor()
+    for t in threads:
+        if _mon_enr.abortRequested() or _shutdown_event.is_set():
+            break
+        t.join(timeout=_EXTRA_TIMEOUT)
+
+    if all_items:
+        try:
+            _tmdb_enrich_validated(all_items)
+        except Exception as exc:
+            logger.error('[PrippiHome enrich] tmdb: %s' % str(exc))
+    _enrich_cache[ctype] = {'items': all_items, 'ts': now}
+    if all_items:
+        _enrich_disk_write(ctype, all_items)
+    logger.info('[PrippiHome enrich] %s pool ready: %d raw items' % (ctype, len(all_items)))
+    return all_items
+
+
+# Known-bad TMDB ids that StreamingCommunity ships for the wrong title.
+# SC's database occasionally maps a modern catalog entry onto an unrelated
+# (usually very old) TMDB record. Title text cannot tell these apart because
+# the strings overlap heavily (e.g. "Una di famiglia" vs "Una famiglia di
+# matti"), and SC often ships no year for them, so the year check can't fire
+# either. This surgical blocklist strips those specific ids; add new ones as
+# they are reported. Keep it small and exact.
+_SC_BAD_TMDB_IDS = {
+    '50863',   # "Call of the Cuckoo" (1927) wrongly mapped to "Una di famiglia"
+}
+
+
+def _tmdb_enrich_validated(items):
+    """Enrich an itemlist via TMDB, then drop demonstrably wrong tmdb_ids.
+
+    StreamingCommunity sometimes ships a wrong tmdb_id. We only revert when we
+    have a HIGH-confidence signal, to avoid stripping correct metadata from
+    titles that legitimately differ between languages (e.g. "La Lista di
+    Schindler" vs "Schindler's List"):
+      1. tmdb_id is in the curated _SC_BAD_TMDB_IDS blocklist, OR
+      2. SC shipped a year AND it differs from the TMDB year by > 12 years.
+    Title-similarity is intentionally NOT used: it produces massive false
+    positives across IT/EN/native-script titles and still can't separate
+    word-overlapping mismatches. On a hit we strip tmdb_id/imdb_id and restore
+    SC's own (self-consistent) poster/title/plot."""
+    if not items:
+        return
+    # Hard choke point: skip ALL TMDB enrichment while a download runs. TMDB
+    # responses are large JSON; parsing them holds the Python GIL for long
+    # stretches and starves the download's writer thread.
+    if _dl_active():
+        logger.info('[PrippiHome] enrich skipped — download active')
+        return
+    from core import tmdb as _tmdb
+
+    # Snapshot SC-provided data BEFORE enrichment overwrites it.
+    # year lives in infoLabels, NOT in item.year (which always returns "").
+    sc_snap = [{
+        'year':   it.infoLabels.get('year') or '',
+        'title':  it.infoLabels.get('title') or it.fulltitle or '',
+        'plot':   it.infoLabels.get('plot') or '',
+        'thumb':  it.thumbnail or '',
+        'fanart': it.fanart or '',
+    } for it in items]
+
+    _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
+
+    for i, it in enumerate(items):
+        snap = sc_snap[i]
+        tmdb_id = str(it.infoLabels.get('tmdb_id') or '')
+        if not tmdb_id:
+            continue
+
+        wrong = False
+        reason = ''
+
+        if tmdb_id in _SC_BAD_TMDB_IDS:
+            wrong = True
+            reason = 'blocklisted id'
+        else:
+            try:
+                sc_year = int(snap['year'])
+            except (ValueError, TypeError):
+                sc_year = 0
+            try:
+                tmdb_year = int(it.infoLabels.get('year') or 0)
+            except (ValueError, TypeError):
+                tmdb_year = 0
+            if sc_year and tmdb_year and abs(sc_year - tmdb_year) > 12:
+                wrong = True
+                reason = 'year SC=%s TMDB=%s' % (sc_year, tmdb_year)
+
+        if wrong:
+            logger.info('[PrippiHome] wrong tmdb_id for "%s" (id=%s, %s) - reverting to SC data' % (
+                snap['title'], tmdb_id, reason))
+            it.infoLabels.pop('tmdb_id', None)
+            it.infoLabels.pop('imdb_id', None)
+            it.infoLabels['title'] = snap['title']
+            it.infoLabels['year'] = snap['year']
+            if snap['plot']:
+                it.infoLabels['plot'] = snap['plot']
+            it.thumbnail = snap['thumb']
+            it.fanart = snap['fanart'] or snap['thumb']
+
+
+def _fetch_main_rows(progress_cb=None):
+    """Fetch the SC main-page sliders (home/movies/tv-shows) only.
+
+    Fast path of the load: returns as soon as the 3 main pages are parsed.
+    TMDB enrichment is intentionally NOT done here — items already carry SC's
+    own poster/title/plot, which is enough for the first paint. Enrichment is
+    applied in the background afterwards (see _bg_enrich_inplace).
+
+    Returns (rows, host, homepage_data).
+    """
+    def _p(pct, msg=None):
+        if progress_cb:
+            try:
+                progress_cb(pct, msg)
+            except Exception:
+                pass
+
+    rows = []
+    host = ''
+    homepage_data = None
+    try:
+        import channels.streamingcommunity as sc
+        host = sc.host
+        logger.info('[PrippiHome] host=%s' % host)
+
+        # Fetch ALL sliders from main pages (different suffixes avoid dedup collision).
+        pages = [
+            (host + '/it',          ''),
+            (host + '/it/movies',   ' \u2014 Film'),
+            (host + '/it/tv-shows', ' \u2014 Serie TV'),
+        ]
+        seen_sliders = set()   # deduplicate by display_name (case-insensitive)
+
+        # Fetch all main pages CONCURRENTLY (network), then process in fixed
+        # order so slider order and dedup stay deterministic.
+        _page_data = {}
+        _pd_lock = threading.Lock()
+
+        def _fetch_main_page(u):
+            try:
+                d = _get_data(u)
+                if d and isinstance(d, dict):
+                    with _pd_lock:
+                        _page_data[u] = d
+            except Exception as exc:
+                logger.error('[PrippiHome] main page fetch %s: %s' % (u, str(exc)))
+
+        _p(15, u'Caricamento in corso\u2026')
+        _pthreads = []
+        for _pu, _ in pages:
+            _pt = threading.Thread(target=_fetch_main_page, args=(_pu,))
+            _pt.daemon = True
+            _pthreads.append(_pt)
+            _pt.start()
+        _deadline = time.monotonic() + 15.0
+        for _pt in _pthreads:
+            _remaining = _deadline - time.monotonic()
+            if _remaining <= 0:
+                break
+            _pt.join(timeout=_remaining)
+
+        _p(55, u'Caricamento contenuti\u2026')
+
+        for page_url, page_suffix in pages:
+            if len(rows) >= SC_MAX_ROWS:
+                break
+            try:
+                data = _page_data.get(page_url)
+                if not data or not isinstance(data, dict):
+                    logger.error('[PrippiHome] _get_data empty for %s' % page_url)
+                    continue
+                if not homepage_data:
+                    homepage_data = data
+                props   = data.get('props', {})
+                sliders = props.get('sliders', [])
+                logger.info('[PrippiHome] %s => %d sliders' % (page_url, len(sliders)))
+
+                for slider in sliders:
+                    if len(rows) >= SC_MAX_ROWS:
+                        break
+                    slider_name = (
+                        slider.get('name') or slider.get('label') or
+                        slider.get('title') or 'Senza nome'
+                    ).strip()
+
+                    raw_titles = slider.get('titles', [])
+                    if isinstance(raw_titles, dict):
+                        raw_titles = raw_titles.get('data', [])
+                    if not raw_titles:
+                        continue
+
+                    # Deduplicate by full display_name (includes page suffix)
+                    display_name = slider_name + page_suffix
+                    key = display_name.lower()
+                    if key in seen_sliders:
+                        continue
+                    seen_sliders.add(key)
+
+                    items = []
+                    for raw in raw_titles[:20]:
+                        try:
+                            it = _build_item(raw, host)
+                            if it:
+                                items.append(it)
+                        except Exception as exc:
+                            logger.error('[PrippiHome] _build_item: %s' % str(exc))
+                    if not items:
+                        continue
+
+                    rows.append((display_name, items))
+                    logger.info('[PrippiHome] row "%s": %d items' % (display_name, len(items)))
+
+            except Exception as exc:
+                logger.error('[PrippiHome] page error %s: %s' % (page_url, str(exc)))
+    except Exception as exc:
+        logger.error('[PrippiHome] main rows import/init: %s' % str(exc))
+
+    logger.info('[PrippiHome] main rows: %d' % len(rows))
+    return rows, host, homepage_data
+
+
+def _fetch_archive_rows(host, homepage_data, existing_count,
+                        max_workers=None, max_new_rows=None,
+                        existing_labels=None):
+    """Fetch curated + genre archive rows (the slower second phase).
+
+    Runs after the main rows are already on-screen so it never delays the
+    first paint. No inline TMDB enrichment (done later in background).
+    """
+    rows = []
+    if not host or existing_count >= SC_MAX_ROWS:
+        return rows
+    try:
+        import threading as _threading
+
+        # Curated entries come first (pinned order), then SC genres
+        _CURATED = [
+            ('I Più Votati — Film',              host + '/it/archive?sort=score&type=movie'),
+            ('I Più Votati — Serie TV',          host + '/it/archive?sort=score&type=tv'),
+            ('I Più Visti — Film',               host + '/it/archive?sort=views&type=movie'),
+            ('I Più Visti',                      host + '/it/archive?sort=views'),
+            ('Serie TV — Aggiornate di Recente', host + '/it/archive?sort=last_air_date&type=tv'),
+            ('Film — Aggiunti di Recente',       host + '/it/archive?sort=created_at&type=movie'),
+        ]
+        genres_list = (homepage_data.get('props') or {}).get('genres') or [] if homepage_data else []
+        _genre_entries = [
+            ((g.get('name') or '').strip(), host + '/it/archive?genre[]=' + str(g.get('id')))
+            for g in genres_list if (g.get('name') or '').strip() and g.get('id')
+        ]
+        all_entries = _CURATED + _genre_entries  # curated first
+
+        # Uno snapshot Android può contenere soltanto il primo lotto caricato.
+        # Non rifare le stesse richieste: completa le righe mancanti usando il
+        # titolo come identità stabile, mantenendo l'ordine ufficiale.
+        existing_keys = {
+            str(label or '').strip().lower()
+            for label in (existing_labels or []) if str(label or '').strip()
+        }
+        pending_entries = [
+            entry for entry in all_entries
+            if str(entry[0] or '').strip().lower() not in existing_keys
+        ]
+
+        remaining = SC_MAX_ROWS - existing_count
+        if max_new_rows is not None:
+            remaining = min(remaining, max(0, int(max_new_rows)))
+        entries_to_fetch = pending_entries[:remaining]
+
+        # results_map preserves insertion order (curated before genres)
+        results_map = {}
+        alock = _threading.Lock()
+
+        def _fetch_archive_row(idx, label, url, result_dict, lock):
+            try:
+                adata = _get_data(url)
+                if not adata:
+                    logger.error('[PrippiHome] archive "%s": empty _get_data' % label)
+                    return
+                titles = (adata.get('props') or {}).get('titles') or {}
+                if isinstance(titles, dict):
+                    raw_titles = titles.get('data', [])
+                elif isinstance(titles, list):
+                    raw_titles = titles
+                else:
+                    raw_titles = []
+                if not raw_titles:
+                    logger.error('[PrippiHome] archive "%s": no titles in props' % label)
+                    return
+                items = []
+                for raw in raw_titles[:20]:
+                    try:
+                        it = _build_item(raw, host)
+                        if it:
+                            items.append(it)
+                    except Exception:
+                        pass
+                if items:
+                    with lock:
+                        result_dict[idx] = (label, items)
+                    logger.info('[PrippiHome] archive row "%s": %d items' % (label, len(items)))
+                else:
+                    logger.error('[PrippiHome] archive "%s": 0 items after build' % label)
+            except Exception as exc:
+                logger.error('[PrippiHome] archive "%s" error: %s' % (label, str(exc)))
+
+        if max_workers is not None and int(max_workers) <= 1:
+            # Android TV/box low-power: parsing many large Next.js payloads in
+            # parallel competes with Compose, image decode and live probes.
+            # A short bounded serial pipeline preserves the progressive Home
+            # without creating a burst of Python threads and network buffers.
+            for idx, (label, url) in enumerate(entries_to_fetch):
+                if _shutdown_event.is_set():
+                    break
+                _fetch_archive_row(idx, label, url, results_map, alock)
+        elif max_workers is not None:
+            # Pool piccolo per telefoni/box con poca RAM: nessun burst di una
+            # ventina di thread, ma soprattutto nessun taglio al catalogo.
+            cursor = [0]
+            cursor_lock = _threading.Lock()
+
+            def _bounded_worker():
+                while not _shutdown_event.is_set():
+                    with cursor_lock:
+                        if cursor[0] >= len(entries_to_fetch):
+                            return
+                        idx = cursor[0]
+                        cursor[0] += 1
+                    label, url = entries_to_fetch[idx]
+                    _fetch_archive_row(idx, label, url, results_map, alock)
+
+            workers = []
+            for _ in range(max(1, int(max_workers))):
+                worker = _threading.Thread(target=_bounded_worker)
+                worker.daemon = True
+                workers.append(worker)
+                worker.start()
+            for worker in workers:
+                worker.join()
+        else:
+            threads = []
+            for idx, (label, url) in enumerate(entries_to_fetch):
+                t = _threading.Thread(target=_fetch_archive_row,
+                                      args=(idx, label, url, results_map, alock))
+                t.daemon = True
+                threads.append(t)
+                t.start()
+            # Plain join — no abortRequested() check (it falsely triggers in service context)
+            for t in threads:
+                if _shutdown_event.is_set():
+                    break
+                t.join(timeout=12)
+        # Collect in original order so curated rows appear before genres
+        for idx in range(len(entries_to_fetch)):
+            if idx in results_map:
+                rows.append(results_map[idx])
+    except Exception as exc:
+        logger.error('[PrippiHome] archive block: %s' % str(exc))
+
+    logger.info('[PrippiHome] archive rows: %d' % len(rows))
+    return rows
+
+
+
+# ── Up Next Overlay Window ──────────────────────────────────────────────────────────
+
+class UpNextOverlayWindow(xbmcgui.WindowXMLDialog):
+    """
+    Prippi-style overlay shown ON TOP of the fullscreen video player.
+    Non-blocking (uses show() not doModal()). The calling thread polls
+    is_done() and calls update() each second.
+    """
+
+    BTN_PLAY   = 9901
+    BTN_CANCEL = 9902
+    LBL_TITLE  = 9903
+    LBL_TIMER  = 9904
+    PROG_BAR   = 9905
+
+    def __init__(self, *args, **kwargs):
+        self._ep_label = kwargs.pop('ep_label', '')
+        self._result   = 'cancel'
+        self._done     = False
+
+    def onInit(self):
+        try:
+            self.getControl(self.LBL_TITLE).setLabel(self._ep_label)
+        except Exception:
+            pass
+        try:
+            self.getControl(self.LBL_TIMER).setLabel('')
+        except Exception:
+            pass
+        try:
+            self.getControl(self.PROG_BAR).setPercent(0)
+        except Exception:
+            pass
+        # Ensure focus starts on "Guarda subito" (non-modal show() needs explicit setFocus)
+        try:
+            self.setFocusId(self.BTN_PLAY)
+        except Exception:
+            pass
+
+    def update(self, secs_remaining, pct_elapsed):
+        """Update countdown label and progress bar. Called every second from caller thread."""
+        if self._done:
+            return
+        if secs_remaining > 0:
+            mins = secs_remaining // 60
+            secs = secs_remaining % 60
+            timer_txt = (u'Parte in [B]%d:%02d[/B]'
+                         u'  —  [COLOR FFE50914]Guarda subito[/COLOR] per iniziare ora'
+                         % (mins, secs))
+        else:
+            timer_txt = u'[B]In partenza...[/B]'
+        try:
+            self.getControl(self.LBL_TIMER).setLabel(timer_txt)
+            self.getControl(self.PROG_BAR).setPercent(min(100, pct_elapsed))
+        except Exception:
+            pass
+
+    def is_done(self):
+        return self._done
+
+    def onClick(self, ctrl_id):
+        if ctrl_id == self.BTN_PLAY:
+            self._result = 'play'
+        else:
+            self._result = 'cancel'
+        self._done = True
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def onAction(self, action):
+        aid = action.getId()
+        _note_touch_action(aid)
+        if aid == 10 and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
+        if aid in (92, 10, xbmcgui.ACTION_STOP,
+                   xbmcgui.ACTION_BACKSPACE, xbmcgui.ACTION_PREVIOUS_MENU):
+            self._result = 'cancel'
+            self._done   = True
+            try:
+                self.close()
+            except Exception:
+                pass
+
+
+# ── Detail Window ─────────────────────────────────────────────────────────────
+
+class DetailWindow(xbmcgui.WindowXMLDialog):
+    """
+    Full-screen detail card for a single title.
+    Shows fanart / trailer (via videowindow), scrollable plot and PLAY button.
+    Opened via doModal() from PrippiHomeWindow._open_detail (main GUI thread).
+    """
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, *args, **kwargs):
+        self._item            = kwargs.pop('item', None)
+        self._result          = None   # 'play' | 'list' | None after close
+        self._player          = xbmc.Player()
+        self._close_requested = False  # Signal background threads to bail out
+        self._selected_season  = None  # int: season selected in EpisodePicker
+        self._selected_episode = None  # int: episode selected in EpisodePicker
+        self._default_season   = 1     # int: default season (from CW or S01)
+        self._default_episode  = 1     # int: default episode (from CW or E01)
+        self._download_eps     = None  # list[(season, episode, title)] for batch download
+        # Cinema mode: True while the menu/overlay is hidden during a trailer.
+        # While hidden, the FIRST key (arrows/center/back) only brings the menu
+        # back — it must NOT perform its normal action (play, navigate, close).
+        self._overlay_hidden     = False
+        self._consume_next_click = False  # swallow the onClick that follows a SELECT
+
+    def onInit(self):
+        item = self._item
+        if not item:
+            return
+
+        # ── Collect metadata ──────────────────────────────────────────────
+        title      = item.fulltitle or item.show or item.contentSerieName or ''
+        year       = str(item.year or item.infoLabels.get('year') or '')
+        lang       = getattr(item, 'language', '') or ''
+        rating     = str(item.infoLabels.get('rating') or '')
+        genre      = str(item.infoLabels.get('genre') or '')
+        director   = str(item.infoLabels.get('director') or '')
+        cast_raw   = item.infoLabels.get('cast') or []
+        runtime    = str(item.infoLabels.get('runtime') or '')
+        tagline    = str(item.infoLabels.get('tagline') or '')
+        country    = str(item.infoLabels.get('country') or '')
+        studio     = str(item.infoLabels.get('studio') or '')
+        seasons    = str(item.infoLabels.get('season') or '')
+        trailer    = str(item.infoLabels.get('trailer') or '')
+        plot       = (item.infoLabels.get('plot') or '').strip()
+        # Fanart: use item.fanart directly (set immediately), then upgrade to
+        # TMDB /original/ backdrop in background for maximum resolution.
+        fanart = item.fanart or item.thumbnail or ''
+
+        ctype_lbl = ('Film' if getattr(item, 'contentType', '') == 'movie'
+                     else 'Serie TV' if getattr(item, 'contentType', '') == 'tvshow'
+                     else '')
+        cast_str = (', '.join(str(c) for c in cast_raw[:7])
+                    if isinstance(cast_raw, list) else str(cast_raw))
+        rating_str = ''
+        if rating:
+            try:
+                rating_str = '\u2605 %.1f' % float(rating)
+            except Exception:
+                pass
+
+        # ── Set background fanart (instant, then upgraded to HD) ───────────
+        try:
+            self.getControl(DW_BG_FANART).setImage(fanart)
+        except Exception:
+            pass
+        tmdb_id_hd = str(item.infoLabels.get('tmdb_id') or '').strip()
+        if tmdb_id_hd:
+            ctype_hd = 'tv' if getattr(item, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+            t_hd = threading.Thread(target=self._load_hd_fanart, args=(tmdb_id_hd, ctype_hd))
+            t_hd.daemon = True
+            t_hd.start()
+
+        # ── Title ─────────────────────────────────────────────────────────
+        try:
+            self.getControl(DW_TITLE).setLabel('[B]' + title + '[/B]')
+        except Exception:
+            pass
+
+        # ── Meta 1: year · type · lang · ★ rating (green) ───────────────
+        # Rating is highlighted in green (Apple TV+ style) via BBCode
+        rating_display = ('[COLOR FF22C55E][B]' + rating_str + '[/B][/COLOR]'
+                         ) if rating_str else ''
+        meta1 = '  \u2022  '.join(
+            p for p in [year, ctype_lbl, lang, rating_display] if p)
+        # ── 4K badge ─────────────────────────────────────────────────────
+        _tmdb_4k = str(item.infoLabels.get('tmdb_id') or '').strip()
+        if getattr(item, 'contentType', '') == 'movie' and _tmdb_4k and _fourk.is_4k_available(_tmdb_4k):
+            meta1 += '  •  [COLOR FFE50914][B]4K[/B][/COLOR]'
+        try:
+            self.getControl(DW_META1).setLabel(meta1)
+        except Exception:
+            pass
+
+        # ── Meta 2: genre · runtime · country ────────────────────────────
+        runtime_str = ('%s min' % runtime) if runtime else ''
+        meta2 = '  \u2022  '.join(p for p in [genre, runtime_str, country] if p)
+        try:
+            self.getControl(DW_META2).setLabel(meta2)
+        except Exception:
+            pass
+
+        # ── Meta 3: director · cast ───────────────────────────────────────
+        meta3_parts = []
+        if director:
+            meta3_parts.append('Regia: ' + director)
+        if cast_str:
+            meta3_parts.append('Cast: ' + cast_str)
+        if studio:
+            meta3_parts.append('Studio: ' + studio)
+        try:
+            self.getControl(DW_META3).setLabel('  |  '.join(meta3_parts))
+        except Exception:
+            pass
+
+        # ── Tagline ───────────────────────────────────────────────────────
+        try:
+            if tagline:
+                self.getControl(DW_TAGLINE).setLabel('[I]' + tagline + '[/I]')
+        except Exception:
+            pass
+
+        # ── Plot textbox (scrollable) ─────────────────────────────────────
+        # Use Italian plot from cache if already available (fetched by home hero thread)
+        tmdb_id_plot = str(item.infoLabels.get('tmdb_id') or '').strip()
+        cached_it_plot = _plot_it_cache.get(tmdb_id_plot) or '' if tmdb_id_plot else ''
+        plot_display = cached_it_plot if cached_it_plot else plot
+        # Build a richer text combining all info with the full plot at the bottom
+        plot_lines = []
+        if seasons:
+            plot_lines.append('Stagioni: ' + seasons)
+        if plot_lines:
+            plot_lines.append('')
+        plot_lines.append(plot_display if plot_display else 'Nessuna trama disponibile.')
+        full_plot = '\n'.join(plot_lines)
+        try:
+            self.getControl(DW_PLOT).setText(full_plot)
+        except Exception:
+            try:
+                self.getControl(DW_PLOT).setLabel(full_plot)
+            except Exception:
+                pass
+
+        # ── Default focus on PLAY ─────────────────────────────────────────
+        try:
+            self.setFocusId(DW_BTN_PLAY)
+        except Exception:
+            pass
+
+        # ── Play button label: "Continua a guardare" if there's a saved position ──
+        try:
+            cw_entry = watch_history.get(_cw_key(item))
+            if cw_entry:
+                t_saved = float(cw_entry.get('time_watched', 0))
+                t_total = float(cw_entry.get('total_time', 0) or 1)
+                pct     = int(t_saved / t_total * 100)
+                mins    = int(t_saved // 60)
+                secs    = int(t_saved % 60)
+                btn_label = u'Continua a guardare  \u2013  %d:%02d  (%d%%)' % (mins, secs, pct)
+                self.getControl(DW_BTN_PLAY).setLabel(btn_label)
+        except Exception:
+            pass
+
+        # ── TV show: show current episode info + STAGIONI & EPISODI button ──
+        ct = getattr(item, 'contentType', '') or ''
+        xbmc.log('[DetailWindow] onInit ct=%r action=%r tmdb=%r title=%r' % (
+            ct, getattr(item, 'action', ''), item.infoLabels.get('tmdb_id'), item.fulltitle), xbmc.LOGINFO)
+        if ct in ('tvshow', 'episode'):
+            try:
+                self.setProperty('is_tvshow', '1')
+                _tmdb_str = str(item.infoLabels.get('tmdb_id') or '').strip()
+                if _tmdb_str:
+                    _ep_key = 'tv_%s' % _tmdb_str
+                else:
+                    # Fallback: same slug logic as _cw_key for episode items
+                    _slug   = re.sub(r'[^a-z0-9]', '',
+                                     (getattr(item, 'show', '') or
+                                      getattr(item, 'contentSerieName', '') or
+                                      getattr(item, 'fulltitle', '') or '').lower())
+                    _ep_key = ('tv_%s' % _slug) if _slug else None
+                _ep_info  = watch_history.get_episode_info(_ep_key) if _ep_key else None
+                if _ep_info:
+                    # Full episode tracking data available
+                    _s   = _ep_info['season']
+                    _e   = _ep_info['episode']
+                    _et  = _ep_info.get('episode_title', '')
+                    _tw  = float(_ep_info.get('time_watched', 0))
+                    _tt  = float(_ep_info.get('total_time', 0) or 1)
+                    _pct = int(_tw / _tt * 100) if _tw > 0 else 0
+                    self._default_season  = _s
+                    self._default_episode = _e
+                    _ep_code = u'S%02dE%02d' % (_s, _e)
+                    _ep_lbl  = u'Continua  %s' % _ep_code
+                    if _et:
+                        _ep_lbl += u'  \u2013  ' + _et
+                    if _pct:
+                        _ep_lbl += u'  (%d%%)' % _pct
+                    if _tw > 10:
+                        _mins = int(_tw // 60)
+                        _secs = int(_tw % 60)
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(
+                                u'Continua %s  \u2013  %d:%02d  (%d%%)' % (
+                                    _ep_code, _mins, _secs, _pct))
+                        except Exception:
+                            pass
+                else:
+                    # No episode tracking — check if any CW entry exists for this series
+                    _ep_entry = watch_history.get(_ep_key) if _ep_key else None
+                    if _ep_entry:
+                        # Old CW entry exists but without season/episode fields
+                        _ep_lbl = u'Continua'
+                        _tw2 = float(_ep_entry.get('time_watched', 0))
+                        _tt2 = float(_ep_entry.get('total_time', 1) or 1)
+                        if _tw2 > 10:
+                            _pct2  = int(_tw2 / _tt2 * 100)
+                            _mins2 = int(_tw2 // 60)
+                            _secs2 = int(_tw2 % 60)
+                            try:
+                                self.getControl(DW_BTN_PLAY).setLabel(
+                                    u'Continua a guardare  \u2013  %d:%02d  (%d%%)' % (
+                                        _mins2, _secs2, _pct2))
+                            except Exception:
+                                pass
+                    else:
+                        # Truly new series — no watch history at all
+                        _ep_lbl = u'Nuova serie  \u2013  S01E01'
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(u'GUARDA  S01E01')
+                        except Exception:
+                            pass
+                self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
+                # Visibility is driven by Window.Property(is_tvshow) in the XML,
+                # already set above via setProperty('is_tvshow', '1')
+            except Exception as _exc:
+                logger.error('[DetailWindow] ep info: %s' % str(_exc))
+
+        # ── Background media: fanart slideshow for CW items, trailer otherwise ──
+        tmdb_id_tr = str(item.infoLabels.get('tmdb_id') or '').strip()
+        ctype_tr   = 'tv' if getattr(item, 'contentType', '') in ('tvshow', 'episode') else 'movie'
+        is_cw_item = bool(watch_history.get(_cw_key(item)))
+
+        # Show/hide the "Remove from CW" button via window property
+        try:
+            self.setProperty('show_remove_cw', '1' if is_cw_item else '')
+        except Exception:
+            pass
+
+        # Show/hide the "SCARICA" (download) button — any VOD (movie/show/episode).
+        # Live channels (SKY/Sport) are excluded by contentType already; the
+        # download resolver is channel-aware (SC, AnimeUnity, CB01, …) and falls
+        # back gracefully per-title when a source can't be downloaded.
+        try:
+            _dl_ok = (ct in ('movie', 'tvshow', 'episode') and
+                      not getattr(item, 'is_live_channel', False) and
+                      not getattr(item, 'is_4k', False))
+            self.setProperty('is_downloadable', '1' if _dl_ok else '')
+        except Exception:
+            pass
+
+        if is_cw_item:
+            # CW item: rotate TMDB backdrops every 5 s, no trailer
+            t2 = threading.Thread(
+                target=self._start_fanart_slideshow,
+                args=(tmdb_id_tr, ctype_tr, fanart),
+            )
+        else:
+            # Normal item: play trailer
+            t2 = threading.Thread(
+                target=self._fetch_and_start_trailer,
+                args=(title, year, tmdb_id_tr, ctype_tr, trailer, _trailer_kind(item)),
+            )
+        t2.daemon = True
+        t2.start()
+
+    def _start_fanart_slideshow(self, tmdb_id, ctype, initial_fanart=''):
+        """
+        For CW items: rotate TMDB backdrop images on DW_BG_FANART every 5 seconds.
+        Fetches up to 6 backdrops from TMDB /images endpoint (no_language filter
+        gives the widest selection). Falls back to initial_fanart if TMDB fails.
+        Runs in a background thread; respects _close_requested.
+        """
+        try:
+            # Reuse the list preloaded at home-load time when available (instant);
+            # otherwise fetch now. Both go through the shared per-title cache.
+            backdrops = list(_fetch_cw_backdrops(tmdb_id, ctype)) if tmdb_id else []
+
+            # If TMDB gave nothing, keep the initial fanart (already set in onInit)
+            if not backdrops:
+                if initial_fanart:
+                    backdrops = [initial_fanart]
+                else:
+                    return   # nothing to show
+
+            # Rotate: show each image for 5 seconds, loop indefinitely
+            idx = 0
+            while not self._close_requested:
+                img = backdrops[idx % len(backdrops)]
+                try:
+                    self.getControl(DW_BG_FANART).setImage(img)
+                except Exception:
+                    break
+                # Sleep in 200 ms chunks so we can react to close quickly
+                for _ in range(25):   # 25 * 200 ms = 5 s
+                    if self._close_requested:
+                        return
+                    xbmc.sleep(200)
+                idx += 1
+        except Exception as exc:
+            logger.error('[DetailWindow] fanart slideshow: %s' % str(exc)[:80])
+
+    def _fetch_and_start_trailer(self, title, year, tmdb_id, ctype, fallback_url='', kind=''):
+        """Trailer search: YouTube first (age-restriction filtered), then TMDB, then
+        the pre-existing URL from the channel as last resort. Runs in background thread."""
+        if self._close_requested:
+            return
+        try:
+            def _make_url(video_id):
+                return ('plugin://plugin.video.youtube/play/?video_id=%s' % video_id)
+
+            cache_key = str(tmdb_id or title or '').strip()
+            cached = _trailer_cache.get(cache_key) if cache_key in _trailer_cache else None
+            if cached:
+                trailer_url = cached
+            elif cache_key in _trailer_cache:
+                trailer_url = fallback_url or None
+            else:
+                # 1) YouTube search (filters age-restricted results; kind tunes the query)
+                vid = _youtube_search_trailer(title, year, kind)
+                trailer_url = _make_url(vid) if vid else None
+
+                # 2) TMDB official videos if YouTube finds nothing
+                if not trailer_url and tmdb_id:
+                    vid = _tmdb_get_trailer(tmdb_id, ctype)
+                    trailer_url = _make_url(vid) if vid else None
+
+                if cache_key:
+                    _cache_put(_trailer_cache, cache_key, trailer_url or False)
+
+            # 3) Pre-existing URL from channel as last resort
+            if not trailer_url and fallback_url:
+                trailer_url = fallback_url
+
+            if trailer_url and not self._close_requested:
+                self._start_trailer(trailer_url)
+        except Exception as exc:
+            logger.error('[DetailWindow] on-demand trailer: %s' % str(exc)[:100])
+
+    def _load_hd_fanart(self, tmdb_id, ctype):
+        """Upgrade background to TMDB /original/ backdrop for maximum resolution.
+        Also updates DW_META1 with number of seasons for TV shows.
+        Fetches Italian metadata first; falls back to English + translation for plot."""
+        try:
+            from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+            # Fetch in Italian (includes credits)
+            url_it = '%s/%s/%s?api_key=%s&language=it-IT&append_to_response=credits' % (
+                      _tmdb_host, ctype, tmdb_id, _tmdb_api)
+            data = _Tmdb.get_json(url_it) or {}
+            path = data.get('backdrop_path') or ''
+            if path:
+                hq_url = 'https://image.tmdb.org/t/p/w1280' + path
+                self.getControl(DW_BG_FANART).setImage(hq_url)
+            # For TV shows, prepend seasons count to META1
+            if ctype == 'tv' and data:
+                n_seasons = int(data.get('number_of_seasons') or 0)
+                if n_seasons > 0:
+                    s_lbl = u'%d stagion%s' % (n_seasons, 'e' if n_seasons == 1 else 'i')
+                    try:
+                        current = self.getControl(DW_META1).getLabel()
+                        new_meta1 = (s_lbl + u'  \u2022  ' + current) if current else s_lbl
+                        self.getControl(DW_META1).setLabel(new_meta1)
+                    except Exception:
+                        pass
+            # Italian plot: check cache first (may already be fetched by home hero thread)
+            it_overview = _plot_it_cache.get(tmdb_id) or ''
+            if not it_overview:
+                # Mark as in-progress to prevent duplicate fetches from parallel threads
+                _cache_put(_plot_it_cache, tmdb_id, '')
+                # Use _get_it_overview which detects TMDB English fallback and translates
+                it_overview = _get_it_overview(tmdb_id, ctype, it_data=data)
+                if it_overview:
+                    _cache_put(_plot_it_cache, tmdb_id, it_overview)
+            if it_overview and not self._close_requested:
+                # Persist Italian plot back to the item so home hero shows it after returning
+                try:
+                    self._item.infoLabels['plot'] = it_overview
+                except Exception:
+                    pass
+                try:
+                    self.getControl(DW_PLOT).setText(it_overview)
+                except Exception:
+                    try:
+                        self.getControl(DW_PLOT).setLabel(it_overview)
+                    except Exception:
+                        pass
+            # Populate cast panel from credits (already in the it-IT+credits response)
+            cast_list = (data.get('credits') or {}).get('cast', [])[:14]
+            if cast_list:
+                self._populate_cast_panel(cast_list)
+        except Exception:
+            pass
+
+    def _populate_cast_panel(self, cast_list):
+        """Populate the horizontal cast panel (id=220) with actor cards from TMDB credits."""
+        try:
+            list_items = []
+            for actor in cast_list:
+                name = actor.get('name', '')
+                profile = actor.get('profile_path', '')
+                thumb = ('https://image.tmdb.org/t/p/w185' + profile) if profile else ''
+                li = xbmcgui.ListItem(label=name, offscreen=True)
+                li.setProperty('actor_thumb', thumb)
+                list_items.append(li)
+            if list_items and not self._close_requested:
+                self.getControl(DW_CAST_PANEL).addItems(list_items)
+                self.getControl(DW_CAST_PANEL).setVisible(True)
+                self.getControl(DW_CAST_HDR).setVisible(True)
+        except Exception as exc:
+            logger.error('[DetailWindow] cast panel: %s' % str(exc)[:80])
+
+    def _start_trailer(self, trailer_url):
+        """Delay slightly then fire PlayMedia so the window is fully rendered first."""
+        # Check close flag before the initial delay: if user already pressed back, skip entirely
+        if self._close_requested:
+            return
+        # Slice the 900 ms wait into 100 ms chunks so we can bail out early
+        for _ in range(9):
+            xbmc.sleep(100)
+            if self._close_requested:
+                return
+        try:
+            # Configure YouTube plugin subtitles / quality (persistent but harmless settings)
+            try:
+                yt = xbmcaddon.Addon('plugin.video.youtube')
+                if yt.getSetting('kodion.subtitle.languages.num') != '2':
+                    yt.setSetting('kodion.subtitle.languages.num', '2')
+                if yt.getSetting('kodion.subtitle.download') != 'true':
+                    yt.setSetting('kodion.subtitle.download', 'true')
+                try:
+                    if yt.getSetting('kodion.video.quality.isa') == 'true':
+                        if int(yt.getSetting('kodion.mpd.quality.selection') or '0') < 4:
+                            yt.setSetting('kodion.mpd.quality.selection', '4')
+                    else:
+                        if int(yt.getSetting('kodion.video.quality') or '0') < 4:
+                            yt.setSetting('kodion.video.quality', '4')
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            # Final check before issuing PlayMedia — CRITICAL: prevents PlayMedia
+            # from firing on a window that is already closing/closed (which would
+            # cause OutputPicture timeouts as DXVA tries to write to a destroyed surface)
+            if self._close_requested:
+                return
+
+            xbmc.executebuiltin('PlayMedia(%s)' % trailer_url)
+            # Wait up to 8 s for the YouTube plugin to start playing
+            for _ in range(80):
+                if self._close_requested:
+                    # PlayMedia was issued but window is closing: cancel it immediately
+                    xbmc.executebuiltin('PlayerControl(Stop)')
+                    return
+                xbmc.sleep(100)
+                if self._player.isPlaying():
+                    break
+            if self._player.isPlaying() and not self._close_requested:
+                # Hide fanart so the videowindow (behind it) becomes visible
+                try:
+                    self.getControl(DW_BG_FANART).setVisible(False)
+                except Exception:
+                    pass
+                # Cinema mode: fade out overlay after 3 s so trailer is (nearly) fullscreen
+                threading.Thread(target=self._enter_cinema_mode, daemon=True).start()
+                # Watcher: restores fanart when trailer ends naturally (not via Back)
+                threading.Thread(target=self._watch_trailer_end, daemon=True).start()
+                # Wait for the player to enumerate audio/subtitle tracks
+                # (fixed 5 s was often too early on slow devices → the language
+                # logic ran against an empty track list and did nothing).
+                for _ in range(80):   # up to 8 s
+                    if self._close_requested:
+                        return
+                    try:
+                        if self._player.getAvailableAudioStreams():
+                            break
+                    except Exception:
+                        pass
+                    xbmc.sleep(100)
+                xbmc.sleep(500)   # small settle so set*Stream calls stick
+                if not self._close_requested:
+                    self._maybe_set_subtitles(trailer_url)
+        except Exception as exc:
+            logger.error('[DetailWindow] trailer start: %s' % str(exc))
+
+    def _watch_trailer_end(self):
+        """Monitor trailer playback and restore fanart/overlay when it ends naturally.
+        Runs in a background thread alongside the trailer. If the user presses Back,
+        _initiate_close sets _close_requested and this thread exits without acting
+        (the close path already handles restoration in _wait_stop_then_close)."""
+        try:
+            # Wait until playback actually starts (up to 10 s)
+            for _ in range(100):
+                if self._close_requested:
+                    return
+                if self._player.isPlaying():
+                    break
+                xbmc.sleep(100)
+            # Poll while playing
+            while self._player.isPlaying() and not self._close_requested:
+                xbmc.sleep(500)
+            # If close was requested, the _wait_stop_then_close path takes care of
+            # restoration — don't interfere.
+            if self._close_requested:
+                return
+            # Trailer ended naturally: restore fanart and overlay
+            xbmc.sleep(300)   # brief pause so the videowindow goes black cleanly
+            try:
+                self.getControl(DW_BG_FANART).setVisible(True)
+            except Exception:
+                pass
+            try:
+                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+                self._overlay_hidden = False
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error('[DetailWindow] _watch_trailer_end: %s' % str(exc))
+
+    def _maybe_set_subtitles(self, trailer_url=''):
+        """Italian audio is ALWAYS the default: if the stream has an Italian
+        audio track, select it and keep subtitles off. Subtitles are enabled
+        only when no Italian audio is available."""
+        try:
+            def _is_it(s):
+                sl = (s or '').lower()
+                return ('ital' in sl or sl in ('it', 'ita', 'ita_it')
+                        or sl.startswith('it-') or sl.startswith('it_'))
+
+            # 1) Stream has an Italian audio track → make sure it's active.
+            try:
+                streams = self._player.getAvailableAudioStreams()
+            except Exception:
+                streams = []
+            it_idx = next((i for i, s in enumerate(streams) if _is_it(s)), None)
+            if it_idx is not None:
+                if not _is_it(xbmc.getInfoLabel('VideoPlayer.AudioLanguage')):
+                    self._player.setAudioStream(it_idx)
+                self._player.showSubtitles(False)
+                return
+
+            # 2) Single/unlabeled track already reporting Italian → no subs.
+            audio_lang = xbmc.getInfoLabel('VideoPlayer.AudioLanguage')
+            if _is_it(audio_lang):
+                self._player.showSubtitles(False)
+                return
+
+            # 3) Unknown language — 'und'/empty is the norm for YouTube uploads
+            #    (an Italian trailer found via the "trailer italiano" queries
+            #    used to fall through here and get pointless Italian subs).
+            #    Trust the search-language hint recorded at fetch time.
+            if (not audio_lang or audio_lang.lower() == 'und') and \
+                    _hint_for_trailer_url(trailer_url) == 'it':
+                self._player.showSubtitles(False)
+                return
+
+            # 4) Audio is foreign — look for Italian subtitle track
+            self._set_italian_subtitles()
+        except Exception:
+            pass
+
+    def _set_italian_subtitles(self):
+        """Enable Italian subtitle track; fall back to first available if Italian not found."""
+        try:
+            streams = self._player.getAvailableSubtitleStreams()
+            if streams:
+                it_index = None
+                for i, s in enumerate(streams):
+                    sl = s.lower()
+                    if 'ital' in sl or sl in ('it', 'ita') or sl.startswith('it-') or sl.startswith('it_'):
+                        it_index = i
+                        break
+                if it_index is not None:
+                    self._player.setSubtitleStream(it_index)
+                else:
+                    # No Italian track → activate first available as fallback
+                    self._player.setSubtitleStream(0)
+                self._player.showSubtitles(True)
+            else:
+                # Plugin did not expose streams via API – force display anyway
+                self._player.showSubtitles(True)
+        except Exception:
+            pass
+
+    def _show_audio_sub_dialog(self):
+        """
+        Show a two-step dialog to let the user pick preferred audio language and
+        subtitle language for this content.  The choices are stored in addon settings
+        keyed by TMDB ID (or normalised title) so they persist across sessions.
+        For TV series the same preference is applied to every episode automatically
+        in _wait_and_restore() when the player announces a new audio stream.
+        """
+        item = self._item
+        if not item:
+            return
+        try:
+            addon = xbmcaddon.Addon()
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            ct = getattr(item, 'contentType', '') or ''
+            key = tmdb_id or re.sub(r'[^a-z0-9]', '',
+                                    (item.fulltitle or item.show or '').lower())
+            if not key:
+                return
+
+            pref_key_audio = 'audiolang_%s' % key
+            pref_key_sub   = 'sublang_%s'   % key
+
+            # ── Audio language ──
+            audio_options = [
+                u'Italiano',
+                u'Inglese',
+                u'Originale (non cambiare)',
+            ]
+            cur_audio = addon.getSetting(pref_key_audio) or ''
+            cur_audio_idx = 0
+            for _i, _o in enumerate(audio_options):
+                if _o == cur_audio:
+                    cur_audio_idx = _i
+                    break
+            audio_idx = xbmcgui.Dialog().select(
+                u'Lingua audio preferita', audio_options,
+                preselect=cur_audio_idx)
+            if audio_idx < 0:
+                return   # user cancelled
+            addon.setSetting(pref_key_audio, audio_options[audio_idx])
+
+            # ── Subtitle language ──
+            sub_options = [
+                u'Nessun sottotitolo',
+                u'Italiano',
+                u'Inglese',
+                u'Come audio (stessa lingua)',
+            ]
+            cur_sub = addon.getSetting(pref_key_sub) or ''
+            cur_sub_idx = 0
+            for _i, _o in enumerate(sub_options):
+                if _o == cur_sub:
+                    cur_sub_idx = _i
+                    break
+            sub_idx = xbmcgui.Dialog().select(
+                u'Sottotitoli preferiti', sub_options,
+                preselect=cur_sub_idx)
+            if sub_idx < 0:
+                return   # user cancelled
+            addon.setSetting(pref_key_sub, sub_options[sub_idx])
+
+            xbmcgui.Dialog().notification(
+                u'PrippiStream',
+                u'Preferenze audio/sub salvate',
+                xbmcgui.NOTIFICATION_INFO, 2500)
+        except Exception as exc:
+            logger.error('[DetailWindow] _show_audio_sub_dialog: %s' % str(exc))
+
+    def _remove_from_cw(self):
+        """Remove the current item from Continue Watching and close the detail card."""
+        item = self._item
+        if not item:
+            return
+        try:
+            key = _cw_key(item)
+            entry = watch_history.get(key)
+            if entry:
+                # Use the actual played URL (vixcloud CDN) saved during playback.
+                # Falling back to item.url or item_url won't work because Kodi
+                # stores the vixcloud ID, not the SC episode_id.
+                played_url = entry.get('played_url', '')
+                _clear_kodi_resume(played_url)
+                watch_history.remove(key)
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream',
+                    u'Rimosso da "Continua a guardare"',
+                    xbmcgui.NOTIFICATION_INFO, 2000)
+            self._initiate_close(result='removed_cw')
+        except Exception as exc:
+            logger.error('[DetailWindow] _remove_from_cw: %s' % str(exc))
+
+    def _nonsc_show_key(self):
+        """Continue-Watching key for a non-SC show — must match onInit's _ep_key
+        (tv_<tmdb> when available, else tv_<title-slug>) so resume/tracking align."""
+        item = self._item
+        _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+        if _tmdb:
+            return 'tv_%s' % _tmdb
+        _slug = re.sub(r'[^a-z0-9]', '',
+                       (getattr(item, 'show', '') or
+                        getattr(item, 'contentSerieName', '') or
+                        getattr(item, 'fulltitle', '') or '').lower())
+        return ('tv_%s' % _slug) if _slug else ''
+
+    def _open_download_episode_picker(self):
+        """Multi-select which episodes to download, using Kodi's native dialogs
+        (robust on every platform). Returns a list of (season, episode, title)
+        tuples, or None if the user cancelled. The first multiselect entry is a
+        "whole season" shortcut."""
+        item = self._item
+        if not item:
+            return None
+        try:
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if tmdb_id:
+                return self._download_pick_sc(tmdb_id)
+            return self._download_pick_channel()
+        except Exception as exc:
+            logger.error('[DLPicker] %s' % str(exc))
+            return None
+
+    def _download_pick_sc(self, tmdb_id):
+        from core.tmdb import Tmdb as _Tmdb, host as _h, api as _a
+        data = _Tmdb.get_json('%s/tv/%s?api_key=%s&language=it-IT' % (_h, tmdb_id, _a)) or {}
+        seasons = [s for s in data.get('seasons', []) if s.get('season_number', 0) > 0]
+        if not seasons:
+            self._dl_no_eps()
+            return None
+        if len(seasons) == 1:
+            season_num = seasons[0].get('season_number', 1)
+        else:
+            labels = [s.get('name') or (u'Stagione %d' % s.get('season_number', i + 1))
+                      for i, s in enumerate(seasons)]
+            idx = xbmcgui.Dialog().select(u'Stagione da scaricare', labels)
+            if idx < 0:
+                return None
+            season_num = seasons[idx].get('season_number', idx + 1)
+        sdata = _Tmdb.get_json('%s/tv/%s/season/%d?api_key=%s&language=it-IT' % (
+            _h, tmdb_id, season_num, _a)) or {}
+        eps = []
+        for ep in sdata.get('episodes', []):
+            num = int(ep.get('episode_number', 0) or 0)
+            if num:
+                eps.append((int(season_num), num,
+                            ep.get('name') or (u'Episodio %d' % num)))
+        return self._multiselect_eps(eps)
+
+    def _download_pick_channel(self):
+        item = self._item
+        show_item = item
+        if getattr(item, 'action', '') != 'episodios':
+            _url = getattr(item, '_cw_show_url', '') or getattr(item, 'url', '') or ''
+            show_item = item.clone(url=_url, action='episodios')
+            if not getattr(show_item, 'api_ep_url', ''):
+                _aid = re.search(r'/anime/(\d+)-', _url)
+                _host = re.match(r'(https?://[^/]+)', _url)
+                if _aid and _host:
+                    show_item.api_ep_url = '%s/info_api/%s/' % (_host.group(1), _aid.group(1))
+        ep_list = _get_channel_episodes(show_item)
+        if not ep_list:
+            self._dl_no_eps()
+            return None
+        eps = []
+        for ep in ep_list:
+            num = int(getattr(ep, 'episode', 0) or 0)
+            t = re.sub(r'\[/?[^\]]+\]', '', getattr(ep, 'title', '') or '').strip()
+            eps.append((1, num, t or (u'Episodio %d' % num)))
+        return self._multiselect_eps(eps)
+
+    def _multiselect_eps(self, eps):
+        if not eps:
+            self._dl_no_eps()
+            return None
+        labels = [u'» Tutta la stagione «']
+        labels += [u'S%02dE%02d  –  %s' % (s, e, t) for (s, e, t) in eps]
+        sel = xbmcgui.Dialog().multiselect(u'Episodi da scaricare', labels)
+        if not sel:
+            return None
+        if 0 in sel:                       # "whole season" sentinel
+            return eps
+        return [eps[i - 1] for i in sel if 1 <= i <= len(eps)]
+
+    def _dl_no_eps(self):
+        try:
+            xbmcgui.Dialog().notification(
+                u'PrippiStream', u'Nessun episodio disponibile per il download',
+                xbmcgui.NOTIFICATION_INFO, 3000)
+        except Exception:
+            pass
+
+    def _open_episode_picker(self):
+        """Open the EpisodePickerDialog (TMDB-based) and update labels on selection."""
+        item = self._item
+        if not item:
+            return
+        try:
+            tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
+            if not tmdb_id:
+                _channel = getattr(item, 'channel', '') or ''
+                _item_url = getattr(item, 'url', '') or ''
+                logger.info('[EpPicker] channel=%r url=%r' % (_channel, _item_url[:80] if _item_url else ''))
+                # Channel not stored in item (pre-Fix3 entry) — infer from item URL
+                if not _channel:
+                    if _item_url:
+                        try:
+                            import os as _os2
+                            import re as _re_ch
+                            from core import jsontools as _jt
+                            _ch_file = _os2.path.join(config.get_runtime_path(), 'channels.json')
+                            logger.info('[EpPicker] channels.json path: %r' % _ch_file)
+                            with open(_ch_file) as _f:
+                                _ch_data = _jt.load(_f.read())
+                            for _ch_name, _ch_url in _ch_data.get('direct', {}).items():
+                                _norm_ch   = _re_ch.sub(r'^https?://(www\.)?', '', _ch_url.rstrip('/'))
+                                _norm_item = _re_ch.sub(r'^https?://(www\.)?', '', _item_url)
+                                if _norm_item.startswith(_norm_ch):
+                                    _channel = _ch_name
+                                    break
+                            logger.info('[EpPicker] detected channel=%r' % _channel)
+                        except Exception as _e:
+                            logger.error('[EpPicker] channel detect error: %s' % str(_e))
+                # Extract the best available show title from all sources
+                _title = (
+                    str(item.fulltitle or '').strip() or
+                    str(item.show or '').strip() or
+                    str(item.infoLabels.get('tvshowtitle') or '').strip() or
+                    str(item.infoLabels.get('title') or '').strip() or
+                    str(getattr(item, 'title', '') or '').strip()
+                )
+                # Last resort: look up the CW DB entry by the key stored at load time
+                if not _title:
+                    _db_key = getattr(item, '_cw_db_key', '') or ''
+                    if _db_key:
+                        try:
+                            _entry = watch_history.get(_db_key)
+                            _title = (_entry or {}).get('title', '') or ''
+                        except Exception:
+                            pass
+                # Strip episode-number suffix: "One Piece  S01E918" → "One Piece"
+                import re as _re2
+                _title = _re2.sub(r'\s+S\d{1,2}E\d{1,4}.*$', '', _title, flags=_re2.IGNORECASE).strip()
+                _title = _re2.sub(r'\s*[-\u2013]\s*Ep\.?\s*\d+.*$', '', _title, flags=_re2.IGNORECASE).strip()
+                _item_action = getattr(item, 'action', '') or ''
+                _cw_show_url = getattr(item, '_cw_show_url', '') or ''
+                if _channel and _channel != 'streamingcommunity' and \
+                        (_item_action in _CH_MENU_ACTIONS or _cw_show_url):
+                    # Channel-based show (e.g. AnimeUnity, mediasetplay 'epmenu'):
+                    # open the SAME season/episode picker used for SC, but sourcing
+                    # episodes from the channel itself.
+                    # CW items have action='findvideos' and url=episode-URL; restore the
+                    # show-level item so _get_channel_episodes gets the correct show URL.
+                    import re as _re_sh
+                    if _cw_show_url and _item_action not in _CH_MENU_ACTIONS:
+                        show_item = item.clone(url=_cw_show_url, action='episodios')
+                        # Rebuild api_ep_url if missing (AnimeUnity: /anime/{id}-{slug})
+                        if not getattr(show_item, 'api_ep_url', ''):
+                            _aid = _re_sh.search(r'/anime/(\d+)-', _cw_show_url)
+                            _host = _re_sh.match(r'(https?://[^/]+)', _cw_show_url)
+                            if _aid and _host:
+                                show_item.api_ep_url = '%s/info_api/%s/' % (
+                                    _host.group(1), _aid.group(1))
+                    else:
+                        show_item = item
+                    show_key  = self._nonsc_show_key()
+                    ep_info   = (watch_history.get_episode_info(show_key) or {}) if show_key else {}
+                    cw_season = int(ep_info.get('season', 1) or 1)
+                    cw_ep     = int(ep_info.get('episode', 1) or 1)
+                    picker = EpisodePickerDialog(
+                        'EpisodePicker.xml', config.get_runtime_path(),
+                        channel_item=show_item,
+                        channel=_channel,
+                        show_key=show_key,
+                        cw_season=cw_season,
+                        cw_ep=cw_ep,
+                    )
+                    picker.doModal()
+                    if picker._selected:
+                        sel_s, sel_e, sel_title = picker._selected
+                        self._selected_season  = sel_s
+                        self._selected_episode = sel_e
+                        # per i canali con stagioni reali sel_e è il numero
+                        # GLOBALE: nelle label usa il codice per-stagione
+                        _ep_code = (getattr(picker, '_selected_disp', '')
+                                    or (u'S%02dE%02d' % (sel_s, sel_e)))
+                        _ep_lbl  = u'%s' % _ep_code
+                        if sel_title:
+                            _ep_lbl += u'  –  ' + sel_title
+                        try:
+                            self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
+                        except Exception:
+                            pass
+                        try:
+                            self.getControl(DW_BTN_PLAY).setLabel(u'GUARDA  %s' % _ep_code)
+                        except Exception:
+                            pass
+                    del picker
+                else:
+                    xbmcgui.Dialog().notification(
+                        u'PrippiStream',
+                        u'Nessuna informazione episodi disponibile per questo contenuto',
+                        xbmcgui.NOTIFICATION_INFO, 3000)
+                return
+            # Build show key — same logic as onInit
+            show_key = 'tv_%s' % tmdb_id
+            ep_info  = watch_history.get_episode_info(show_key) or {}
+            # If no episode info, check if a plain CW entry exists for current ep
+            if not ep_info:
+                _cw_plain = watch_history.get(show_key) or {}
+                cw_season = int(_cw_plain.get('season', 1) or 1)
+                cw_ep     = int(_cw_plain.get('episode', 1) or 1)
+            else:
+                cw_season = int(ep_info.get('season', 1) or 1)
+                cw_ep     = int(ep_info.get('episode', 1) or 1)
+            picker = EpisodePickerDialog(
+                'EpisodePicker.xml', config.get_runtime_path(),
+                tmdb_id=tmdb_id,
+                show_key=show_key,
+                cw_season=cw_season,
+                cw_ep=cw_ep,
+            )
+            picker.doModal()
+            if picker._selected:
+                sel_s, sel_e, sel_title = picker._selected
+                self._selected_season  = sel_s
+                self._selected_episode = sel_e
+                # Update EP_INFO label
+                _ep_code = u'S%02dE%02d' % (sel_s, sel_e)
+                _ep_lbl  = u'%s' % _ep_code
+                if sel_title:
+                    _ep_lbl += u'  \u2013  ' + sel_title
+                try:
+                    self.getControl(DW_EP_INFO).setLabel(_ep_lbl)
+                except Exception:
+                    pass
+                # Update GUARDA button to show the selected episode
+                try:
+                    self.getControl(DW_BTN_PLAY).setLabel(
+                        u'GUARDA  %s' % _ep_code)
+                except Exception:
+                    pass
+            del picker
+        except Exception as exc:
+            logger.error('[DetailWindow] _open_episode_picker: %s' % str(exc))
+
+    def _initiate_close(self, result=None):
+        """
+        The ONLY way to close DetailWindow. Safe to call from any thread or GUI callback.
+
+        Sets _close_requested immediately (so _start_trailer bails out), then spawns
+        a single daemon thread that waits for the player to fully stop BEFORE calling
+        self.close(). This prevents the OutputPicture-timeout crash that occurs when
+        the window's videowindow D3D11 surface is destroyed while DXVA is still
+        pushing frames into it.
+        """
+        if self._close_requested:
+            return   # Already closing — ignore duplicate calls
+        if result is not None:
+            self._result = result
+        self._close_requested = True
+        threading.Thread(target=self._wait_stop_then_close, daemon=True).start()
+
+    def _wait_stop_then_close(self):
+        """
+        Background daemon thread:
+          1. Cancel any pending/active playback
+          2. Poll until player is confirmed stopped (max 3 s)
+          3. Wait for DXVA render buffers to flush (400 ms)
+          4. Restore fanart overlay
+          5. Close the window
+        """
+        try:
+            # Step 1: cancel playback via both APIs to cover every state:
+            # - PlayerControl(Stop) cancels a queued/starting PlayMedia
+            # - player.stop() signals an already-playing stream to stop
+            xbmc.executebuiltin('PlayerControl(Stop)')
+            xbmc.sleep(150)   # brief yield so the stop message is processed
+            if self._player.isPlaying():
+                self._player.stop()
+
+            # Step 2: wait until isPlaying() is False (max 3 s)
+            for _ in range(30):
+                xbmc.sleep(100)
+                if not self._player.isPlaying():
+                    break
+
+            # Step 3: DXVA buffer flush.
+            # isPlaying()==False means CVideoPlayer acknowledged the stop, but the
+            # CVideoPlayerVideo decoder thread may still hold GPU buffer locks for
+            # one more OutputPicture cycle. Without this wait the window teardown
+            # races with the decoder → OutputPicture timeout → crash.
+            xbmc.sleep(400)
+
+            # Step 4: restore fanart overlay so there's no black flash
+            try:
+                self.getControl(DW_BG_FANART).setVisible(True)
+            except Exception:
+                pass
+            # Restore cinema-mode group so window fade-out looks correct
+            try:
+                self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+                self._overlay_hidden = False
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+        # Step 5: close the window (safe to call from any thread in Kodi)
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def _enter_cinema_mode(self):
+        """Sleep 3 s then fade out the overlay group so the trailer plays fullscreen.
+        If the window is closing or trailer stopped, bail out."""
+        for _ in range(30):  # 3 seconds in 100 ms chunks
+            if self._close_requested:
+                return
+            xbmc.sleep(100)
+        if self._close_requested or not self._player.isPlaying():
+            return
+        try:
+            self.getControl(DW_OVERLAY_GROUP).setVisible(False)
+            self._overlay_hidden = True
+        except Exception:
+            pass
+
+    def _restore_overlay(self):
+        """Bring the cinema-mode menu/overlay back and refocus PLAY."""
+        self._overlay_hidden = False
+        try:
+            self.getControl(DW_OVERLAY_GROUP).setVisible(True)
+        except Exception:
+            pass
+        try:
+            self.setFocusId(DW_BTN_PLAY)
+        except Exception:
+            pass
+
+    def onAction(self, action):
+        aid = action.getId()
+        # While the menu is hidden during the trailer, ANY key just brings the
+        # menu back — including BACK (only a second BACK closes the window).
+        # Mouse-move events are ignored so a stray cursor jiggle can't pop it.
+        if self._overlay_hidden and aid != ACTION_MOUSE_MOVE:
+            self._restore_overlay()
+            if aid == ACTION_SELECT_ITEM:
+                # A SELECT also fires onClick on the focused button — swallow it
+                # so this first press doesn't also trigger PLAY.
+                self._consume_next_click = True
+            return
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
+        if aid in (self.ACTION_EXIT, self.ACTION_BACK):
+            self._initiate_close()
+
+    def onClick(self, control_id):
+        # First click right after the menu was hidden: already consumed by
+        # onAction's _restore_overlay — don't also run the button's action.
+        if self._consume_next_click:
+            self._consume_next_click = False
+            return
+        if self._overlay_hidden:
+            self._restore_overlay()
+            return
+        if control_id == DW_BTN_CLOSE:
+            self._initiate_close()
+        elif control_id == DW_BTN_PLAY:
+            item = self._item
+            ct      = getattr(item, 'contentType', '') or ''
+            # For tvshow with no pre-selected episode: use default
+            # (CW resume point if exists, otherwise S01E01).
+            # EpisodePicker is only triggered by DW_BTN_EP_SEL.
+            if ct == 'tvshow' and self._selected_season is None:
+                self._selected_season  = self._default_season
+                self._selected_episode = self._default_episode
+            self._initiate_close(result='play')
+        elif control_id == DW_BTN_AUDIO_SUB:
+            self._show_audio_sub_dialog()
+        elif control_id == DW_BTN_REMOVE_CW:
+            self._remove_from_cw()
+        elif control_id == DW_BTN_EP_SEL:
+            self._open_episode_picker()
+        elif control_id == DW_BTN_DOWNLOAD:
+            item = self._item
+            ct = getattr(item, 'contentType', '') or ''
+            # A series — including one opened from Continue Watching (which is an
+            # 'episode' item carrying _cw_show_url) — always shows the season/
+            # episode picker. Only standalone movies download directly.
+            if ct in ('tvshow', 'episode') or getattr(item, '_cw_show_url', ''):
+                # Pick which episodes to download (multi-select). Only proceed
+                # to the actual download if the user confirmed a selection.
+                eps = self._open_download_episode_picker()
+                if not eps:
+                    return
+                self._download_eps = eps
+            self._initiate_close(result='download')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EpisodePickerDialog — TMDB-based season/episode selector
+# ─────────────────────────────────────────────────────────────────────────────
+
+class EpisodePickerDialog(xbmcgui.WindowXMLDialog):
+    """Full-screen episode picker with season tabs (id=310) and episode list (id=311).
+
+    Opened via doModal() from DetailWindow._open_episode_picker.
+    After doModal() returns, check _selected: None or (season, episode, title) tuple.
+    """
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, *args, **kwargs):
+        self._tmdb_id   = kwargs.pop('tmdb_id', '')
+        self._show_key  = kwargs.pop('show_key', '')
+        self._cw_season = int(kwargs.pop('cw_season', 1) or 1)
+        self._cw_ep     = int(kwargs.pop('cw_ep', 1) or 1)
+        # Channel mode (e.g. AnimeUnity): episodes come from the channel's
+        # episodios() instead of TMDB. AnimeUnity shows are a flat episode list,
+        # presented as a single "Stagione 1".
+        self._channel_item = kwargs.pop('channel_item', None)
+        self._channel      = kwargs.pop('channel', '')
+        self._seasons   = []      # list of season dicts from TMDB
+        self._cur_season_num = self._cw_season
+        self._selected  = None    # (season, episode, title) on confirmation
+        self._selected_disp = ''  # codice display per-stagione (es. 'S02E05')
+        self._dd_open   = False   # season dropdown expanded?
+
+    def onInit(self):
+        target = self._load_seasons_channel if self._channel_item is not None else self._load_seasons
+        t = threading.Thread(target=target)
+        t.daemon = True
+        t.start()
+
+    # ── season dropdown (replaces the old top tab bar) ─────────────────────────
+    def _set_season_btn(self, label):
+        try:
+            self.getControl(EP_SEASON_BTN).setLabel(label or u'Stagione')
+        except Exception:
+            pass
+
+    def _fill_season_dd(self, items, sel_idx):
+        """Populate the season dropdown list (313) and set the trigger button (312)
+        label to the currently-selected season."""
+        try:
+            ctrl = self.getControl(EP_SEASON_DD)
+            ctrl.reset()
+            ctrl.addItems(items)
+            if 0 <= sel_idx < len(items):
+                ctrl.selectItem(sel_idx)
+        except Exception as exc:
+            logger.error('[EpisodePicker] season dd populate: %s' % str(exc))
+        try:
+            self._set_season_btn(items[sel_idx].getLabel()
+                                 if 0 <= sel_idx < len(items) else u'Stagione')
+        except Exception:
+            pass
+
+    def _toggle_dd(self):
+        if len(self._seasons) <= 1:
+            return                      # nothing to choose
+        self._dd_open = not self._dd_open
+        try:
+            self.setProperty('season_dd', '1' if self._dd_open else '0')
+        except Exception:
+            pass
+        if self._dd_open:
+            try:
+                cur = next((i for i, s in enumerate(self._seasons)
+                            if s.get('season_number') == self._cur_season_num), 0)
+                self.getControl(EP_SEASON_DD).selectItem(cur)
+                xbmc.sleep(60)   # let the overlay become visible before focusing it
+                self.setFocusId(EP_SEASON_DD)
+            except Exception:
+                pass
+
+    def _close_dd(self):
+        self._dd_open = False
+        try:
+            self.setProperty('season_dd', '0')
+        except Exception:
+            pass
+
+    def _load_seasons_channel(self):
+        """Channel mode. One Piece → one tab per SAGA; canali con menu-stagioni
+        (mediasetplay/raiplay) → una tab per stagione reale; other channels → a
+        single flat 'Stagione 1' tab. Episodes always come from the channel's
+        episodios()."""
+        try:
+            # ── One Piece: saga tabs (absolute episode numbering) ──
+            if self._channel == 'onepiece':
+                sagas = []
+                try:
+                    import channels.onepiece as _op
+                    sagas = _op.get_sagas(self._channel_item) or []
+                except Exception as exc:
+                    logger.error('[EpisodePicker] onepiece sagas: %s' % str(exc))
+                if sagas:
+                    self._seasons = [{'season_number': i + 1, 'name': s['name'],
+                                      'start': int(s['start']), 'end': int(s['end'])}
+                                     for i, s in enumerate(sagas)]
+                    items = []
+                    sel_idx = 0
+                    for i, s in enumerate(self._seasons):
+                        li = xbmcgui.ListItem(label=s['name'])
+                        li.setProperty('season_number', str(s['season_number']))
+                        items.append(li)
+                        if s['start'] <= self._cw_ep <= s['end']:
+                            sel_idx = i
+                    self._fill_season_dd(items, sel_idx)
+                    self._cur_season_num = self._seasons[sel_idx]['season_number']
+                    self._load_episodes_channel(sel_idx)
+                    return
+            # ── stagioni reali dal menu del canale (mediasetplay/raiplay) ──
+            # _get_channel_episodes attacca _disp_season/_season_name quando il
+            # primo livello del canale è un menu di stagioni; qui diventano tab.
+            ep_list = _get_channel_episodes(self._channel_item)
+            groups = []
+            for ep in ep_list:
+                s = int(getattr(ep, '_disp_season', 0) or 0)
+                if s and all(g[0] != s for g in groups):
+                    groups.append((s, getattr(ep, '_season_name', '')
+                                   or (u'Stagione %d' % s)))
+            if len(groups) > 1:
+                self._seasons = [{'season_number': s, 'name': n}
+                                 for s, n in groups]
+                sel_idx = 0
+                # preseleziona la stagione dell'episodio CW (numeraz. globale)
+                for ep in ep_list:
+                    if int(getattr(ep, 'episode', 0) or 0) == self._cw_ep:
+                        _s = int(getattr(ep, '_disp_season', 0) or 0)
+                        for i, (gs, _n) in enumerate(groups):
+                            if gs == _s:
+                                sel_idx = i
+                        break
+                items = []
+                for s, n in groups:
+                    li = xbmcgui.ListItem(label=n)
+                    li.setProperty('season_number', str(s))
+                    items.append(li)
+                self._fill_season_dd(items, sel_idx)
+                self._cur_season_num = groups[sel_idx][0]
+                self._load_episodes_channel(sel_idx)
+                return
+            # ── default: single flat season ──
+            self._seasons = [{'season_number': 1, 'name': u'Stagione 1'}]
+            li = xbmcgui.ListItem(label=u'Stagione 1')
+            li.setProperty('season_number', '1')
+            self._fill_season_dd([li], 0)
+            self._cur_season_num = 1
+            self._load_episodes_channel()
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_seasons_channel: %s' % str(exc))
+
+    def _load_episodes_channel(self, saga_idx=None):
+        """Populate the episode list from the channel's episodios(). When saga_idx
+        is given (One Piece) only the episodes within that saga's absolute range
+        are shown, labelled by their absolute number."""
+        try:
+            ep_list = _get_channel_episodes(self._channel_item)
+            saga = None
+            saga_num = 1
+            is_op = (self._channel == 'onepiece')
+            if saga_idx is not None and 0 <= saga_idx < len(self._seasons):
+                saga = self._seasons[saga_idx]
+                saga_num = saga.get('season_number', saga_idx + 1)
+            if saga and is_op:
+                ep_list = [ep for ep in ep_list
+                           if saga['start'] <= int(getattr(ep, 'episode', 0) or 0) <= saga['end']]
+            elif saga and any(getattr(ep, '_disp_season', 0) for ep in ep_list):
+                # stagioni reali dal menu canale: mostra solo quella scelta
+                ep_list = [ep for ep in ep_list
+                           if int(getattr(ep, '_disp_season', 0) or 0) == saga_num]
+            watched = set(
+                tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
+                if len(w) == 2
+            ) if self._show_key else set()
+            watched_eps = set(e for (_s, e) in watched)
+            items   = []
+            sel_pos = 0
+            for ep in ep_list:
+                try:
+                    ep_num = int(getattr(ep, 'episode', 0) or 0)
+                except Exception:
+                    ep_num = 0
+                # Strip BBCode/typo markup from the channel's episode title
+                ep_title = re.sub(r'\[/?[^\]]+\]', '', getattr(ep, 'title', '') or '').strip()
+                if is_op:
+                    ep_code = u'Ep %d' % ep_num
+                    is_current = (ep_num == self._cw_ep)
+                    is_watched = (ep_num in watched_eps)
+                else:
+                    # display per-stagione quando il canale ha stagioni reali;
+                    # ep_num (globale) resta la chiave di selezione/CW
+                    _ds = int(getattr(ep, '_disp_season', 0) or 0)
+                    _de = int(getattr(ep, '_disp_ep', 0) or 0)
+                    if _ds and _de:
+                        ep_code = u'S%02dE%02d' % (_ds, _de)
+                    else:
+                        ep_code = u'S01E%02d' % ep_num
+                    is_current = (self._cw_season == 1 and ep_num == self._cw_ep)
+                    is_watched = ((1, ep_num) in watched)
+                # One Piece main episodes have a generic "Episodio N" title → drop it
+                if is_op and re.match(r'^Episodio\s+\d+$', ep_title or ''):
+                    ep_title = ''
+                if is_current:
+                    label = u'[B]%s[/B]' % ep_code if not ep_title else u'[B]%s  –  %s[/B]' % (ep_code, ep_title)
+                    sel_pos = len(items)
+                elif is_watched:
+                    label = u'[COLOR FF888888]%s[/COLOR]' % ep_code
+                else:
+                    label = ep_code if not ep_title else u'%s  –  %s' % (ep_code, ep_title)
+                _li = xbmcgui.ListItem(label=label, offscreen=True)
+                if getattr(ep, 'thumbnail', ''):
+                    _li.setArt({'thumb': ep.thumbnail})
+                _li.setProperty('ep_num',     str(ep_num))
+                _li.setProperty('season_num', str(saga_num))
+                _li.setProperty('ep_title',   ep_title)
+                _li.setProperty('disp_code',  ep_code)
+                _li.setProperty('overview',   (getattr(ep, 'plot', '') or '')[:200])
+                _li.setProperty('runtime',    '')
+                items.append(_li)
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                ctrl.reset()
+                ctrl.addItems(items)
+                if items:
+                    ctrl.selectItem(sel_pos)
+            except Exception as exc:
+                logger.error('[EpisodePicker] channel ep list populate: %s' % str(exc))
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_episodes_channel: %s' % str(exc))
+
+    def _load_seasons(self):
+        try:
+            from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+            url  = '%s/tv/%s?api_key=%s&language=it-IT' % (_tmdb_host, self._tmdb_id, _tmdb_api)
+            data = _Tmdb.get_json(url) or {}
+            raw  = data.get('seasons', [])
+            # Filter out specials (season_number == 0)
+            self._seasons = [s for s in raw if s.get('season_number', 0) > 0]
+            if not self._seasons:
+                return
+            # Build season tab list items
+            items = []
+            sel_idx = 0
+            for i, s in enumerate(self._seasons):
+                n    = s.get('season_number', i + 1)
+                name = s.get('name') or (u'Stagione %d' % n)
+                li   = xbmcgui.ListItem(label=name)
+                li.setProperty('season_number', str(n))
+                items.append(li)
+                if n == self._cw_season:
+                    sel_idx = i
+            self._fill_season_dd(items, sel_idx)
+            # Load episodes for the current season
+            self._cur_season_num = self._seasons[sel_idx].get('season_number',
+                                                               self._cw_season)
+            self._load_episodes(self._cur_season_num)
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_seasons: %s' % str(exc))
+
+    def _load_episodes(self, season_num):
+        try:
+            from core.tmdb import Tmdb as _Tmdb, host as _tmdb_host, api as _tmdb_api
+            # Fetch season in Italian first
+            url_it = '%s/tv/%s/season/%d?api_key=%s&language=it-IT' % (
+                      _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
+            data = _Tmdb.get_json(url_it) or {}
+            # Also fetch English version to use as translation source for empty overviews
+            url_en = '%s/tv/%s/season/%d?api_key=%s&language=en-US' % (
+                      _tmdb_host, self._tmdb_id, season_num, _tmdb_api)
+            data_en  = _Tmdb.get_json(url_en) or {}
+            eps_en   = {ep.get('episode_number'): ep for ep in data_en.get('episodes', [])}
+            episodes = data.get('episodes', [])
+            watched  = set(
+                tuple(w) for w in watch_history.get_watched_episodes(self._show_key)
+                if len(w) == 2
+            )
+            items    = []
+            sel_pos  = 0
+            for ep in episodes:
+                ep_num   = ep.get('episode_number', 0)
+                ep_title = ep.get('name') or (u'Episodio %d' % ep_num)
+                ep_thumb = ep.get('still_path', '')
+                overview = (ep.get('overview') or '').strip()
+                # If Italian overview is missing, fall back to English then translate
+                if not overview:
+                    en_ep    = eps_en.get(ep_num) or {}
+                    en_ov    = (en_ep.get('overview') or '').strip()
+                    if en_ov:
+                        overview = _translate_to_it(en_ov)
+                overview = overview[:200]
+                runtime  = ep.get('runtime', 0)
+                is_watched = (season_num, ep_num) in watched
+                is_current = (season_num == self._cw_season and ep_num == self._cw_ep)
+                ep_code    = u'S%02dE%02d' % (season_num, ep_num)
+                if is_current:
+                    label = u'[B]%s  \u2013  %s[/B]' % (ep_code, ep_title)
+                    sel_pos = len(items)
+                elif is_watched:
+                    label = (u'[COLOR FF22C55E]\u2713[/COLOR] '
+                             u'[COLOR FF888888]%s  \u2013  %s[/COLOR]' % (ep_code, ep_title))
+                else:
+                    label = u'%s  \u2013  %s' % (ep_code, ep_title)
+                li = xbmcgui.ListItem(label=label, offscreen=True)
+                if ep_thumb:
+                    li.setArt({'thumb': 'https://image.tmdb.org/t/p/w300' + ep_thumb})
+                li.setProperty('ep_num',      str(ep_num))
+                li.setProperty('season_num',  str(season_num))
+                li.setProperty('ep_title',    ep_title)
+                li.setProperty('overview',    overview)
+                li.setProperty('runtime',     ('%d min' % runtime) if runtime else '')
+                items.append(li)
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                ctrl.reset()
+                ctrl.addItems(items)
+                if items:
+                    ctrl.selectItem(sel_pos)
+            except Exception as exc:
+                logger.error('[EpisodePicker] ep list populate: %s' % str(exc))
+        except Exception as exc:
+            logger.error('[EpisodePicker] _load_episodes: %s' % str(exc))
+
+    def onAction(self, action):
+        _note_touch_action(action.getId())
+        if action.getId() == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
+        if action.getId() in (self.ACTION_EXIT, self.ACTION_BACK):
+            # Back first closes the open dropdown, only then the whole dialog.
+            if self._dd_open:
+                self._close_dd()
+                try:
+                    self.setFocusId(EP_SEASON_BTN)
+                except Exception:
+                    pass
+                return
+            self.close()
+
+    def onClick(self, control_id):
+        if control_id == EP_SEASON_BTN:        # open/close the season dropdown
+            self._toggle_dd()
+            return
+        if control_id == EP_SEASON_DD:         # a season picked from the dropdown
+            try:
+                pos = int(self.getControl(EP_SEASON_DD).getSelectedPosition() or 0)
+                self._close_dd()
+                if 0 <= pos < len(self._seasons):
+                    new_season = self._seasons[pos].get('season_number', pos + 1)
+                    try:
+                        self._set_season_btn(
+                            self.getControl(EP_SEASON_DD).getListItem(pos).getLabel())
+                    except Exception:
+                        pass
+                    if new_season != self._cur_season_num:
+                        self._cur_season_num = new_season
+                        # Channel mode (e.g. One Piece sagas) → reload from the
+                        # channel; TMDB mode → reload that season from TMDB.
+                        if self._channel_item is not None:
+                            t = threading.Thread(target=self._load_episodes_channel,
+                                                 args=(pos,))
+                        else:
+                            t = threading.Thread(target=self._load_episodes,
+                                                 args=(new_season,))
+                        t.daemon = True
+                        t.start()
+                try:
+                    self.setFocusId(EP_EP_LIST)
+                except Exception:
+                    pass
+            except Exception as exc:
+                logger.error('[EpisodePicker] onClick season dd: %s' % str(exc))
+            return
+        if control_id == EP_EP_LIST:
+            try:
+                ctrl = self.getControl(EP_EP_LIST)
+                pos  = int(ctrl.getSelectedPosition() or 0)
+                li   = ctrl.getListItem(pos)
+                if li:
+                    s     = int(li.getProperty('season_num') or 0)
+                    e     = int(li.getProperty('ep_num')     or 0)
+                    title = li.getProperty('ep_title') or ''
+                    if s and e:
+                        self._selected = (s, e, title)
+                        # codice per-stagione da mostrare nelle label (l'ep_num
+                        # in _selected è quello GLOBALE usato per il play)
+                        self._selected_disp = li.getProperty('disp_code') or ''
+                        self.close()
+            except Exception as exc:
+                logger.error('[EpisodePicker] onClick episode: %s' % str(exc))
+        elif control_id == EP_BTN_CANCEL:
+            self.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PrippiSearchWindow — unified search overlay
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _search_history_limit():
+    try:
+        raw = xbmcaddon.Addon('plugin.video.prippistream').getSetting(
+            'saved_searches_limit') or '10'
+        return max(1, min(40, int(raw)))
+    except Exception:
+        return 10
+
+
+def _prompt_search_query():
+    """Choose a recent query or open the keyboard for a new one."""
+    from platformcode import search_history
+    limit = _search_history_limit()
+    history = search_history.load(limit)
+    if history:
+        options = [u'Nuova ricerca'] + history + [u'Cancella cronologia']
+        choice = xbmcgui.Dialog().select(u'Cerca su PrippiStream', options)
+        if choice < 0:
+            return ''
+        if choice == len(options) - 1:
+            if xbmcgui.Dialog().yesno(u'Cronologia ricerche',
+                                      u'Vuoi cancellare tutte le ricerche recenti?'):
+                search_history.clear()
+            return ''
+        if choice > 0:
+            query = history[choice - 1]
+            search_history.save(query, limit)
+            return query
+    query = platformtools.dialog_input('', heading='Cerca su PrippiStream...')
+    query = (query or '').strip()
+    if query:
+        search_history.save(query, limit)
+    return query
+
+
+def _open_search(parent_window=None):
+    """Choose/ask for query text then open the search overlay modal."""
+    query = _prompt_search_query()
+    if not query:
+        return
+    query = query.strip()
+    if not query:
+        return
+    try:
+        # Pause BG UI refreshes while search window is open (parent may be None)
+        if parent_window is not None:
+            parent_window._bg_ui_pause.clear()
+        win = PrippiSearchWindow(
+            'PrippiSearch.xml',
+            config.get_runtime_path(),
+            query=query,
+            parent_window=parent_window,
+        )
+        win.doModal()
+        del win
+    except Exception as exc:
+        xbmc.log('[PrippiSearch] _open_search ERROR: %s' % str(exc), xbmc.LOGERROR)
+    finally:
+        if parent_window is not None:
+            parent_window._bg_ui_pause.set()
+
+
+# ── Search result classification (anime / film / serie) ──────────────────────
+# A result is ANIME when its source channel is a *pure*-anime channel
+# (categories include 'anime' but neither 'movie' nor 'tvshow'). Mixed channels
+# (e.g. cineblog01: anime+movie+tvshow) classify by the item's own mediatype.
+_chan_is_anime_cache = {}
+
+# Per-session cache for provider search results. Selecting a recent query used
+# to repeat every network call (including providers already known to return an
+# error) even a few seconds later. Store raw Item payloads for 15 minutes; cached
+# Items are reconstructed on read and a small FIFO cap bounds warm-invoker RAM.
+_SEARCH_PROVIDER_CACHE = {}
+_SEARCH_PROVIDER_CACHE_LOCK = threading.Lock()
+_SEARCH_PROVIDER_CACHE_TTL = 15 * 60
+_SEARCH_PROVIDER_CACHE_CAP = 80
+
+
+def _search_final_cache_path(query):
+    import hashlib
+    key = str(query or '').strip().casefold().encode('utf-8')
+    name = hashlib.sha256(key).hexdigest() + '.json'
+    return os.path.join(config.get_data_path(), 'search_cache', name)
+
+
+def _search_final_cache_get(query):
+    """Return the completed, deduplicated result set across invoker reloads."""
+    try:
+        import json as _json
+        path = _search_final_cache_path(query)
+        if not os.path.isfile(path):
+            return False, []
+        with open(path, 'r', encoding='utf-8') as handle:
+            payload = _json.load(handle)
+        if (payload.get('version') != 1
+                or time.time() - float(payload.get('ts') or 0) > _SEARCH_PROVIDER_CACHE_TTL):
+            return False, []
+        items = []
+        for raw in payload.get('items', []):
+            try:
+                items.append(Item().fromjson(raw))
+            except Exception:
+                pass
+        return True, items
+    except Exception as exc:
+        logger.debug('[PrippiSearch] final cache read: %s' % str(exc)[:100])
+        return False, []
+
+
+def _search_final_cache_put(query, items):
+    try:
+        import json as _json
+        path = _search_final_cache_path(query)
+        folder = os.path.dirname(path)
+        if not os.path.isdir(folder):
+            os.makedirs(folder)
+        tmp = path + '.tmp'
+        payload = {'version': 1, 'ts': time.time(),
+                   'items': [item.tojson() for item in items or []]}
+        with open(tmp, 'w', encoding='utf-8') as handle:
+            _json.dump(payload, handle, ensure_ascii=False, separators=(',', ':'))
+        os.replace(tmp, path)
+    except Exception as exc:
+        logger.debug('[PrippiSearch] final cache write: %s' % str(exc)[:100])
+
+
+def _search_provider_cache_get(provider, query):
+    key = (str(provider or '').lower(), str(query or '').strip().casefold())
+    now = time.time()
+    with _SEARCH_PROVIDER_CACHE_LOCK:
+        row = _SEARCH_PROVIDER_CACHE.get(key)
+        if not row or now - row[0] > _SEARCH_PROVIDER_CACHE_TTL:
+            if row:
+                _SEARCH_PROVIDER_CACHE.pop(key, None)
+            return False, []
+        payloads = list(row[1])
+    items = []
+    for raw in payloads:
+        try:
+            items.append(Item().fromjson(raw))
+        except Exception:
+            pass
+    return True, items
+
+
+def _search_provider_cache_put(provider, query, items):
+    key = (str(provider or '').lower(), str(query or '').strip().casefold())
+    payloads = []
+    for item in items or []:
+        try:
+            payloads.append(item.tojson())
+        except Exception:
+            pass
+    with _SEARCH_PROVIDER_CACHE_LOCK:
+        if (key not in _SEARCH_PROVIDER_CACHE
+                and len(_SEARCH_PROVIDER_CACHE) >= _SEARCH_PROVIDER_CACHE_CAP):
+            try:
+                _SEARCH_PROVIDER_CACHE.pop(next(iter(_SEARCH_PROVIDER_CACHE)))
+            except (StopIteration, KeyError):
+                pass
+        _SEARCH_PROVIDER_CACHE[key] = (time.time(), payloads)
+
+def _channel_is_anime(ch_name):
+    """True if *ch_name* is a pure-anime channel. Cached (reads channel JSON once)."""
+    if ch_name in _chan_is_anime_cache:
+        return _chan_is_anime_cache[ch_name]
+    res = False
+    try:
+        from core import channeltools
+        cats = channeltools.get_channel_parameters(ch_name).get('categories', []) or []
+        cats = [str(c).lower() for c in cats]
+        res = ('anime' in cats) and not ('movie' in cats or 'tvshow' in cats)
+    except Exception:
+        res = False
+    _chan_is_anime_cache[ch_name] = res
+    return res
+
+def _is_pagination_item(item):
+    """True if *item* is a 'next page' pagination marker rather than a real
+    result. SC's search() (via peliculas) and support.nextPage() append such an
+    item; it has no playable content, so it must never reach the search grid
+    (it rendered as a clickable tile that opened an empty trailer card)."""
+    if getattr(item, 'nextPage', False):
+        return True
+    # A 'list' item in search results is a folder/pagination marker, never a
+    # playable title (SC's next-page has contentType='list').
+    if (getattr(item, 'contentType', '') or '') == 'list':
+        return True
+    title = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                   (getattr(item, 'title', '') or '')).strip().lower()
+    # Drop trailing decoration: SC titles it "Next Page >" — the chevron made
+    # the equality check miss it and the tile reached the grid.
+    title = re.sub(u'[\\s>»›…]+$', '', title)
+    if not title:
+        return False
+    try:
+        loc = re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                     config.get_localized_string(30992) or '').strip().lower()
+        loc = re.sub(u'[\\s>»›…]+$', '', loc)
+    except Exception:
+        loc = ''
+    return title in (loc, 'next page', 'successivo', 'pagina successiva', 'avanti')
+
+
+def _classify_search_item(item):
+    """Return 'anime' | 'film' | 'serie' for a search result item.
+
+    Priority Anime: a title from a pure-anime channel is ANIME regardless of
+    its mediatype. Otherwise classify by mediatype/contentType (movie→film,
+    tvshow/season/episode→serie), defaulting to 'film' when unknown.
+    """
+    ch = getattr(item, '_search_channel', '') or ''
+    if ch and ch != 'sc' and _channel_is_anime(ch):
+        return 'anime'
+    info = getattr(item, 'infoLabels', None) or {}
+    mt = str(info.get('mediatype', '') or '').lower()
+    ct = str(getattr(item, 'contentType', '') or '').lower()
+    if mt == 'movie' or ct == 'movie':
+        return 'film'
+    if mt in ('tvshow', 'season', 'episode') or ct in ('tvshow', 'season', 'episode'):
+        return 'serie'
+    return 'film'
+
+
+class PrippiSearchWindow(xbmcgui.WindowXML):
+    """Prippi-style search results overlay.
+
+    Three horizontal rows:
+      ROW 0 (id=160) — StreamingCommunity (all types)
+      ROW 1 (id=161) — Film from other global-search channels
+      ROW 2 (id=162) — Serie TV from other global-search channels
+
+    Focus on a card → hero panel updates (poster, title, meta, plot).
+    Click a card → opens DetailWindow (same flow as home).
+    """
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, xmlFilename, scriptPath, query='', parent_window=None, **kwargs):
+        super().__init__(xmlFilename, scriptPath, **kwargs)
+        self._query          = query
+        self._parent_window  = parent_window   # PrippiHomeWindow — for CW/launch delegation
+        self._items     = []             # currently displayed results (after filter)
+        self._all_items = []             # full result set (all types) — filter source
+        self._active_filter = 'all'      # active filter chip: all|film|serie|anime
+        self._op_mode   = False          # True → One Piece carousel rows layout
+        self._op_rows   = {}             # wraplist control id → list of Items
+        self._hero_item = None           # item currently shown in the context line
+        self._last_pos  = 0              # last selected grid position (restored after trailer)
+        self._last_hover = None          # last (control, pos) hovered by mouse (throttle)
+        self._alive     = True           # False once closed (HOME._restore_search_window guard)
+        self._search_started = False     # guard: onInit may fire again after a fullscreen trailer
+        self._search_done = threading.Event()
+        self._lock      = threading.Lock()
+        self._cancelled    = threading.Event()   # UI-close signal (stops search thread)
+        self._pf_cancelled = threading.Event()   # prefetch-stop signal (set only on back/close)
+        # Pre-fetch: background link testing for non-SC results
+        self._prefetch_results = {}  # id(item) → (server_item, [label, url]) or None
+        self._prefetch_events  = {}  # id(item) → threading.Event (set when prefetch done)
+
+    # ── Kodi WindowXML lifecycle ──────────────────────────────────────────
+
+    def onInit(self):
+        try:
+            # Highlight the active filter chip (defaults to "Tutti")
+            self.setProperty('filter', self._active_filter)
+            # Show query text in the query button
+            self.getControl(SEARCH_QUERY_BTN).setLabel(self._query)
+            # Re-init guard: Kodi calls onInit again when this WindowXML is re-activated
+            # after a fullscreen video (e.g. a trailer played inside DetailWindow). In
+            # that case the search has ALREADY run — restore the cached results instead
+            # of launching a brand-new network search ("ricerca che riparte da capo").
+            if self._search_started:
+                self._restore_after_reinit()
+                return
+            self._search_started = True
+            # Hide no-results label; show loading indicator
+            self.getControl(SEARCH_NORESULTS).setVisible(False)
+            self.getControl(SEARCH_LOADING).setVisible(True)
+            # Start search in background thread
+            t = threading.Thread(target=self._run_search_thread, name='NS-search')
+            t.daemon = True
+            t.start()
+        except Exception as exc:
+            logger.error('[PrippiSearch] onInit error: %s' % str(exc))
+
+    def _restore_after_reinit(self):
+        """Re-populate the (freshly re-created) grid from cached results after the
+        window was re-initialised — typically returning from a fullscreen trailer.
+        Never triggers a new network search."""
+        try:
+            if not self._search_done.is_set():
+                # Search still running: it will populate the grid itself when it
+                # reaches its final step. Just keep the loading indicator visible.
+                self.getControl(SEARCH_LOADING).setVisible(True)
+                self.getControl(SEARCH_NORESULTS).setVisible(False)
+                return
+            self.getControl(SEARCH_LOADING).setVisible(False)
+            with self._lock:
+                items = list(self._items)
+            try:
+                self.getControl(SEARCH_WL_SC).reset()
+            except Exception:
+                pass
+            if items:
+                self.getControl(SEARCH_NORESULTS).setVisible(False)
+                self._populate_grid(items)
+                # Restore hero + the card the user was on before opening the detail
+                pos = self._last_pos if 0 <= self._last_pos < len(items) else 0
+                self._update_hero(items[pos])
+                try:
+                    self.getControl(SEARCH_WL_SC).selectItem(pos)
+                    self.setFocusId(SEARCH_WL_SC)
+                except Exception:
+                    pass
+            else:
+                self.getControl(SEARCH_NORESULTS).setVisible(True)
+        except Exception as exc:
+            logger.error('[PrippiSearch] _restore_after_reinit: %s' % str(exc))
+
+    def onAction(self, action):
+        aid = action.getId()
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
+        if aid in (self.ACTION_EXIT, self.ACTION_BACK):
+            self._alive = False
+            self._cancelled.set()
+            self._pf_cancelled.set()  # cancel all prefetch workers on back/close
+            self.close()
+            return
+        # ── Mouse hover: the grid/carousel highlight follows the cursor (Kodi moves
+        # the selected position), but no focus event fires per card — so refresh the
+        # hero from the hovered position here. Throttled to selection changes. ──
+        if aid == ACTION_MOUSE_MOVE:
+            self._hover_hero()
+            return
+        # ── One Piece carousel navigation (up/down move between rows in code so
+        # empty rows are skipped; left/right scroll the row and refresh the hero) ──
+        if self._op_mode:
+            fid = self.getFocusId()
+            if fid in OP_ROW_WL:
+                idx = OP_ROW_WL.index(fid)
+                if aid == ACTION_DOWN:
+                    nxt = self._next_op_row(idx, +1)
+                    if nxt is not None:
+                        self.setFocusId(OP_ROW_WL[nxt])
+                        self._op_hero(nxt)
+                    return
+                if aid == ACTION_UP:
+                    prv = self._next_op_row(idx, -1)
+                    if prv is not None:
+                        self.setFocusId(OP_ROW_WL[prv])
+                        self._op_hero(prv)
+                    else:
+                        self.setFocusId(SEARCH_QUERY_BTN)
+                    return
+                if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+                    threading.Thread(target=self._op_deferred_hero, args=(fid,),
+                                     daemon=True).start()
+                    return
+            elif fid == SEARCH_QUERY_BTN and aid == ACTION_DOWN:
+                first = self._next_op_row(-1, +1)
+                if first is not None:
+                    self.setFocusId(OP_ROW_WL[first])
+                    self._op_hero(first)
+                    return
+        # Update hero when navigating within the grid (LEFT/RIGHT/UP/DOWN/scroll wheel)
+        if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
+                   ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+            if self.getFocusId() == SEARCH_WL_SC:
+                threading.Thread(target=self._deferred_hero_update,
+                                 daemon=True).start()
+        # Note: UP from top row → search bar and DOWN from top bar → grid
+        # are handled by <onup>/<ondown> in the XML — no override needed here.
+
+    def onClick(self, control_id):
+        if control_id in (SEARCH_BTN_BACK, SEARCH_CLOSE):
+            self._alive = False
+            self._cancelled.set()
+            self._pf_cancelled.set()  # cancel prefetch on close
+            self.close()
+            return
+        if control_id == SEARCH_QUERY_BTN:
+            self._alive = False
+            self._cancelled.set()
+            self._pf_cancelled.set()  # cancel prefetch on close
+            self.close()
+            # Propaga la home window: senza, la nuova finestra di ricerca
+            # perde la delega play (_launch/_play_episode_direct_nonsc) e le
+            # serie a menu (mediasetplay 'epmenu') finivano in un RunPlugin
+            # folder che non riproduce nulla.
+            _open_search(parent_window=self._parent_window)
+            return
+        if control_id in SEARCH_FILTER_MAP:
+            self._apply_filter(SEARCH_FILTER_MAP[control_id])
+            return
+        if control_id in OP_ROW_WL:      # One Piece carousel card
+            try:
+                items = self._op_rows.get(control_id, [])
+                pos = int(self.getControl(control_id).getSelectedPosition() or 0)
+                if 0 <= pos < len(items):
+                    self._open_detail(items[pos])
+                # restore focus to this row after backing out of the detail card
+                if self._alive and self._op_mode:
+                    try:
+                        self.setFocusId(control_id)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                logger.error('[PrippiSearch] onClick op-row: %s' % str(exc))
+            return
+        if control_id == SEARCH_WL_SC:   # panel grid id=160
+            try:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._open_detail(self._items[pos])
+            except Exception as exc:
+                logger.error('[PrippiSearch] onClick grid: %s' % str(exc))
+
+    def onFocus(self, control_id):
+        if control_id in OP_ROW_WL:      # One Piece carousel card
+            try:
+                self._op_hero(OP_ROW_WL.index(control_id))
+            except Exception:
+                pass
+            return
+        if control_id == SEARCH_WL_SC:   # panel grid id=160
+            try:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._update_hero(self._items[pos])
+            except Exception:
+                pass
+
+    def _deferred_hero_update(self):
+        """Called from onAction on a background thread to update the hero panel
+        after a navigation key. Waits briefly so the panel can process the key
+        and update getSelectedPosition() before we read it."""
+        xbmc.sleep(80)
+        try:
+            pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._last_pos = pos
+                self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    def _hover_hero(self):
+        """Refresh the hero from the card currently under the mouse cursor — both
+        the flat grid and the One Piece carousels. Throttled: only fires when the
+        hovered (control, position) actually changed."""
+        try:
+            fid = self.getFocusId()
+            if self._op_mode and fid in OP_ROW_WL:
+                pos = int(self.getControl(fid).getSelectedPosition() or 0)
+                if (fid, pos) != self._last_hover:
+                    self._last_hover = (fid, pos)
+                    self._op_hero(OP_ROW_WL.index(fid))
+                return
+            if fid == SEARCH_WL_SC:
+                pos = int(self.getControl(SEARCH_WL_SC).getSelectedPosition() or 0)
+                if (fid, pos) != self._last_hover:
+                    self._last_hover = (fid, pos)
+                    with self._lock:
+                        items = list(self._items)
+                    if 0 <= pos < len(items):
+                        self._last_pos = pos
+                        self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    # ── Context line (focused item summary) ───────────────────────────────
+
+    _TYPE_LABELS = {
+        'anime': '[COLOR FFA78BFA]ANIME[/COLOR]',
+        'film':  '[COLOR FF38BDF8]FILM[/COLOR]',
+        'serie': '[COLOR FF4ADE80]SERIE[/COLOR]',
+        'hentai': '[COLOR FFEC4899]HENTAI[/COLOR]',
+    }
+
+    def _update_hero(self, item):
+        """Update the bottom hero box (mini poster + title + meta + plot) for *item*."""
+        if item is None:
+            try:
+                self.getControl(SEARCH_CTX_POSTER).setImage('')
+                self.getControl(SEARCH_CTX_TITLE).setLabel('')
+                self.getControl(SEARCH_CTX_META).setLabel('')
+                self.getControl(SEARCH_CTX_PLOT).setLabel('')
+            except Exception:
+                pass
+            return
+        try:
+            self._hero_item = item
+            # Mini poster
+            try:
+                self.getControl(SEARCH_CTX_POSTER).setImage(item.thumbnail or '')
+            except Exception:
+                pass
+            title = item.fulltitle or item.title or ''
+            self.getControl(SEARCH_CTX_TITLE).setLabel(title)
+            info = item.infoLabels or {}
+            year   = str(info.get('year', '')) if info.get('year') else ''
+            rating = ('★ %.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
+            stype  = getattr(item, '_search_type', '') or _classify_search_item(item)
+            tlabel = self._TYPE_LABELS.get(stype, '')
+            # 4K badge (movies only)
+            extra = ''
+            _tmdb_h = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
+            if getattr(item, 'contentType', '') == 'movie' and _tmdb_h and _fourk.is_4k_available(_tmdb_h):
+                extra = '[COLOR FFE50914]4K[/COLOR]'
+            parts = [p for p in [tlabel, year, rating, extra] if p]
+            self.getControl(SEARCH_CTX_META).setLabel('   ·   '.join(parts))
+            # Plot (trimmed; the label wraps to 2 lines)
+            plot = str(info.get('plot', '') or '').strip()
+            if len(plot) > 240:
+                plot = plot[:237].rstrip() + '…'
+            self.getControl(SEARCH_CTX_PLOT).setLabel(plot)
+        except Exception as exc:
+            logger.error('[PrippiSearch] _update_hero: %s' % str(exc))
+
+    # ── Filters ───────────────────────────────────────────────────────────
+
+    def _count_by_type(self, items):
+        """Return (n_all, n_film, n_serie, n_anime) for *items*."""
+        n_film = n_serie = n_anime = 0
+        for it in items:
+            t = getattr(it, '_search_type', '')
+            if   t == 'anime': n_anime += 1
+            elif t == 'serie': n_serie += 1
+            else:              n_film  += 1
+        return len(items), n_film, n_serie, n_anime
+
+    def _update_count_label(self):
+        """Refresh the result-count label (id=121) from the full result set."""
+        with self._lock:
+            base = list(self._all_items)
+        n_all, n_film, n_serie, n_anime = self._count_by_type(base)
+        txt = ('[B]%d[/B] risultati   ·   %d film · %d serie · '
+               '[COLOR FFA78BFA]%d anime[/COLOR]' % (n_all, n_film, n_serie, n_anime))
+        try:
+            self.getControl(SEARCH_PROGRESS).setLabel(txt)
+        except Exception:
+            pass
+
+    def _apply_filter(self, ftype):
+        """Filter the full result set by content type and re-populate the grid."""
+        self._active_filter = ftype
+        self.setProperty('filter', ftype)
+        with self._lock:
+            base = list(self._all_items)
+        if ftype == 'all':
+            items = base
+        else:
+            items = [it for it in base if getattr(it, '_search_type', 'film') == ftype]
+        with self._lock:
+            self._items = items
+        try:
+            self.getControl(SEARCH_WL_SC).reset()
+        except Exception:
+            pass
+        self._populate_grid(items)
+        try:
+            self.getControl(SEARCH_NORESULTS).setVisible(not items)
+        except Exception:
+            pass
+        if items:
+            self._last_pos = 0
+            self._update_hero(items[0])
+            try:
+                self.getControl(SEARCH_WL_SC).selectItem(0)
+                self.setFocusId(SEARCH_WL_SC)
+            except Exception:
+                pass
+        else:
+            self._update_hero(None)
+        self._update_count_label()
+
+    # ── Detail / play ──────────────────────────────────────────────────────
+
+    def _open_detail(self, item):
+        """Open DetailWindow modal (same flow as PrippiHomeWindow)."""
+        try:
+            dw = DetailWindow(
+                'DetailWindow.xml',
+                config.get_runtime_path(),
+                item=item,
+            )
+            dw.doModal()
+            result = getattr(dw, '_result', None)
+            sel_s  = getattr(dw, '_selected_season',  None)
+            sel_e  = getattr(dw, '_selected_episode', None)
+            dl_eps = getattr(dw, '_download_eps', None)
+            del dw
+            if result == 'play':
+                if sel_s is not None and sel_e is not None:
+                    # User picked a specific episode in the EpisodePicker.
+                    _is_sc = (getattr(item, 'channel', '') == 'streamingcommunity'
+                              or getattr(item, '_search_channel', '') == 'sc')
+                    _show_url = (getattr(item, '_cw_show_url', '') or
+                                 (item.url if getattr(item, 'action', '') == 'episodios' else ''))
+                    if _is_sc and _show_url and self._parent_window is not None:
+                        t_ep = threading.Thread(
+                            target=self._parent_window._play_episode_direct,
+                            args=(item, sel_s, sel_e))
+                        t_ep.daemon = True
+                        t_ep.start()
+                    elif self._parent_window is not None:
+                        # Non-SC (AnimeUnity / One Piece / …): play the chosen
+                        # episode via the channel flow.
+                        t_ep = threading.Thread(
+                            target=self._parent_window._play_episode_direct_nonsc,
+                            args=(item, sel_e))
+                        t_ep.daemon = True
+                        t_ep.start()
+                    else:
+                        # Senza home window: risolvi comunque l'episodio scelto
+                        # (numerazione globale) e lancialo direttamente.
+                        _played = False
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            _hit = [e for e in _eps
+                                    if int(getattr(e, 'episode', 0) or 0) == int(sel_e)]
+                            if _hit:
+                                _pre_play_set_lang(_hit[0])
+                                xbmc.executebuiltin(
+                                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                                    % _hit[0].tourl())
+                                _played = True
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent ep play: %s' % str(_exc))
+                        if not _played:
+                            self._launch_item(item)
+                else:
+                    self._launch_item(item)
+            elif result == 'download' and self._parent_window is not None:
+                # SCARICA from a search detail card: delegate to the home's
+                # downloader (same flow as a home-launched download).
+                t_dl = threading.Thread(
+                    target=self._parent_window._start_download,
+                    args=(item, dl_eps))
+                t_dl.daemon = True
+                t_dl.start()
+        except Exception as exc:
+            logger.error('[PrippiSearch] _open_detail: %s' % str(exc))
+
+    def _launch_item(self, item):
+        """Play item. For non-SC items waits for pre-tested working URL and plays directly."""
+        try:
+            # ── Non-SC items: always use the channel flow ───────────────────────
+            # Route through _parent_window._launch → RunPlugin → platformtools
+            # .play_video, which configures inputstream.adaptive (manifest_type
+            # mpd/hls) + DRM + headers.  The previous "prefetch direct play" path
+            # played the resolved URL with a bare ListItem and no ISA, so the
+            # DASH/HLS/Widevine streams that Mediaset/Discovery/Rai/… serve failed
+            # in Kodi's native demuxer ("Error creating demuxer") and never started.
+            if getattr(item, '_search_channel', 'sc') != 'sc':
+                if self._parent_window is not None:
+                    self._parent_window._launch(item, source_window=self)
+                else:
+                    # Rete di sicurezza senza home window: le serie a menu
+                    # (epmenu/episodios) non sono riproducibili via RunPlugin
+                    # diretto → risolvi qui il primo episodio del canale.
+                    _tgt = item
+                    if getattr(item, 'action', '') in _CH_MENU_ACTIONS:
+                        try:
+                            _eps = _get_channel_episodes(item)
+                            if _eps:
+                                _tgt = _eps[0]
+                        except Exception as _exc:
+                            logger.error('[PrippiSearch] no-parent first-ep: %s' % str(_exc))
+                    _pre_play_set_lang(_tgt)
+                    xbmc.executebuiltin(
+                        'RunPlugin(plugin://plugin.video.prippistream/?%s)' % _tgt.tourl())
+                return
+
+            # ── 4K check (movies only, before normal path) ────────────────
+            ct = getattr(item, 'contentType', '') or ''
+            if ct == 'movie' and not getattr(item, '_no_4k', 0):
+                _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
+                if _tmdb:
+                    _f4k = _fourk.lookup_4k(_tmdb)
+                    if _f4k:
+                        _choice = '4k'
+                        if _ask_quality_enabled():
+                            _choice = _ask_4k_quality(item)
+                        if _choice is None:
+                            return  # dialog dismissed: play nothing
+                        if _choice == 'fhd':
+                            # Search results are full channel items (SC url):
+                            # skip the 4K branch and let the normal path below
+                            # play them like any other content (CW included).
+                            logger.info('[PrippiSearch] 4K disponibile ma scelto FHD: %s' % item.fulltitle)
+                            item._no_4k = 1
+                        else:
+                            logger.info('[PrippiSearch] 4K HIT: %s' % item.fulltitle)
+                            _pw = self._parent_window
+                            if _pw:
+                                t = threading.Thread(target=_pw._play_4k_stream, args=(item, _f4k))
+                                t.daemon = True
+                                t.start()
+                            else:
+                                # No parent window: resolve URL and play directly
+                                _pre_play_set_lang(item)
+                                _stream_url4k = _fourk.get_resolved_url(_f4k)
+                                li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url4k)
+                                li.setArt({'thumb': item.thumbnail or _f4k.get('poster', ''),
+                                            'fanart': item.fanart or ''})
+                                try:
+                                    _il2 = dict(item.infoLabels or {})
+                                    if _il2:
+                                        li.setInfo('video', {k: v for k, v in _il2.items()
+                                                             if v is not None and isinstance(v, (str, int, float))})
+                                except Exception:
+                                    pass
+                                li.setProperty('IsPlayable', 'true')
+                                xbmc.Player().play(_stream_url4k, li)
+                            return
+
+            # ── Normal path (SC item or no prefetch event) ──────────────────────
+            if self._parent_window is not None:
+                self._parent_window._launch(item, source_window=self)
+            else:
+                xbmc.executebuiltin(
+                    'RunPlugin(plugin://plugin.video.prippistream/?%s)' % item.tourl()
+                )
+        except Exception as exc:
+            logger.error('[PrippiSearch] _launch_item: %s' % str(exc))
+
+    # ── Wraplist helpers ────────────────────────────────────────────────────
+
+    def _populate_grid(self, items):
+        """Populate the panel grid (id=160) with *items*."""
+        if self._cancelled.is_set():
+            return
+        list_items = []
+        for it in items:
+            li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
+            li.setArt({'thumb': it.thumbnail or ''})
+            li.setProperty('thumbnail', it.thumbnail or '')
+            # Type badge (ANIME / FILM / SERIE) — drives the coloured pill in the skin
+            stype = getattr(it, '_search_type', '') or _classify_search_item(it)
+            li.setProperty('stype', stype.upper())
+            list_items.append(li)
+        try:
+            self.getControl(SEARCH_WL_SC).addItems(list_items)
+        except Exception as exc:
+            logger.error('[PrippiSearch] _populate_grid: %s' % str(exc))
+
+    # ── One Piece carousel rows ───────────────────────────────────────────────
+    @staticmethod
+    def _make_op_li(it):
+        li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
+        li.setArt({'thumb': it.thumbnail or ''})
+        li.setProperty('thumbnail', it.thumbnail or '')
+        return li
+
+    def _show_op_rows(self, groups):
+        """Switch the search overlay into the dedicated One Piece carousel layout:
+        a header + up to three horizontal rows (Serie / Film / Speciali). Hides the
+        filter chips and the flat grid via Window.Property(op_mode)."""
+        self._op_mode = True
+        self._op_rows = {}
+        try:
+            self.setProperty('op_mode', '1')
+        except Exception:
+            pass
+        total = sum(len(its) for _t, its in groups)
+        try:
+            self.getControl(OP_HEADER).setLabel(u'[B][COLOR FFE50914]ONE PIECE[/COLOR][/B]')
+            self.getControl(OP_SUBHDR).setLabel(
+                u'La ciurma di Cappello di Paglia · %d contenuti' % total)
+        except Exception:
+            pass
+        first = None
+        for i in range(len(OP_ROW_WL)):
+            wl_id, lbl_id = OP_ROW_WL[i], OP_ROW_LBL[i]
+            if i < len(groups):
+                title, gitems = groups[i]
+                self._op_rows[wl_id] = gitems
+                try:
+                    self.getControl(lbl_id).setLabel(
+                        u'[B]%s[/B]   [COLOR FF777777]%d[/COLOR]' % (title, len(gitems)))
+                    self.getControl(lbl_id).setVisible(True)
+                    wl = self.getControl(wl_id)
+                    wl.reset()
+                    wl.addItems([self._make_op_li(it) for it in gitems])
+                    wl.setVisible(True)
+                except Exception as exc:
+                    logger.error('[OnePiece] row %d populate: %s' % (i, str(exc)))
+                if first is None and gitems:
+                    first = (wl_id, gitems)
+            else:
+                self._op_rows[wl_id] = []
+                try:
+                    self.getControl(wl_id).setVisible(False)
+                    self.getControl(lbl_id).setVisible(False)
+                except Exception:
+                    pass
+        if first:
+            try:
+                self.getControl(first[0]).selectItem(0)
+                self.setFocusId(first[0])
+            except Exception:
+                pass
+            self._update_hero(first[1][0])
+
+    def _next_op_row(self, idx, step):
+        """Index of the next non-empty One Piece row from *idx* in *step* direction."""
+        i = idx + step
+        while 0 <= i < len(OP_ROW_WL):
+            if self._op_rows.get(OP_ROW_WL[i]):
+                return i
+            i += step
+        return None
+
+    def _op_hero(self, row_idx):
+        """Update the hero box from the selected card of One Piece row *row_idx*."""
+        try:
+            wl_id = OP_ROW_WL[row_idx]
+            items = self._op_rows.get(wl_id, [])
+            pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
+            if 0 <= pos < len(items):
+                self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    def _op_deferred_hero(self, wl_id):
+        """Hero update after a horizontal navigation key in a One Piece row."""
+        xbmc.sleep(80)
+        try:
+            row_idx = OP_ROW_WL.index(wl_id)
+        except ValueError:
+            return
+        self._op_hero(row_idx)
+
+    # ── Search engine ───────────────────────────────────────────────────────
+
+    def _run_search_thread(self):
+        """Background search: SC first (shown immediately), then ALL other active channels in parallel.
+
+        Flow:
+          1. Search StreamingCommunity → show results immediately (fast feedback).
+          2. Search all other channels with include_in_global_search=True in parallel (6 workers).
+          3. Merge SC + others, sort by title relevance (exact match first, SC preferred),
+             dedup by tmdb_id (first/highest-priority occurrence wins), reset panel,
+             re-populate with final sorted list.
+
+        Fixed bugs vs previous version:
+          - get_channels(Item(mode='all')) — was Item() whose mode="" matched no channel → returned [].
+          - _do_channel receives a string (channel name), not a dict — was calling .get() on it.
+        """
+        import re as _re
+
+        query = self._query
+        # Strip Kodi colour/format tags for title comparison
+        query_clean = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', query).strip().lower()
+        _final_hit, _final_items = _search_final_cache_get(query)
+        if _final_hit:
+            logger.info('[PrippiSearch] final cache hit: %d results' % len(_final_items))
+            with self._lock:
+                self._all_items = list(_final_items)
+                self._items = list(_final_items)
+            self._populate_grid(_final_items)
+            if _final_items:
+                self._update_hero(_final_items[0])
+            try:
+                self.getControl(SEARCH_LOADING).setVisible(False)
+                self.getControl(SEARCH_NORESULTS).setVisible(not _final_items)
+                self._update_count_label()
+            except Exception:
+                pass
+            self._search_done.set()
+            return
+        sc_items    = []
+        sc_tmdb_ids = set()
+        cache_stats = {'hit': 0, 'miss': 0}
+        cache_stats_lock = threading.Lock()
+
+        def _count_cache(hit):
+            with cache_stats_lock:
+                cache_stats['hit' if hit else 'miss'] += 1
+
+        # ── Step 1: StreamingCommunity (fastest, shown first) ──────────
+        try:
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]…')
+            _hit, sc_items = _search_provider_cache_get('streamingcommunity', query)
+            _count_cache(_hit)
+            if not _hit:
+                from channels import streamingcommunity as _sc
+                from core.item import Item as _Item
+                sc_seed = _Item(channel='streamingcommunity', extra='search', text_color='FFFFFFFF')
+                sc_items = list(_sc.search(sc_seed, query) or [])
+                _search_provider_cache_put('streamingcommunity', query, sc_items)
+            # Filter out SC results without a valid thumbnail (blank cards) and the
+            # trailing "next page" pagination marker (SC search doesn't pop it).
+            sc_items = [it for it in sc_items if (it.thumbnail or '').strip()
+                        and (it.thumbnail or '').strip().lower() not in ('none', 'false', 'null', 'n/a')
+                        and not _is_pagination_item(it)]
+            for it in sc_items:
+                it._search_channel = 'sc'
+                it._search_type = _classify_search_item(it)
+                tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
+                if tmdb:
+                    sc_tmdb_ids.add(str(tmdb))
+            logger.info('[PrippiSearch] SC returned %d results' % len(sc_items))
+            logger.info('[PrippiSearch] SC items: %s' % [
+                (it.fulltitle or it.title, getattr(it, 'contentType', ''),
+                 (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb'),
+                 getattr(it, '_search_type', '')) for it in sc_items])
+        except Exception as exc:
+            logger.error('[PrippiSearch] SC search error: %s' % str(exc))
+        if self._cancelled.is_set():
+            return
+
+        # Show SC results immediately in the grid (user sees something right away)
+        with self._lock:
+            self._all_items = list(sc_items)
+            self._items = list(sc_items)
+        self._populate_grid(sc_items)
+        if sc_items:
+            self._update_hero(sc_items[0])
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  %d risultati · cercando altri canali…' % len(sc_items))
+        else:
+            self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  cercando altri canali…')
+
+        # ── Step 2: Other channels (parallel) ──────────────────────────
+        # Read channels directly from JSON flags — avoids the double check (JSON flag + Kodi
+        # settings) that previously caused get_channels() to always return [].
+        try:
+            from core import channeltools
+            import channelselector as _channelselector
+            _all_chs = _channelselector.filterchannels('all')
+            channels = []
+            for _ch in _all_chs:
+                if _ch.channel == 'streamingcommunity':
+                    continue  # already searched above
+                _cp = channeltools.get_channel_parameters(_ch.channel)
+                if _cp.get('active', False) and _cp.get('include_in_global_search', False):
+                    channels.append(_ch.channel)
+        except Exception as exc:
+            logger.error('[PrippiSearch] channels detection error: %s' % str(exc))
+            channels = []
+
+        logger.info('[PrippiSearch] global search: %d other channels' % len(channels))
+        total_ch = len(channels)
+        done_ch  = [0]
+        all_others = []
+
+        # Article-aware title match: used in both _do_channel and Step 4a.
+        # Rule: if the query starts with a leading article ("i", "il", "la", "the"...),
+        # also accept results that match after stripping the article from BOTH sides.
+        # This lets "Pirati della Silicon Valley" match "I pirati della silicon valley".
+        # If the query has NO leading article, be strict so "Un Amore per sempre"
+        # is NOT accepted when searching "Amore per sempre" (different film).
+        _ART_RE = _re.compile(
+            r'^(il |la |lo |i |le |gli |l |un |una |uno |the |a |an )'
+        )
+        _q_norm_raw   = _re.sub(r'[^a-z0-9 ]', '', query_clean).strip()
+        _q_has_art    = bool(_ART_RE.match(_q_norm_raw))
+        _q_stripped   = _ART_RE.sub('', _q_norm_raw, count=1).strip()
+
+        # Tolleranza sugli stopword INTERNI: i cataloghi titolano lo stesso film
+        # in modi diversi ("I pirati DELLA Silicon Valley" su CB01 vs "I pirati
+        # DI Silicon Valley" su hd4me). Quando la query porta l'articolo
+        # iniziale (= l'utente ha digitato il titolo per intero) confrontiamo
+        # anche le sequenze di parole significative, ignorando articoli e
+        # preposizioni (it+en). Minimo 2 parole: con una sola ("la la land" ->
+        # "land") il confronto accetterebbe troppo.
+        _SEARCH_STOPWORDS = {
+            'il', 'lo', 'la', 'i', 'gli', 'le', 'l', 'un', 'uno', 'una',
+            'di', 'del', 'dello', 'della', 'dei', 'degli', 'delle',
+            'a', 'ad', 'al', 'allo', 'alla', 'ai', 'agli', 'alle',
+            'da', 'dal', 'dallo', 'dalla', 'dai', 'dagli', 'dalle',
+            'in', 'nel', 'nello', 'nella', 'nei', 'negli', 'nelle',
+            'con', 'col', 'coi', 'su', 'sul', 'sullo', 'sulla', 'sui', 'sugli', 'sulle',
+            'per', 'tra', 'fra', 'e', 'ed', 'o', 'od',
+            'the', 'an', 'of', 'and', 'or', 'to', 'on', 'at',
+        }
+
+        def _sig_words(s):
+            return [w for w in s.split() if w not in _SEARCH_STOPWORDS]
+
+        _q_sig = _sig_words(_q_norm_raw)
+
+        def _title_match_query(r_norm):
+            """Return True if r_norm is a title-match for the current query."""
+            # Direct match (exact, or result is query + quality/year suffix)
+            if (r_norm == _q_norm_raw
+                    or r_norm.startswith(_q_norm_raw + ' ')
+                    or _q_norm_raw.startswith(r_norm + ' ')):
+                return True
+            # Article-aware match: only when query has a leading article
+            if _q_has_art:
+                r_stripped = _ART_RE.sub('', r_norm, count=1).strip()
+                if (r_stripped == _q_stripped
+                        or r_stripped.startswith(_q_stripped + ' ')
+                        or _q_stripped.startswith(r_stripped + ' ')):
+                    return True
+                # Stesse parole significative in sequenza (un lato può estendere
+                # l'altro, es. suffisso anno/qualità) -> stesso titolo.
+                if len(_q_sig) >= 2:
+                    r_sig = _sig_words(r_norm)
+                    k = min(len(_q_sig), len(r_sig))
+                    if k >= 2 and _q_sig[:k] == r_sig[:k]:
+                        return True
+            return False
+
+        # FIX: get_channels returns a list of strings (channel names), not dicts.
+        def _do_channel(ch_name):
+            if self._cancelled.is_set():
+                return []
+            try:
+                ch_module = __import__('channels.' + ch_name, fromlist=[ch_name])
+                if not hasattr(ch_module, 'search'):
+                    return []
+                _hit, results = _search_provider_cache_get(ch_name, query)
+                _count_cache(_hit)
+                if not _hit:
+                    from core.item import Item as _Item
+                    results = ch_module.search(_Item(channel=ch_name), query) or []
+                    _search_provider_cache_put(ch_name, query, results)
+                filtered = []
+                for r in results:
+                    if _is_pagination_item(r):
+                        continue   # drop "next page" markers (no playable content)
+                    tmdb = (r.infoLabels or {}).get('tmdb_id') or (r.infoLabels or {}).get('tmdb')
+                    if tmdb and str(tmdb) in sc_tmdb_ids:
+                        continue   # SC has this exact title — SC version wins
+                    # Title relevance filter: reject results that don't closely match
+                    # the query. "Un Amore per sempre" must not appear when searching
+                    # "Amore per sempre" — it's a different film.
+                    # Use the raw title (no article stripping) for accurate comparison.
+                    _r_raw = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '',
+                                     (r.fulltitle or r.title or '')).strip().lower()
+                    _r_norm = _re.sub(r'[^a-z0-9 ]', '', _r_raw)
+                    _r_norm = _re.sub(r'\s+', ' ', _r_norm).strip()
+                    _ok = _title_match_query(_r_norm)
+                    if (not _ok and _q_norm_raw
+                            and ch_name in ('raiplay', 'mediasetplay', 'la7')):
+                        _ok = bool(_re.search(
+                            r'(?:^|\s)' + _re.escape(_q_norm_raw) + r'(?:\s|$)',
+                            _r_norm))
+                    if not _ok and _q_norm_raw and _channel_is_anime(ch_name):
+                        # Anime channels use romaji titles where the searched name is a
+                        # trailing/middle word (AnimeUnity lists Frieren as "Sousou no
+                        # Frieren"), which the strict PREFIX match drops.  For anime,
+                        # also accept the query as a whole word/phrase anywhere in it.
+                        _ok = bool(_re.search(r'(?:^|\s)' + _re.escape(_q_norm_raw) + r'(?:\s|$)', _r_norm))
+                        if _ok:
+                            logger.debug('[PrippiSearch] %s: anime word-match kept "%s" for "%s"' % (
+                                ch_name, _r_norm[:50], _q_norm_raw))
+                    if _q_norm_raw and not _ok:
+                        logger.debug('[PrippiSearch] %s: skip "%s" (no match for "%s")' % (
+                            ch_name, _r_norm[:40], _q_norm_raw))
+                        continue
+                    r._search_channel = ch_name
+                    r._search_type = _classify_search_item(r)
+                    filtered.append(r)
+                logger.debug('[PrippiSearch] %s: %d results' % (ch_name, len(filtered)))
+                return filtered
+            except Exception as exc:
+                logger.debug('[PrippiSearch] channel %s error: %s' % (ch_name, str(exc)))
+                return []
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(
+                max_workers=deviceprofile.worker_count('search', 6)) as pool:
+            future_map = {pool.submit(_do_channel, ch): ch for ch in channels}
+            for fut in as_completed(future_map):
+                if self._cancelled.is_set():
+                    break
+                batch = fut.result() or []
+                all_others.extend(batch)
+                done_ch[0] += 1
+                if total_ch > 0:
+                    self._set_progress('[B][COLOR FFE50914]RICERCA IN CORSO[/COLOR][/B]  —  %d / %d canali...' % (done_ch[0], total_ch))
+
+        if self._cancelled.is_set():
+            return
+
+        try:
+            from platformcode import perf
+            perf.note('search.provider_cache', 'hit=%d miss=%d query=%s' % (
+                cache_stats['hit'], cache_stats['miss'], query_clean[:40]))
+        except Exception:
+            pass
+
+        # ── Step 3: Sort by relevance + dedup by tmdb_id OR normalized title ──
+        combined = list(sc_items) + all_others
+
+        # Anime enrichment + AnimeUnity preference:
+        #  1. AnimeUnity/AnimeSaturn ship a native title/plot but no tmdb_id/year/
+        #     rating. TMDB matches their (romaji) titles well — "Sousou no Frieren"
+        #     → 209867 — so enrich the anime results that still lack a tmdb_id: this
+        #     fills in year/rating/poster (also replaces AnimeUnity's occasional black
+        #     poster) AND gives them a tmdb_id to match against AnimeWorld's.
+        #  2. Prefer AnimeUnity: once matched, drop the SAME show coming from other
+        #     anime channels — keep only AnimeUnity's version (it has the episode list
+        #     and plays as a series, unlike AnimeWorld's film-like entries).
+        def _it_tmdb(it):
+            return str((it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
+                       or getattr(it, '_pref_tmdb', '') or '')
+
+        _anime_no_tmdb = [it for it in combined
+                          if getattr(it, '_search_type', '') == 'anime' and not _it_tmdb(it)]
+        if _anime_no_tmdb and not self._cancelled.is_set():
+            # Snapshot AnimeUnity's NATIVE poster/plot/title (distinct per season/
+            # spin-off) and restore them after enrichment: TMDB has a SINGLE Frieren
+            # entry, so letting it overwrite would flatten every part to the same
+            # poster + plot. We only want the ADDED metadata (tmdb_id/year/rating) —
+            # tmdb_id lets us prefer AnimeUnity over AnimeWorld; year/rating fills the
+            # missing details — while each part keeps its own image and synopsis.
+            _native = [(it, it.thumbnail, it.fanart,
+                        (it.infoLabels or {}).get('plot', ''),
+                        (it.infoLabels or {}).get('title', '')) for it in _anime_no_tmdb]
+            try:
+                _tmdb_enrich_validated(_anime_no_tmdb)
+            except Exception as _exc:
+                logger.error('[PrippiSearch] anime enrich failed: %s' % str(_exc))
+            for _it, _th, _fa, _pl, _ti in _native:
+                # Move the matched tmdb_id to a SIDE attribute: it's used ONLY to
+                # prefer AnimeUnity over other sources, NOT stored in infoLabels —
+                # where the detail view would pull TMDB's single shared info + episode
+                # list and make every part identical. Keep the ADDED year/rating and
+                # the native art/plot so each season/spin-off stays distinct.
+                _tid = str((_it.infoLabels or {}).get('tmdb_id') or (_it.infoLabels or {}).get('tmdb') or '')
+                if _tid:
+                    _it._pref_tmdb = _tid
+                    _it.infoLabels.pop('tmdb_id', None)
+                    _it.infoLabels.pop('tmdb', None)
+                    _it.infoLabels.pop('imdb_id', None)
+                if _th:
+                    _it.thumbnail = _th
+                if _fa:
+                    _it.fanart = _fa
+                if _pl:
+                    _it.infoLabels['plot'] = _pl
+                if _ti:
+                    _it.infoLabels['title'] = _ti
+
+        _au_tmdb = {_it_tmdb(it) for it in combined
+                    if getattr(it, '_search_channel', '') == 'animeunity' and _it_tmdb(it)}
+        if _au_tmdb:
+            _before = len(combined)
+            combined = [it for it in combined
+                        if getattr(it, '_search_channel', '') == 'animeunity'
+                        or getattr(it, '_search_type', '') != 'anime'
+                        or _it_tmdb(it) not in _au_tmdb]
+            if len(combined) != _before:
+                logger.info('[PrippiSearch] AnimeUnity preferred: dropped %d duplicate anime result(s)'
+                            % (_before - len(combined)))
+
+        def _relevance_key(it):
+            raw   = (it.fulltitle or it.title or '').lower()
+            clean = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip()
+            is_sc    = (getattr(it, '_search_channel', '') == 'sc')
+            is_cb01  = (getattr(it, '_search_channel', '') == 'cineblog01')
+            exact    = (clean == query_clean)
+            if not exact and len(_q_sig) >= 2:
+                # Stesse parole significative = stesso titolo frasato diverso
+                # ("I pirati DI Silicon Valley" per query "... DELLA ..."):
+                # deve ordinarsi come exact, non affondare in fondo alla lista.
+                _c = _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', '', clean)).strip()
+                exact = (_sig_words(_c) == _q_sig)
+            starts   = clean.startswith(query_clean)
+            contains = (query_clean in clean)
+            # Tuple: (priority_bucket 0-10, title for stable secondary sort)
+            # Order: SC > CB01 > everything else
+            if exact    and is_sc:   return (0,  clean)
+            if exact    and is_cb01: return (1,  clean)
+            if exact:                return (2,  clean)
+            if starts   and is_sc:   return (3,  clean)
+            if starts   and is_cb01: return (4,  clean)
+            if starts:               return (5,  clean)
+            if contains and is_sc:   return (6,  clean)
+            if contains and is_cb01: return (7,  clean)
+            if contains:             return (8,  clean)
+            if is_sc:                return (9,  clean)
+            if is_cb01:              return (10, clean)
+            return                          (11, clean)
+
+        combined.sort(key=_relevance_key)
+
+        def _norm_title(it):
+            """Normalized title for dedup fallback when tmdb_id is absent."""
+            raw = (it.fulltitle or it.title or '')
+            t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
+            t = _re.sub(r'[^a-z0-9 ]', '', t)
+            t = _re.sub(r'\s+', ' ', t).strip()
+            _source = (getattr(it, '_search_channel', '')
+                       or getattr(it, 'channel', '') or '').lower()
+            if (_source in ('raiplay', 'mediasetplay', 'la7') and _q_norm_raw
+                    and _re.search(r'(?:^|\s)' + _re.escape(_q_norm_raw)
+                                   + r'(?:\s|$)', t)):
+                return ' '.join(_q_sig) or _q_norm_raw
+            # Chiave senza stopword: le varianti di titolo dello STESSO film
+            # devono collidere ("I pirati della Silicon Valley" CB01 / "I pirati
+            # di Silicon Valley" hd4me) così la priorità per fonte sceglie il
+            # vincitore invece di mostrare due tile.
+            sig = ' '.join(_sig_words(t))
+            if sig:
+                return sig
+            # Titolo fatto di soli stopword: tieni la vecchia chiave
+            # (solo articolo iniziale via).
+            return _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
+
+        def _valid_thumb(it):
+            """Return True only if thumbnail is a usable URL or local path."""
+            t = (it.thumbnail or '').strip()
+            return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
+
+        # Catena di priorità per fonte (numero più basso = preferito) quando lo
+        # STESSO film arriva da più canali: SC sempre primo, poi hd4me (parte in
+        # streaming via Mega), poi CB01 (murato da Cloudflare → ultima spiaggia),
+        # poi qualsiasi altra fonte. Ordina solo il "vincitore" per titolo, non
+        # l'ordine tra titoli diversi.
+        _SRC_PRIO = {'sc': 0, 'streamingcommunity': 0, 'hd4me': 1, 'cineblog01': 2}
+
+        def _src_prio(it):
+            ch = (getattr(it, '_search_channel', '') or getattr(it, 'channel', '') or '').lower()
+            return _SRC_PRIO.get(ch, 5)
+
+        # Dedup by tmdb_id and by normalized title. Priority Anime: when the same
+        # title appears from both an anime source and a non-anime one, the anime
+        # version wins (keeps the anime source so playback uses the anime channel).
+        # The kept item takes the original (highest-relevance) slot, so cross-title
+        # ordering is preserved — only the per-title winner changes.
+        seen_tmdb  = {}   # tmdb  → index in deduped
+        seen_title = {}   # title → index in deduped
+        deduped    = []
+        for it in combined:
+            # Skip items with no valid thumbnail — they render as blank cards
+            if not _valid_thumb(it):
+                continue
+            nt   = _norm_title(it)
+            tmdb = (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb')
+            tkey = str(tmdb) if tmdb else None
+            # Locate an already-kept duplicate (by tmdb first, then by title)
+            dup_idx = None
+            matched_by_tmdb = False
+            if tkey is not None and tkey in seen_tmdb:
+                _prev = deduped[seen_tmdb[tkey]]
+                # Same TMDB id from the SAME channel but a DIFFERENT title = distinct
+                # parts of one show (e.g. AnimeWorld "Frieren … End" / "… End 2" /
+                # "… Mini Anime" all resolve to the same TMDB series once the sequel
+                # suffix is stripped for the match) → keep them ALL so every season/
+                # spin-off stays reachable. Only collapse a genuine duplicate: the
+                # same part, or the same show coming from another source.
+                if (nt and getattr(it, '_search_channel', '') == getattr(_prev, '_search_channel', '')
+                        and nt != _norm_title(_prev)):
+                    dup_idx = None
+                else:
+                    dup_idx = seen_tmdb[tkey]
+                    matched_by_tmdb = True
+            elif nt and nt in seen_title:
+                cand = seen_title[nt]
+                cand_tmdb = (deduped[cand].infoLabels or {}).get('tmdb_id') or (deduped[cand].infoLabels or {}).get('tmdb')
+                # Same normalized title but BOTH carry a tmdb_id and they DIFFER →
+                # two different shows that merely share a name (e.g. "Glitch" tmdb
+                # 63201 vs 136699) → NOT a duplicate, keep both.  Title dedup only
+                # applies when at least one side lacks a tmdb (the fallback case).
+                if tkey is not None and cand_tmdb and str(cand_tmdb) != tkey:
+                    dup_idx = None
+                else:
+                    dup_idx = cand
+            if dup_idx is not None:
+                # Duplicate: Priority Anime — replace the kept item with an anime one
+                # ONLY when it's genuinely the same title (matched by tmdb, or neither
+                # side has a tmdb_id = pure anime-vs-anime title match).  Never let a
+                # no-tmdb anime hijack a tmdb-identified non-anime title via a title
+                # collision (e.g. an anime "Glitch" replacing the SC series "Glitch",
+                # tmdb 136699 — which made the real result vanish and fail to play).
+                prev = deduped[dup_idx]
+                prev_tmdb = (prev.infoLabels or {}).get('tmdb_id') or (prev.infoLabels or {}).get('tmdb')
+                if (getattr(it, '_search_type', '') == 'anime'
+                        and getattr(prev, '_search_type', '') != 'anime'
+                        and (matched_by_tmdb or not prev_tmdb)):
+                    deduped[dup_idx] = it
+                # Scala di priorità per fonte (SC > hd4me > CB01 > altri): a parità
+                # di titolo tieni la fonte preferita. Non scavalca mai un vincitore
+                # anime (che resta gestito dalla regola sopra).
+                elif (getattr(prev, '_search_type', '') != 'anime'
+                        and _src_prio(it) < _src_prio(prev)):
+                    deduped[dup_idx] = it
+                continue
+            if tkey is None and not nt:
+                continue   # no tmdb and no usable title → skip
+            idx = len(deduped)
+            if tkey is not None:
+                seen_tmdb[tkey] = idx
+            if nt:
+                seen_title[nt] = idx
+            deduped.append(it)
+
+        logger.info('[PrippiSearch] deduped %d -> %s' % (len(deduped), [
+            ((it.fulltitle or it.title), getattr(it, '_search_channel', '?'),
+             (it.infoLabels or {}).get('tmdb_id') or (it.infoLabels or {}).get('tmdb'),
+             getattr(it, '_search_type', '')) for it in deduped]))
+
+        _search_final_cache_put(query, deduped)
+
+        # Non-SC items are played via the channel flow (see _launch_item), which
+        # sets up inputstream.adaptive/DRM correctly — so there is no background
+        # link pre-testing here anymore (it played raw URLs that wouldn't start).
+
+        # ── Step 4a-bis: special One Piece handling ──
+        # When the user searches "One Piece", replace the dozens of scattered
+        # anime/CB01 results with the unified provider items (2 main series +
+        # films + Live Action + OVA/special/spin-off), at the very top.
+        if 'one piece' in _re.sub(r'[^a-z0-9 ]', '', query_clean):
+            _op_groups = _onepiece_groups(deduped, sc_items=sc_items)
+            if _op_groups:
+                # Dedicated One Piece carousel layout (rows), no filter chips.
+                with self._lock:
+                    self._all_items = [it for _t, its in _op_groups for it in its]
+                    self._items = list(self._all_items)
+                self._show_op_rows(_op_groups)
+                try:
+                    self.getControl(SEARCH_LOADING).setVisible(False)
+                    self.getControl(SEARCH_NORESULTS).setVisible(False)
+                except Exception:
+                    pass
+                self._search_done.set()
+                return
+            # provider not ready → fall back to the normal flat grid
+            deduped = _onepiece_curate(deduped, want_extras=True,
+                                       at_front=True, force=True)
+
+        # ── Step 4b: store full set, apply the active filter, re-populate ──
+        with self._lock:
+            self._all_items = deduped
+        # Honour whatever filter chip the user may have selected while loading.
+        ftype = self._active_filter
+        shown = deduped if ftype == 'all' else [
+            it for it in deduped if getattr(it, '_search_type', 'film') == ftype]
+        with self._lock:
+            self._items = shown
+        try:
+            self.getControl(SEARCH_WL_SC).reset()
+        except Exception:
+            pass
+        self._populate_grid(shown)
+        if shown:
+            self._update_hero(shown[0])
+
+        # ── Step 5: Finalize ───────────────────────────────────────────
+        total = len(deduped)
+        try:
+            self.getControl(SEARCH_LOADING).setVisible(False)
+            if total == 0:
+                self.getControl(SEARCH_NORESULTS).setVisible(True)
+                self._set_progress('Nessun risultato trovato per questa ricerca.')
+            else:
+                self.getControl(SEARCH_NORESULTS).setVisible(not shown)
+                self._update_count_label()
+        except Exception:
+            pass
+        self._search_done.set()
+
+    def _prefetch_links(self, item_id, sources, event):
+        """Background: find first playable HD stream URL across ALL channel sources.
+
+        Strategy:
+          Phase 1 (parallel) — two task types submitted to the SAME thread pool:
+            A) For each known source (channels that returned this film in search):
+               call check()/findvideos() directly on the item URL.
+            B) For each OTHER active+global_search channel NOT already in sources:
+               search the channel for the film title, then call check()/findvideos()
+               on matching results. This covers channels that missed the film during
+               the global search (site slow, different indexing, etc.).
+          Phase 2 (sequential) — sort all collected server items HD-first via
+               sort_servers, resolve URLs one by one, stop at first working one.
+
+        No server names are hardcoded — we test whatever findvideos returns from
+        each channel (mixdrop, streamtape, voe, doodstream, … anything).
+        """
+        import re as _re
+
+        try:
+            _ART_RE = _re.compile(
+                r'^(il |la |lo |i |le |gli |l |un |una |uno |the |a |an )'
+            )
+            from core import servertools, channeltools
+            from core.servertools import sort_servers
+            from core.item import Item as _PFItem
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            import channelselector as _cs
+
+            # ── helpers ────────────────────────────────────────────────────────
+            def _norm(s):
+                s = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', s or '').strip().lower()
+                s = _re.sub(r'[^a-z0-9 ]', '', s)
+                return _re.sub(r'\s+', ' ', s).strip()
+
+            # Title: use original casing for search(), normalized for matching
+            _ref  = sources[0] if sources else None
+            _raw_title = (
+                (getattr(_ref, 'fulltitle', '') or getattr(_ref, 'title', ''))
+                if _ref else ''
+            )
+            # Strip Kodi colour tags from the raw title
+            _raw_title = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', _raw_title).strip()
+            _tq   = _norm(_raw_title)   # normalized version for title-match filtering
+            _known_channels = {getattr(s, 'channel', '') for s in sources}
+
+            def _fetch_servers(src):
+                """Call check()/findvideos() on a known source Item → server items."""
+                ch_name = getattr(src, 'channel', None)
+                if not ch_name or self._pf_cancelled.is_set():
+                    return []
+                try:
+                    ch  = __import__('channels.' + ch_name, fromlist=[ch_name])
+                    act = getattr(src, 'action', 'findvideos')
+                    if act == 'check' and hasattr(ch, 'check'):
+                        sv = ch.check(src)
+                    elif hasattr(ch, act):
+                        sv = getattr(ch, act)(src)
+                    elif hasattr(ch, 'findvideos'):
+                        sv = ch.findvideos(src)
+                    else:
+                        return []
+                    svlist = [i for i in (sv or []) if getattr(i, 'server', None)]
+                    if svlist:
+                        logger.debug('[NS-pf] fetch ch=%s → %d servers' % (ch_name, len(svlist)))
+                    return svlist
+                except Exception as _ex:
+                    logger.debug('[NS-pf] fetch ch=%s: %s' % (ch_name, str(_ex)))
+                    return []
+
+            def _search_and_fetch(ch_name):
+                """Search ch_name for the film title, call findvideos on matches → server items."""
+                if self._pf_cancelled.is_set() or not _raw_title:
+                    return []
+                try:
+                    ch = __import__('channels.' + ch_name, fromlist=[ch_name])
+                    if not hasattr(ch, 'search'):
+                        return []
+                    # Pass original (un-normalised) title so case-sensitive searches work
+                    results = ch.search(_PFItem(channel=ch_name), _raw_title) or []
+                    # Keep only results whose title STARTS WITH the query (after normalisation).
+                    # startswith rejects superset false-positives: "Un Amore per sempre"
+                    # contains all query words but does NOT start with "amore per sempre",
+                    # so it is correctly discarded. Quality/year suffixes are fine:
+                    # "Amore per sempre HD" and "Amore per sempre 2021" both pass.
+                    def _title_matches_ch(r):
+                        if not _tq:
+                            return False
+                        n = _norm(getattr(r, 'title', '') or '')
+                        # exact match OR result is query + suffix (quality/year)
+                        if n == _tq or n.startswith(_tq + ' '):
+                            return True
+                        # article-aware: if _tq starts with leading article, also try stripped
+                        _tq_stripped = _ART_RE.sub('', _tq, count=1).strip() if _ART_RE.match(_tq) else _tq
+                        if _tq_stripped != _tq:
+                            n_stripped = _ART_RE.sub('', n, count=1).strip()
+                            return (n_stripped == _tq_stripped
+                                    or n_stripped.startswith(_tq_stripped + ' ')
+                                    or _tq_stripped.startswith(n_stripped + ' '))
+                        return False
+
+                    matched = [r for r in results if _title_matches_ch(r)]
+                    if not matched:
+                        return []
+                    logger.debug('[NS-pf] search ch=%s → %d matches for "%s"' % (
+                        ch_name, len(matched), _raw_title))
+                    servers = []
+                    for m in matched[:1]:   # max 1 item per channel to avoid noise
+                        if self._pf_cancelled.is_set():
+                            break
+                        servers.extend(_fetch_servers(m))
+                    return servers
+                except Exception as _ex:
+                    logger.debug('[NS-pf] search_fetch ch=%s: %s' % (ch_name, str(_ex)))
+                    return []
+
+            # ── discover extra channels ────────────────────────────────────────
+            extra_channels = []
+            try:
+                for _ch in _cs.filterchannels('all'):
+                    if _ch.channel == 'streamingcommunity':
+                        continue
+                    if _ch.channel in _known_channels:
+                        continue
+                    cp = channeltools.get_channel_parameters(_ch.channel)
+                    if cp.get('active', False) and cp.get('include_in_global_search', False):
+                        extra_channels.append(_ch.channel)
+            except Exception as _ex:
+                logger.debug('[NS-pf] extra channels detection: %s' % str(_ex))
+
+            logger.info('[NS-pf] sources=%d known=%s · extra=%s · title="%s"' % (
+                len(sources), sorted(_known_channels), sorted(extra_channels[:5]), _raw_title))
+
+            # ── Phase 1: all tasks run in the SAME parallel pool ───────────────
+            all_sv = []
+            with ThreadPoolExecutor(
+                    max_workers=deviceprofile.worker_count('search', 6)) as pool:
+                futs = {}
+                for src in sources:
+                    futs[pool.submit(_fetch_servers, src)] = getattr(src, 'channel', '?')
+                for ch in extra_channels:
+                    futs[pool.submit(_search_and_fetch, ch)] = ch
+                for fut in as_completed(futs):
+                    if self._pf_cancelled.is_set():
+                        break
+                    all_sv.extend(fut.result() or [])
+
+            if not all_sv or self._pf_cancelled.is_set():
+                return
+
+            logger.info('[NS-pf] Phase 1 total server items: %d' % len(all_sv))
+
+            # ── Phase 2: sort HD-first, test sequentially, stop at first working ─
+            for si in sort_servers(all_sv):
+                if self._pf_cancelled.is_set():
+                    break
+                try:
+                    video_urls, ok, _ = servertools.resolve_video_urls_for_playing(
+                        si.server, si.url)
+                    if ok and video_urls:
+                        _stream_url = video_urls[0][1]
+                        # Skip if the resolved URL is an image (e.g. mixdrop returning
+                        # a CDN thumbnail instead of a real stream).
+                        _IMAGE_EXT = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')
+                        if any(_stream_url.lower().split('?')[0].endswith(ext)
+                               for ext in _IMAGE_EXT):
+                            logger.info('[NS-pf] SKIP image URL server=%s url=%.60s' % (
+                                si.server, _stream_url))
+                            continue
+                        self._prefetch_results[item_id] = (si, video_urls[0])
+                        logger.info('[NS-pf] FOUND server=%s qual=%s url=%.60s' % (
+                            si.server, getattr(si, 'quality', '?'), video_urls[0][1]))
+                        return  # stop immediately
+                except Exception:
+                    continue
+
+        except Exception as ex:
+            logger.error('[NS-pf] fatal: %s' % str(ex))
+        finally:
+            self._prefetch_results.setdefault(item_id, None)
+            event.set()
+            logger.info('[NS-pf] done item_id=%d found=%s' % (
+                item_id, 'YES' if self._prefetch_results.get(item_id) else 'NO'))
+
+    def _set_progress(self, text):
+        try:
+            self.getControl(SEARCH_PROGRESS).setLabel(text)
+        except Exception:
+            pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# PrippiBrowseWindow — single-screen category browser (SC + CB01 + AnimeUnity)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Browse window control IDs ────────────────────────────────
+BROWSE_EXIT        = 122
+BROWSE_COUNT       = 121
+BROWSE_TAB_FILM    = 200
+BROWSE_TAB_SERIE   = 201
+BROWSE_TAB_KDRAMA  = 202
+BROWSE_TAB_ANIME   = 203
+BROWSE_TAB_HENTAI  = 204   # dedicated HENTAI macro (hentaisaturn.tv), gated by 'show_adult_anime'
+BROWSE_BREADCRUMB  = 210
+BROWSE_SORT        = 211
+BROWSE_GENRES      = 140
+BROWSE_GRID        = 160
+BROWSE_HERO_POSTER = 150
+BROWSE_HERO_TITLE  = 151
+BROWSE_HERO_META   = 152
+BROWSE_HERO_PLOT   = 153
+BROWSE_LOADING     = 170
+BROWSE_EMPTY       = 171
+BROWSE_PARK        = 165   # off-screen button: focus is parked here during grid appends
+BROWSE_TAB_MAP = {BROWSE_TAB_FILM: 'film', BROWSE_TAB_SERIE: 'serie',
+                  BROWSE_TAB_KDRAMA: 'kdrama', BROWSE_TAB_ANIME: 'anime',
+                  BROWSE_TAB_HENTAI: 'hentai'}
+
+# Module caches (shared across re-opens of the browse window)
+_br_genre_cache   = {}              # macro -> list[genre dict]
+_br_cb01_genres   = {'film': None, 'serie': None}  # key -> {norm_name: url}
+
+
+def _br_clean(s):
+    import re as _re
+    return _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', s or '').strip()
+
+
+# SC "Korean drama" genre (type 'all', id 26). The dedicated K-DRAMA macro tab
+# (type=tv&country[]=118) is the canonical, more complete browse for K-dramas, so we
+# drop this genre from the Film/Serie/K-Drama sidebars to remove the duplication.
+def _is_kdrama_genre(name, gid):
+    if str(gid) == '26':
+        return True
+    n = (name or '').lower()
+    return any(k in n for k in ('korean', 'corean', 'k-drama', 'kdrama'))
+
+
+# Adult / sensitive AnimeUnity genres, hidden unless the user opts in (setting
+# 'show_adult_anime'). Substring match for the explicit ones (no false positives),
+# exact match for the 2-letter BL/GL codes.
+def _is_adult_anime_genre(name):
+    n = (name or '').strip().lower()
+    if n in ('bl', 'gl', 'boys love', 'girls love', 'shounen ai', 'shoujo ai',
+             'shounen-ai', 'shoujo-ai', 'smut'):
+        return True
+    return any(k in n for k in ('hentai', 'ecchi', 'yaoi', 'yuri'))
+
+
+def _trailer_kind(item):
+    """'anime' | 'kdrama' | '' — used to tune the YouTube trailer query (anime prefer
+    the opening; k-dramas rarely have an Italian trailer)."""
+    try:
+        ch = (getattr(item, '_search_channel', '') or getattr(item, 'channel', '') or '').lower()
+        if 'anime' in ch:
+            return 'anime'
+        info = getattr(item, 'infoLabels', None) or {}
+        if str(info.get('original_language', '') or '').lower() == 'ko':
+            return 'kdrama'
+    except Exception:
+        pass
+    return ''
+
+
+def _br_norm_title(it):
+    import re as _re
+    raw = (getattr(it, 'fulltitle', '') or getattr(it, 'title', '') or '')
+    t = _re.sub(r'\[/?[A-Za-z][^\]]*\]', '', raw).strip().lower()
+    t = _re.sub(r'[^a-z0-9 ]', '', t)
+    t = _re.sub(r'\s+', ' ', t).strip()
+    t = _re.sub(r'^(il |la |lo |i |le |gli |un |una |uno |the |a |an )', '', t)
+    return t
+
+
+def _br_year(it):
+    info = getattr(it, 'infoLabels', None) or {}
+    y = info.get('year') or getattr(it, 'year', '') or ''
+    try:
+        y = int(str(y)[:4])
+        if 1900 <= y <= 2100:
+            return y
+    except Exception:
+        pass
+    return 0
+
+
+def _br_valid_thumb(it):
+    t = (getattr(it, 'thumbnail', '') or '').strip()
+    return bool(t) and t.lower() not in ('none', 'false', 'null', 'n/a')
+
+
+def _br_is_korean(it):
+    """Best-effort K-Drama detection from TMDB-enriched infoLabels."""
+    info = getattr(it, 'infoLabels', None) or {}
+    lang = str(info.get('original_language', '') or '').lower()
+    if lang == 'ko':
+        return True
+    oc = info.get('origin_country') or info.get('country') or ''
+    if isinstance(oc, (list, tuple)):
+        oc = ','.join(str(x) for x in oc)
+    oc = str(oc)
+    return ('KR' in oc) or ('Korea' in oc) or ('Corea' in oc)
+
+
+def _br_fetch_genres(macro):
+    """Return [{'name','sc_id','anime_item'}] for *macro*. Cached per macro.
+
+    SC genres carry a 'type' (movie / tv / all). Film must use movie+all genres,
+    Serie & K-Drama tv+all — otherwise picking a wrong-type genre returns ~0
+    titles (e.g. the TV genre 'Action & Adventure' under Film gave 1 result).
+    """
+    if macro in _br_genre_cache:
+        return _br_genre_cache[macro]
+    genres = [{'name': 'Tutti', 'sc_id': None, 'anime_item': None}]
+    try:
+        from core.item import Item as _Item
+        if macro in ('film', 'serie', 'kdrama'):
+            import channels.streamingcommunity as _sc
+            dp = _sc.get_data(_sc.host + '/it/archive')
+            raw = ((dp or {}).get('props', {}) or {}).get('genres', []) or []
+            want = ('movie', 'all') if macro == 'film' else ('tv', 'all')
+            picked, seen = [], set()
+            for g in raw:
+                if g.get('type') not in want:
+                    continue
+                name = (g.get('name') or '').strip()
+                gid  = g.get('id')
+                key  = name.lower()
+                # Drop the "Korean drama" genre: superseded by the dedicated K-DRAMA
+                # macro tab (avoids the duplicate the tester flagged).
+                if _is_kdrama_genre(name, gid):
+                    continue
+                if name and gid is not None and key not in seen:
+                    seen.add(key)
+                    picked.append({'name': name, 'sc_id': str(gid), 'anime_item': None})
+            picked.sort(key=lambda d: d['name'].lower())
+            genres.extend(picked)
+        elif macro == 'anime':
+            import channels.animeunity as _au
+            seed = _Item(channel='animeunity', url=_au.host, args={})
+            for g in (_au.genres(seed) or []):
+                name = _br_clean(getattr(g, 'title', ''))
+                if name:
+                    # 18+/sensitive anime genres now live in the dedicated HENTAI macro
+                    # (hentaisaturn.tv) — always dropped from ANIME.
+                    if _is_adult_anime_genre(name):
+                        continue
+                    genres.append({'name': name, 'sc_id': None, 'anime_item': g})
+        elif macro == 'hentai':
+            # HENTAI merges TWO sources: hentaisaturn.tv (explicit, PRIMARY — wins
+            # on a duplicate title) and AnimeUnity's adult/suggestive genres (ecchi,
+            # yaoi, yuri, BL/GL…), which are dropped from the ANIME macro. "Tutti"
+            # pulls from BOTH; every site's genres are also listed individually. A
+            # genre present on both sites (e.g. Yaoi/Yuri) is merged into a single
+            # entry that fetches both (hentaisaturn still wins on a title clash).
+            import channels.hentaisaturn as _hs
+            genres[0] = {'name': 'Tutti', 'sc_id': None, 'anime_item': None,
+                         'hs': True, 'hs_item': None, 'au': True, 'au_item': None,
+                         'au_all': True}
+            by_name = {}   # lower(name) -> dict, so same-named genres merge
+            hs_seed = _Item(channel='hentaisaturn', url=_hs.host + '/genres')
+            for g in (_hs.generi(hs_seed) or []):
+                name = _br_clean(getattr(g, 'title', ''))
+                if not name:
+                    continue
+                d = {'name': name, 'sc_id': None, 'anime_item': None,
+                     'hs': True, 'hs_item': g, 'au': False, 'au_item': None,
+                     'au_all': False}
+                by_name[name.lower()] = d
+                genres.append(d)
+            try:
+                import channels.animeunity as _au
+                au_seed = _Item(channel='animeunity', url=_au.host, args={})
+                for g in (_au.genres(au_seed) or []):
+                    name = _br_clean(getattr(g, 'title', ''))
+                    if not name or not _is_adult_anime_genre(name):
+                        continue
+                    key = name.lower()
+                    if key in by_name:                 # same genre on both sites → merge
+                        by_name[key]['au'] = True
+                        by_name[key]['au_item'] = g
+                    else:
+                        d = {'name': name, 'sc_id': None, 'anime_item': None,
+                             'hs': False, 'hs_item': None, 'au': True, 'au_item': g,
+                             'au_all': False}
+                        by_name[key] = d
+                        genres.append(d)
+            except Exception as exc:
+                logger.error('[Browse] hentai AU genres: %s' % str(exc)[:160])
+    except Exception as exc:
+        logger.error('[Browse] genres %s: %s' % (macro, str(exc)[:160]))
+    _br_genre_cache[macro] = genres
+    return genres
+
+
+def _br_cb01_genre_map(macro):
+    """Return {normalized_genre_name: category_url} for CB01 film/serie. Cached."""
+    key = 'serie' if macro == 'serie' else 'film'
+    if _br_cb01_genres.get(key) is not None:
+        return _br_cb01_genres[key]
+    mp = {}
+    try:
+        import channels.cineblog01 as _cb
+        from core.item import Item as _Item
+        if key == 'film':
+            seed = _Item(channel='cineblog01', url=_cb.host,
+                         args='Film per Genere', contentType='movie')
+        else:
+            seed = _Item(channel='cineblog01', url=_cb.host.rstrip('/') + '/serietv/',
+                         args='Serie-TV x Genere', contentType='tvshow')
+        for g in (_cb.menu(seed) or []):
+            name = _br_clean(getattr(g, 'title', '')).lower()
+            url  = getattr(g, 'url', '') or ''
+            if name and url:
+                mp[name] = url
+    except Exception as exc:
+        logger.error('[Browse] cb01 genres %s: %s' % (key, str(exc)[:160]))
+    _br_cb01_genres[key] = mp
+    return mp
+
+
+def _open_browse(parent_window=None):
+    """Open the category-browser modal."""
+    _nb_cls = globals().get('PrippiBrowseWindow')
+    if _nb_cls is None:
+        return
+    try:
+        if parent_window is not None:
+            parent_window._bg_ui_pause.clear()
+        win = PrippiBrowseWindow('PrippiBrowse.xml', config.get_runtime_path(),
+                                  parent_window=parent_window)
+        win.doModal()
+        del win
+    except Exception as exc:
+        xbmc.log('[PrippiBrowse] _open_browse ERROR: %s' % str(exc), xbmc.LOGERROR)
+    finally:
+        if parent_window is not None:
+            parent_window._bg_ui_pause.set()
+
+
+class PrippiBrowseWindow(xbmcgui.WindowXML):
+    """Single-screen browser: macro tabs + genre sidebar + sort + poster grid."""
+
+    ACTION_EXIT = 10
+    ACTION_BACK = 92
+
+    def __init__(self, xmlFilename, scriptPath, parent_window=None, **kwargs):
+        super().__init__(xmlFilename, scriptPath, **kwargs)
+        self._parent_window = parent_window
+        self._macro    = 'film'
+        self._sort     = 'recent'           # recent | old
+        self._genres   = []                 # list of genre dicts for current macro
+        self._genre_idx = 0
+        self._items    = []                 # currently displayed titles (accumulated)
+        self._last_pos = 0
+        self._last_hover = None              # last grid pos hovered by mouse (throttle)
+        self._restore_to = None              # one-shot: grid pos to re-assert after an append
+        self._restore_until = 0              # deadline (epoch s) for the restore window
+        self._alive    = True
+        self._lock     = threading.Lock()
+        self._cancelled = threading.Event()
+        self._load_seq = 0                  # guards against stale background loads
+        # Pagination state (per current macro+genre+sort)
+        self._sc_page  = 1                  # next SC archive page to fetch (1-based)
+        self._sc_total = 0                  # SC totalCount for the current filter (0=unknown)
+        self._hs_page  = 0                  # HENTAI: hentaisaturn /filter page
+        self._hs_done  = False              # HENTAI: hentaisaturn source exhausted
+        self._hs_au_gi = 0                  # HENTAI: index into adult-AU-genre list
+        self._hs_au_page = 0                # HENTAI: page within current adult AU genre
+        self._au_more  = False              # HENTAI: AnimeUnity adult source has more
+        self._au_year  = None               # AnimeUnity year-walk: current year
+        self._au_ypage = 0                  # AnimeUnity year-walk: page within year
+        self._au_oldest = 1966              # AnimeUnity oldest release year
+        self._has_more = False              # more pages available → infinite scroll
+        self._sc_phase = 0                  # Plan B: 0=block0, 1=year walk, 2=drain deferred
+        self._sc_year  = None               # Plan B: current year being paged
+        self._sc_grand = 0                  # Plan B: grand total for the filter
+        self._sc_retry = 0                  # Plan B: retries on ignored/throttled year
+        self._sc_deferred = []              # Plan B: years SC throttled → retried in drain phase
+        self._sc_defer_n  = {}              # Plan B: per-year defer count (caps the drain)
+        self._sc_resume   = {}              # Plan B: per-year page to resume from in the drain
+        self._sc_dyear    = None            # Plan B: deferred year being drained (phase 2)
+        self._loading  = False              # a load is in flight (guards load-more)
+        self._inited   = False              # guard: onInit re-fires after a fullscreen trailer/video
+
+    # ── lifecycle ─────────────────────────────────────────────────────────
+    def onInit(self):
+        try:
+            self.setProperty('macro', self._macro)
+            self._gate_hentai_tab()
+            # Kodi re-creates this WindowXML (and re-fires onInit) when it returns
+            # to front after a fullscreen video (trailer or playback). In that case
+            # restore the cached state + last focus instead of reloading from zero.
+            if self._inited:
+                self._restore_after_reinit()
+                return
+            self._inited = True
+            self._set_macro('film', focus_genres=True)
+        except Exception as exc:
+            logger.error('[Browse] onInit: %s' % str(exc))
+
+    def _gate_hentai_tab(self):
+        """Show the HENTAI macro tab only when enabled (setting 'show_adult_anime').
+        When hidden, re-wire ANIME↔EXIT so the tab row stays fully traversable.
+        Read fresh on every open, so toggling the setting takes effect next time
+        Browse is opened (no addon reload needed)."""
+        try:
+            on = bool(config.get_setting('show_adult_anime'))
+        except Exception:
+            on = False
+        try:
+            self.getControl(BROWSE_TAB_HENTAI).setVisible(on)
+        except Exception:
+            pass
+        try:
+            anime = self.getControl(BROWSE_TAB_ANIME)
+            exit_b = self.getControl(BROWSE_EXIT)
+            if on:
+                anime.controlRight(self.getControl(BROWSE_TAB_HENTAI))
+                exit_b.controlLeft(self.getControl(BROWSE_TAB_HENTAI))
+            else:
+                anime.controlRight(exit_b)
+                exit_b.controlLeft(anime)
+        except Exception:
+            pass
+
+    def _restore_after_reinit(self):
+        """Re-populate the freshly re-created sidebar + grid from cached state and
+        restore the last selected card. Never re-fetches from the network."""
+        try:
+            self.setProperty('macro', self._macro)
+            # Genre sidebar
+            try:
+                self.getControl(BROWSE_GENRES).reset()
+                self.getControl(BROWSE_GENRES).addItems(
+                    [xbmcgui.ListItem(label=g['name'], offscreen=True) for g in self._genres])
+                if 0 <= self._genre_idx < len(self._genres):
+                    self.getControl(BROWSE_GENRES).selectItem(self._genre_idx)
+            except Exception:
+                pass
+            # Breadcrumb
+            try:
+                genre = (self._genres[self._genre_idx]
+                         if 0 <= self._genre_idx < len(self._genres) else {'name': 'Tutti'})
+                crumb = self._MACRO_LABELS.get(self._macro, '') + (
+                    '  ›  ' + genre['name'] if genre.get('name') != 'Tutti' else '')
+                self.getControl(BROWSE_BREADCRUMB).setLabel('[B]%s[/B]' % crumb)
+            except Exception:
+                pass
+            # Grid
+            with self._lock:
+                items = list(self._items)
+            self._populate_grid(items)
+            try:
+                self.getControl(BROWSE_LOADING).setVisible(False)
+                self.getControl(BROWSE_EMPTY).setVisible(not items)
+                if self._sc_total:
+                    self.getControl(BROWSE_COUNT).setLabel(
+                        '[B]%d[/B] di %d titoli' % (len(items), self._sc_total))
+                else:
+                    self.getControl(BROWSE_COUNT).setLabel('[B]%d[/B] titoli' % len(items))
+            except Exception:
+                pass
+            # Restore the last selected card + focus
+            if items:
+                pos = self._last_pos if 0 <= self._last_pos < len(items) else 0
+                try:
+                    self.getControl(BROWSE_GRID).selectItem(pos)
+                    self.setFocusId(BROWSE_GRID)
+                    self._update_hero(items[pos])
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error('[Browse] _restore_after_reinit: %s' % str(exc))
+
+    def onAction(self, action):
+        aid = action.getId()
+        _note_touch_action(aid)
+        if aid == self.ACTION_EXIT and _is_touch_mode():
+            return   # long-press → click destro → PREVIOUS_MENU: non è Back sul touch
+        if aid in (self.ACTION_EXIT, self.ACTION_BACK):
+            self._alive = False
+            self._cancelled.set()
+            self.close()
+            return
+        # Mouse hover: the grid highlight follows the cursor but no focus event
+        # fires per card — refresh the hero from the hovered card here (throttled).
+        if aid == ACTION_MOUSE_MOVE:
+            self._hover_hero()
+            return
+        if aid in (ACTION_LEFT, ACTION_RIGHT, ACTION_UP, ACTION_DOWN,
+                   ACTION_WHEEL_UP, ACTION_WHEEL_DOWN):
+            if self.getFocusId() == BROWSE_GRID:
+                # ARROW keys only: re-assert the post-append position on the GUI thread,
+                # in-band with the auto-repeat flood that a bg restore loses to when DOWN
+                # is held. Mouse wheel / hover are deliberately excluded — they use only
+                # _arm_restore's bg loop, the path confirmed flicker-free.
+                if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT):
+                    self._apply_restore()
+                threading.Thread(target=self._deferred_hero_update, daemon=True).start()
+
+    def _hover_hero(self):
+        """Refresh the hero from the grid card currently under the mouse cursor.
+        Throttled: only fires when the hovered position changed."""
+        try:
+            if self.getFocusId() != BROWSE_GRID:
+                return
+            pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+            if pos == self._last_hover:
+                return
+            self._last_hover = pos
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._last_pos = pos
+                self._update_hero(items[pos])
+        except Exception:
+            pass
+
+    def onClick(self, control_id):
+        if control_id == BROWSE_EXIT:
+            self._alive = False
+            self._cancelled.set()
+            self.close()
+            return
+        if control_id in BROWSE_TAB_MAP:
+            self._set_macro(BROWSE_TAB_MAP[control_id], focus_genres=True)
+            return
+        if control_id == BROWSE_GENRES:
+            try:
+                pos = int(self.getControl(BROWSE_GENRES).getSelectedPosition() or 0)
+            except Exception:
+                pos = 0
+            self._select_genre(pos)
+            return
+        if control_id == BROWSE_GRID:
+            try:
+                pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._open_detail(self._items[pos])
+            except Exception as exc:
+                logger.error('[Browse] onClick grid: %s' % str(exc))
+
+    def onFocus(self, control_id):
+        if control_id == BROWSE_GRID:
+            try:
+                pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                if 0 <= pos < len(self._items):
+                    self._last_pos = pos
+                    self._update_hero(self._items[pos])
+                self._maybe_load_more(pos)
+            except Exception:
+                pass
+
+    def _maybe_load_more(self, pos):
+        """Infinite scroll: load the next page well BEFORE focus reaches the grid end,
+        so the next block has appeared by the time the user gets there — they should
+        rarely sit on the very last card waiting (where DOWN has nowhere to go)."""
+        if self._has_more and not self._loading and pos >= len(self._items) - 30:
+            self._load_titles(append=True)
+
+    def _deferred_hero_update(self):
+        xbmc.sleep(80)
+        try:
+            pos = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+            with self._lock:
+                items = list(self._items)
+            if 0 <= pos < len(items):
+                self._last_pos = pos
+                self._update_hero(items[pos])
+            self._maybe_load_more(pos)
+        except Exception:
+            pass
+
+    # ── macro / genre navigation ──────────────────────────────────────────
+    def _sync_sort_label(self):
+        try:
+            self.getControl(BROWSE_SORT).setLabel(
+                'Più recenti' if self._sort == 'recent' else 'Meno recenti')
+        except Exception:
+            pass
+
+    _MACRO_LABELS = {'film': 'FILM', 'serie': 'SERIE TV',
+                     'kdrama': 'K-DRAMA', 'anime': 'ANIME', 'hentai': 'HENTAI'}
+
+    def _set_macro(self, macro, focus_genres=False):
+        # All network (genre list + titles) runs off the GUI thread so switching
+        # macro never blocks/freezes the addon.
+        self._macro = macro
+        self.setProperty('macro', macro)
+        try:
+            self.getControl(BROWSE_GRID).reset()
+            self.getControl(BROWSE_GENRES).reset()
+            self.getControl(BROWSE_EMPTY).setVisible(False)
+            self.getControl(BROWSE_LOADING).setVisible(True)
+            self.getControl(BROWSE_COUNT).setLabel('')
+            self.getControl(BROWSE_BREADCRUMB).setLabel(
+                '[B]%s[/B]' % self._MACRO_LABELS.get(macro, ''))
+        except Exception:
+            pass
+        self._load_seq += 1
+        seq = self._load_seq
+        threading.Thread(target=self._macro_thread,
+                         args=(macro, focus_genres, seq), daemon=True).start()
+
+    def _macro_thread(self, macro, focus_genres, seq):
+        genres = _br_fetch_genres(macro)
+        if self._cancelled.is_set() or seq != self._load_seq:
+            return
+        self._genres = genres
+        self._genre_idx = 0
+        try:
+            self.getControl(BROWSE_GENRES).reset()
+            self.getControl(BROWSE_GENRES).addItems(
+                [xbmcgui.ListItem(label=g['name'], offscreen=True) for g in genres])
+            if focus_genres:
+                self.getControl(BROWSE_GENRES).selectItem(0)
+                self.setFocusId(BROWSE_GENRES)
+        except Exception as exc:
+            logger.error('[Browse] populate genres: %s' % str(exc))
+        first = dict(genres[0]) if genres else {'name': 'Tutti', 'sc_id': None, 'anime_item': None}
+        # Load the first genre in THIS thread (seq still valid → no main-thread block)
+        self._run_load(macro, first, self._sort, seq, append=False)
+
+    def _select_genre(self, pos):
+        if not (0 <= pos < len(self._genres)):
+            pos = 0
+        self._genre_idx = pos
+        self._load_titles(append=False)
+
+    def _load_titles(self, append=False):
+        if not self._genres:
+            return
+        if append:
+            # Atomically claim the single in-flight append slot. Without the lock,
+            # keyboard auto-repeat fires many _maybe_load_more calls that all pass a
+            # plain `not self._loading` check before the bg thread sets the flag →
+            # concurrent appends double-add items and fight over the grid selection,
+            # which yanks the keyboard focus back to the top. (The mouse path
+            # self-heals because the selection follows the cursor; the keyboard
+            # path has no such correction, so the jump only shows with the arrows.)
+            with self._lock:
+                if self._loading or not self._has_more:
+                    return
+                self._loading = True
+        macro = self._macro
+        genre = dict(self._genres[self._genre_idx])
+        sort  = self._sort
+        if not append:
+            self._load_seq += 1
+            crumb = self._MACRO_LABELS.get(macro, '') + (
+                '  ›  ' + genre['name'] if genre['name'] != 'Tutti' else '')
+            try:
+                self.getControl(BROWSE_BREADCRUMB).setLabel('[B]%s[/B]' % crumb)
+                self.getControl(BROWSE_GRID).reset()
+                self.getControl(BROWSE_EMPTY).setVisible(False)
+                self.getControl(BROWSE_LOADING).setVisible(True)
+                self.getControl(BROWSE_COUNT).setLabel('')
+            except Exception:
+                pass
+        seq = self._load_seq
+        threading.Thread(target=self._run_load,
+                         args=(macro, genre, sort, seq, append), daemon=True).start()
+
+    # ── data layer ────────────────────────────────────────────────────────
+    def _run_load(self, macro, genre, sort, seq, append):
+        """Fetch one batch (page) and merge/append into the grid. Background only."""
+        self._loading = True
+        try:
+            if not append:
+                self._sc_page = 1
+                self._sc_total = 0
+                self._au_year = None         # AnimeUnity year-walk cursor (reset)
+                self._au_ypage = 0
+                # HENTAI macro cursors (hentaisaturn page + AnimeUnity adult walk)
+                self._hs_page = 0            # hentaisaturn /filter page
+                self._hs_done = False        # hentaisaturn source exhausted
+                self._hs_au_gi = 0           # index into the adult-AU-genre list
+                self._hs_au_page = 0         # page within the current adult AU genre
+                self._au_more = False        # AnimeUnity adult source has more
+                self._has_more = False
+                # Plan B (year-partition) pagination cursor — see _fetch_sc_pages.
+                self._sc_phase = 0       # 0 = unfiltered block 0, 1 = year walk, 2 = drain
+                self._sc_year = None     # current year being paged
+                self._sc_grand = 0       # unfiltered/filtered grand total
+                self._sc_retry = 0       # retries on an 'ignored'/throttled year
+                self._sc_deferred = []   # years SC throttled → retried in drain phase
+                self._sc_defer_n = {}    # per-year defer count (caps the drain)
+                self._sc_resume = {}     # per-year page to resume from in the drain
+                self._sc_dyear = None    # deferred year being drained (phase 2)
+                with self._lock:
+                    self._items = []
+            try:
+                sc_new, other_new = self._fetch_batch(macro, genre, append)
+            except Exception as exc:
+                logger.error('[Browse] fetch %s/%s: %s' % (
+                    macro, genre.get('name'), str(exc)[:160]))
+                sc_new, other_new = [], []
+            if self._cancelled.is_set() or seq != self._load_seq:
+                return
+            with self._lock:
+                existing = list(self._items)
+            # Keep SC's server order (release_date); just dedup the new items.
+            new_unique = self._dedup_new(existing, sc_new, other_new)
+            if self._cancelled.is_set() or seq != self._load_seq:
+                return
+            with self._lock:
+                self._items = existing + new_unique
+                # Special One Piece handling: in the Anime/Serie grids replace the
+                # AnimeUnity/CB01 One Piece clutter with the unified provider items.
+                # Only on the first page — _populate_grid re-renders the whole list
+                # there, whereas append paths add only new_unique to the grid.
+                if macro in ('anime', 'serie') and not append:
+                    self._items = _onepiece_curate(self._items, want_extras=False)
+                loaded = len(self._items)
+            if append:
+                # Keep the user exactly where they were. addItems on the FOCUSED panel
+                # animates the selection back to the top (a ~0.5s scroll glide up and
+                # back). _append_grid mutates while focus is parked off-screen so the
+                # panel never animates; _arm_restore is a cheap no-op backup.
+                try:
+                    keep = int(self.getControl(BROWSE_GRID).getSelectedPosition() or 0)
+                except Exception:
+                    keep = self._last_pos
+                keep = self._append_grid(new_unique, keep)
+                self._arm_restore(keep)
+            else:
+                self._populate_grid(self._items)
+            try:
+                self.getControl(BROWSE_LOADING).setVisible(False)
+                if loaded:
+                    self.getControl(BROWSE_EMPTY).setVisible(False)
+                    if self._sc_total:
+                        cnt = '[B]%d[/B] di %d titoli' % (loaded, self._sc_total)
+                    else:
+                        cnt = '[B]%d[/B] titoli%s' % (loaded, '  +' if self._has_more else '')
+                    self.getControl(BROWSE_COUNT).setLabel(cnt)
+                    if not append:
+                        self._update_hero(self._items[0])
+                else:
+                    self.getControl(BROWSE_EMPTY).setVisible(True)
+                    self.getControl(BROWSE_EMPTY).setLabel('Nessun titolo per questa categoria.')
+                    self.getControl(BROWSE_COUNT).setLabel('0 titoli')
+                    self._update_hero(None)
+            except Exception:
+                pass
+        finally:
+            self._loading = False
+
+    def _fetch_hentai_batch(self, genre):
+        """HENTAI batch: fetch from hentaisaturn (PRIMARY, returned in the sc_new
+        slot → wins the SC-wins dedup on a title clash) and/or AnimeUnity's adult
+        genres (other_new → loses). Both sources page independently; the infinite
+        scroll continues while EITHER still has more. Returns (hs_items, au_items)."""
+        hs_items, au_items = [], []
+        if genre.get('hs', True) and not getattr(self, '_hs_done', False):
+            hs_items = self._fetch_hentai(genre, self._hs_page)
+            self._hs_page += 1
+            if len(hs_items) < 20:
+                self._hs_done = True                 # hentaisaturn exhausted
+        if genre.get('au'):
+            au_items = self._fetch_hentai_au(genre)  # sets self._au_more
+        self._has_more = (not getattr(self, '_hs_done', True)
+                          and genre.get('hs', True)) or bool(getattr(self, '_au_more', False))
+        return hs_items, au_items
+
+    def _fetch_hentai_au(self, genre):
+        """Fetch a page of AnimeUnity adult content for HENTAI. For a single adult
+        genre, page through it directly; for "Tutti" (au_all) page through the union
+        of the adult genres, exhausting each before moving to the next. Simple offset
+        pagination (HENTAI is not year-sorted). Sets self._au_more."""
+        import channels.animeunity as _au
+        out = []
+        try:
+            _au._ensure_init()
+            if genre.get('au_all'):
+                au_genres = [x['au_item'] for x in self._genres
+                             if x.get('au_item') is not None]
+            else:
+                g = genre.get('au_item')
+                au_genres = [g] if g is not None else []
+            if not au_genres:
+                self._au_more = False
+                return out
+            # Walk genres from the current cursor until we get a non-empty page or
+            # run out (skips genres that page out empty without stalling the scroll).
+            while self._hs_au_gi < len(au_genres):
+                g = au_genres[self._hs_au_gi]
+                seed = g.clone(page=self._hs_au_page,
+                               args=dict(getattr(g, 'args', {}) or {}))
+                raw = [x for x in (_au.peliculas(seed) or [])
+                       if getattr(x, 'action', '') in ('findvideos', 'episodios')]
+                for x in raw:
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'animeunity'
+                    x._search_channel = 'animeunity'
+                    try:
+                        x.infoLabels['_enr'] = 1     # keep native AnimeUnity poster
+                    except Exception:
+                        pass
+                    out.append(x)
+                if len(raw) >= 30:
+                    self._hs_au_page += 1            # more pages in this genre
+                else:
+                    self._hs_au_page = 0             # genre done → next genre
+                    self._hs_au_gi += 1
+                if out:
+                    break                            # non-empty batch → return it
+            self._au_more = self._hs_au_gi < len(au_genres)
+            return out
+        except Exception as exc:
+            logger.error('[Browse] hentai AU fetch: %s' % str(exc)[:160])
+            self._au_more = False
+            return out
+
+    def _fetch_hentai(self, genre, page):
+        """Fetch a page of HentaiSaturn series for the HENTAI macro (the /filter
+        listing, or a genre's /filter?categories=<id>). page is 0-based here."""
+        import channels.hentaisaturn as _hs
+        from core.item import Item as _Item
+        import re as _re_h
+        out = []
+        try:
+            g = genre.get('hs_item')
+            base = getattr(g, 'url', None) or (_hs.host + '/filter')
+            base = _re_h.sub(r'[?&]page=\d+', '', base)
+            sep = '&' if '?' in base else '?'
+            pno = max(1, int(page) + 1)
+            url = '%s%spage=%d' % (base, sep, pno)
+            seed = _Item(channel='hentaisaturn', url=url, page=pno)
+            for x in (_hs.peliculas(seed) or []):
+                if getattr(x, 'action', '') != 'episodios':
+                    continue                       # skip the trailing "next page" marker
+                if not getattr(x, 'channel', ''):
+                    x.channel = 'hentaisaturn'
+                x._search_channel = 'hentaisaturn'
+                try:
+                    x.infoLabels['_enr'] = 1       # keep native hentaisaturn poster (no TMDB)
+                except Exception:
+                    pass
+                out.append(x)
+        except Exception as exc:
+            logger.error('[Browse] hentaisaturn fetch: %s' % str(exc)[:160])
+        return out
+
+    def _fetch_batch(self, macro, genre, append):
+        """Fetch the next page → (sc_new, other_new). Updates pagination + _has_more."""
+        from concurrent.futures import ThreadPoolExecutor
+        sc_new, other_new = [], []
+        if macro == 'anime':
+            other_new = self._fetch_anime(genre)   # walks release years; sets self._has_more
+            return sc_new, other_new
+        if macro == 'hentai':
+            # hentaisaturn goes in the sc_new slot so the SC-wins dedup keeps its
+            # version of a title over the AnimeUnity one (hentaisaturn precedence).
+            return self._fetch_hentai_batch(genre)
+        # film / serie / kdrama → SC archive paged server-side (+ CB01 first page)
+        n_pages = 1 if append else 2
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_sc = pool.submit(self._fetch_sc_pages, macro, genre, n_pages)
+            f_cb = (pool.submit(self._fetch_cb01, macro, genre)
+                    if (macro in ('film', 'serie') and not append) else None)
+            try:
+                sc_new = f_sc.result() or []
+            except Exception as exc:
+                logger.error('[Browse] SC fetch: %s' % str(exc)[:160])
+            if f_cb is not None:
+                try:
+                    other_new = f_cb.result() or []
+                except Exception as exc:
+                    logger.error('[Browse] CB01 fetch: %s' % str(exc)[:160])
+        return sc_new, other_new
+
+    def _sc_archive_url(self, macro, genre, year=None):
+        import channels.streamingcommunity as _sc
+        ctype = 'movie' if macro == 'film' else 'tv'   # serie + kdrama → tv
+        url = _sc.host + '/it/archive?type=' + ctype
+        if genre.get('sc_id'):
+            url += '&genre[]=' + genre['sc_id']
+        if macro == 'kdrama':
+            url += '&country[]=%d' % _sc.KOREA_COUNTRY_ID   # South Korea
+        if year:
+            # Per-year partition: SC caps the archive at page 20 (1200 titles) per
+            # filter, but the (undocumented) &year=YYYY filter is exact and each year
+            # stays well under 1200 → walking years bypasses the cap. Verified live.
+            url += '&year=%d' % year
+        return url
+
+    # SC caps archive pagination: page>20 returns HTTP 503 "Page limit reached (20)".
+    # So at most 20×60 = 1200 titles are browsable per filter. Genres with ≤1200
+    # titles are fully accessible; for bigger sets (e.g. "Tutti") only the newest
+    # 1200 (recent) / oldest-of-1200 (old) are reachable — a hard site limit.
+    _MAX_SC_PAGE = 20
+
+    _MIN_SC_YEAR = 1901      # SC archive rejects year<1901 (HTTP 422)
+
+    # Drain-phase tuning (a throttled — 'ignored' — year is always transient, so it
+    # must be retried until it succeeds, never dropped): _SC_DEFER_CAP re-queues each
+    # year up to N times; _SC_DRAIN_RETRY is the in-place drain retries per pop. These
+    # values give full year coverage in simulation up to ~60% sustained throttling
+    # while staying bounded (always terminates). Real throttling is far lower.
+    _SC_DEFER_CAP   = 8
+    _SC_DRAIN_RETRY = 3
+
+    def _fetch_sc_pages(self, macro, genre, n_pages):
+        """Fetch up to *n_pages* SC archive pages (60/each), bypassing SC's hard
+        1200-title (page-20) cap by partitioning the catalog with the &year=YYYY
+        filter (exact, disjoint per year, each year well under 1200 — verified).
+
+        'recent': block 0 = the unfiltered newest ≤1200 (fast first paint + covers
+        no-year titles in the newest set), then a year walk descending from the
+        CURRENT year down to 1901 — every year, not from block 0's oldest year, so the
+        years only partially covered by block 0 are not skipped. 'old': years ascending
+        from 1901. Years SC throttled ('ignored' the &year filter) during the walk are
+        queued and retried in a final drain phase. Cross-segment duplicates are removed
+        by the caller's _dedup_new (by title)."""
+        import channels.streamingcommunity as _sc
+        from core.item import Item as _Item
+        import datetime
+        cap   = self._MAX_SC_PAGE
+        maxy  = datetime.date.today().year + 1
+        out   = []
+
+        def _fetch(url, page):
+            try:
+                items, total = _sc.browse(
+                    _Item(channel='streamingcommunity', url=url, page=page))
+            except Exception as exc:
+                logger.error('[Browse] SC browse y=%s p%d: %s'
+                             % (self._sc_year, page, str(exc)[:120]))
+                items, total = [], 0
+            for x in items:
+                x._search_channel = 'sc'
+            return items, total
+
+        def _seg_done(items, total):
+            return (not items) or (self._sc_page > cap) \
+                or (total and (self._sc_page - 1) * 60 >= total)
+
+        def _ignored(items, want):
+            """True if SC did NOT apply the &year=want filter (transient throttling →
+            it returned the catalog newest instead). Throttle-proof: judged by the
+            per-title release years, not the (falsifiable) totalCount. A real &year
+            page is (near-)monoyear; a throttled one is the catalog-newest spread of
+            years → flag when fewer than half of the known-year items match `want`.
+            (The plain 'want not in years' test missed the CURRENT year, whose titles
+            ARE the catalog newest → its deep pages got silently skipped.)"""
+            yr_items = [y for y in (_br_year(x) for x in items) if y]
+            if not yr_items:
+                return False
+            matched = sum(1 for y in yr_items if y == want)
+            return matched * 2 < len(yr_items)
+
+        def _year_fetch(direction, lo, hi):
+            """Fetch one page of the current year; advance to the next year when the
+            year is exhausted, empty, or 'ignored'. Every year in [1901, cur_year] is a
+            valid filter, so an 'ignored' response there is always transient throttling
+            (never a genuine empty) → retry briefly, then DEFER the year (retried in the
+            drain phase once load eases, resuming from the page that failed) instead of
+            skipping it for good, which is what opened the year gaps before."""
+            items, total = _fetch(self._sc_archive_url(macro, genre, self._sc_year),
+                                  self._sc_page)
+            if items and _ignored(items, self._sc_year):
+                self._sc_retry += 1
+                if self._sc_retry < 2:
+                    import time as _t
+                    _t.sleep(0.4)                # let transient throttling ease
+                    self._has_more = True        # retry same year/page next call
+                    return []
+                self._sc_retry = 0               # defer this year, step on for now
+                if self._sc_defer_n.get(self._sc_year, 0) < self._SC_DEFER_CAP:
+                    self._sc_defer_n[self._sc_year] = \
+                        self._sc_defer_n.get(self._sc_year, 0) + 1
+                    self._sc_resume[self._sc_year] = self._sc_page   # resume here later
+                    if self._sc_year not in self._sc_deferred:
+                        self._sc_deferred.append(self._sc_year)
+                self._sc_year += direction
+                self._sc_page = 1
+                self._has_more = (lo <= self._sc_year <= hi) or bool(self._sc_deferred)
+                return []
+            self._sc_retry = 0
+            self._sc_page += 1
+            if _seg_done(items, total):
+                self._sc_year += direction
+                self._sc_page = 1
+            # Keep paging alive while years remain in range OR still pending in the
+            # drain queue — without the deferred-OR the walk's last in-range year sets
+            # has_more False and the scroll loop exits BEFORE the drain phase ever runs.
+            self._has_more = (lo <= self._sc_year <= hi) or bool(self._sc_deferred)
+            return items
+
+        def _drain_fetch():
+            """Phase 2: retry the years SC throttled during the walk (load has since
+            eased). One deferred year at a time; bounded by _sc_defer_n so it always
+            terminates. Re-defers a still-throttled year up to its cap, then drops it."""
+            if self._sc_dyear is None:
+                if not self._sc_deferred:
+                    self._has_more = False
+                    return []
+                self._sc_dyear = self._sc_deferred.pop(0)
+                self._sc_page  = self._sc_resume.get(self._sc_dyear, 1)  # resume, not p1
+                self._sc_retry = 0
+            items, total = _fetch(self._sc_archive_url(macro, genre, self._sc_dyear),
+                                  self._sc_page)
+            if items and _ignored(items, self._sc_dyear):
+                self._sc_retry += 1
+                if self._sc_retry < self._SC_DRAIN_RETRY:
+                    import time as _t
+                    _t.sleep(0.5)
+                    self._has_more = True
+                    return []
+                self._sc_retry = 0
+                if self._sc_defer_n.get(self._sc_dyear, 0) < self._SC_DEFER_CAP:
+                    self._sc_defer_n[self._sc_dyear] = \
+                        self._sc_defer_n.get(self._sc_dyear, 0) + 1
+                    self._sc_resume[self._sc_dyear] = self._sc_page   # resume here later
+                    self._sc_deferred.append(self._sc_dyear)
+                self._sc_dyear = None
+                self._has_more = bool(self._sc_deferred)
+                return []
+            self._sc_retry = 0
+            self._sc_page += 1
+            if _seg_done(items, total):
+                self._sc_dyear = None             # this year done → next on next call
+            self._has_more = bool(self._sc_deferred) or self._sc_dyear is not None
+            return items
+
+        def _one():
+            """Do one archive fetch, advance the year/phase cursor, return items."""
+            cur_year = datetime.date.today().year
+            # ── phase 2: drain the years SC throttled during the walk (any sort) ──
+            if self._sc_phase == 2:
+                return _drain_fetch()
+            # ── 'old' sort → years ascending (oldest first) ──
+            if self._sort == 'old':
+                if self._sc_year is None:
+                    self._sc_year, self._sc_page = self._MIN_SC_YEAR, 1
+                if self._sc_year > maxy:
+                    self._sc_phase = 2
+                    return _drain_fetch()
+                return _year_fetch(+1, self._MIN_SC_YEAR, maxy)
+            # ── 'recent', phase 0: unfiltered newest (block 0) ──
+            if self._sc_phase == 0:
+                items, total = _fetch(self._sc_archive_url(macro, genre), self._sc_page)
+                if total:
+                    self._sc_total = self._sc_grand = total
+                self._sc_page += 1
+                if self._sc_grand and self._sc_grand > cap * 60:
+                    # Large filter: keep block 0 to ONE page only (fast first paint +
+                    # grand total + the no-year titles in the newest set), then walk
+                    # EVERY year from the current one down to 1901. A full 20-page
+                    # block 0 re-fetched the entire newest-1200 set as duplicates during
+                    # the walk → the grid stalled at ~1200 ("stuck at 1201"); a 1-page
+                    # block 0 overlaps the walk by a single page, which the new-item
+                    # counter in the gather loop skips. Walking from the current year
+                    # (not block 0's oldest year) is what closes the 2024→2017 gap.
+                    self._sc_phase = 1
+                    self._sc_year  = cur_year
+                    self._sc_page  = 1
+                    self._has_more = True
+                elif _seg_done(items, total):
+                    self._has_more = False        # small filter (≤1200) fully paged
+                else:
+                    self._has_more = True         # small filter: keep paging unfiltered
+                return items
+            # ── 'recent', phase 1: years descending through the whole range ──
+            if self._sc_year is None or self._sc_year < self._MIN_SC_YEAR:
+                self._sc_phase = 2
+                return _drain_fetch()
+            return _year_fetch(-1, self._MIN_SC_YEAR, cur_year + 1)
+
+        # Gather until we have ~target NEW (not-already-shown) titles, not just raw
+        # pages: the year walk overlaps the newest titles (block 0 + the newest slice
+        # of each recent year), so counting raw pages would let an all-duplicate batch
+        # leave the grid unchanged ("stuck at 1201"). Counting post-dedup novelty
+        # powers through those duplicate pages so every batch visibly grows the grid.
+        with self._lock:
+            seen = {_br_norm_title(it) for it in self._items}
+        seen.discard('')
+        target_new = 30 * max(1, n_pages)
+        got_new, attempts = 0, 0
+        while got_new < target_new and attempts < 40:
+            if self._cancelled.is_set():
+                break
+            items = _one()
+            attempts += 1
+            for it in items:
+                nt = _br_norm_title(it)
+                if nt and nt not in seen:
+                    seen.add(nt)
+                    got_new += 1
+            if items:
+                out.extend(items)
+            if not self._has_more:
+                break
+        return out
+
+    def _fetch_cb01(self, macro, genre):
+        import channels.cineblog01 as _cb
+        from core.item import Item as _Item
+        name = (genre.get('name') or '').lower()
+        out = []
+        try:
+            if genre.get('sc_id') is None:
+                # "Tutti" → reuse the channel's own newest() (proven path; avoids the
+                # heavy serie-newest regex that froze the addon when args='newest'
+                # was combined with /serietv/).
+                raw = _cb.newest('series' if macro == 'serie' else 'movie') or []
+            else:
+                gmap = _br_cb01_genre_map(macro)
+                url = gmap.get(name)
+                if not url:
+                    return []
+                seed = _Item(channel='cineblog01', url=url,
+                             contentType='tvshow' if macro == 'serie' else 'movie')
+                raw = _cb.peliculas(seed) or []
+            for x in raw:
+                if getattr(x, 'action', '') in ('findvideos', 'episodios'):
+                    x._search_channel = 'cineblog01'
+                    # newest() builds bare Items with no channel, so episodios()
+                    # routing (via _get_channel_episodes) would import 'channels.'
+                    # and fail. Stamp the owning channel so play/detail work.
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'cineblog01'
+                    out.append(x)
+        except Exception as exc:
+            logger.error('[Browse] cb01 peliculas: %s' % str(exc)[:160])
+        return out
+
+    def _fetch_anime(self, genre):
+        """Fetch the next AnimeUnity batch, WALKING release years so anime are
+        ordered by year like the SC macros: 'recent' = current year → 1966
+        (descending), 'old' = 1966 → current (ascending). AnimeUnity's archive
+        supports an exact &year filter (each anime's own release year, disjoint),
+        so each year is paged (30/req) before stepping to the next. Sets
+        self._has_more for the infinite scroll."""
+        import channels.animeunity as _au
+        from core.item import Item as _Item
+        import datetime, re as _re_yr
+        out = []
+        try:
+            _au._ensure_init()
+            cur = datetime.date.today().year
+            if self._au_year is None:
+                m = _re_yr.search(r'anime_oldest_date="(\d+)"', _au._archivio_data or '')
+                self._au_oldest = int(m.group(1)) if m else 1966
+                self._au_year = cur if self._sort == 'recent' else self._au_oldest
+            g = genre.get('anime_item')
+            base = dict(getattr(g, 'args', {}) or {}) if g is not None else {}
+
+            def _in_range(y):
+                return (y >= self._au_oldest) if self._sort == 'recent' else (y <= cur)
+
+            # Walk years until this batch has items (skip empty years) or the range
+            # is exhausted, so the grid never gets an empty page mid-walk.
+            for _ in range(80):
+                if not _in_range(self._au_year):
+                    break
+                _args = dict(base)
+                _args['year'] = self._au_year
+                seed = (g.clone(page=self._au_ypage, args=_args) if g is not None
+                        else _Item(channel='animeunity', url=_au.host, args=_args, page=self._au_ypage))
+                raw = [x for x in (_au.peliculas(seed) or [])
+                       if getattr(x, 'action', '') in ('findvideos', 'episodios')]
+                for x in raw:
+                    if not getattr(x, 'channel', ''):
+                        x.channel = 'animeunity'
+                    x._search_channel = 'animeunity'
+                    try:
+                        x.infoLabels['_enr'] = 1
+                    except Exception:
+                        pass
+                    out.append(x)
+                if len(raw) >= 30:
+                    self._au_ypage += 1                 # more pages left this year
+                else:
+                    self._au_ypage = 0                  # year done → step to the next
+                    self._au_year += (-1 if self._sort == 'recent' else 1)
+                if out:                                 # got a non-empty batch → return it
+                    break
+            self._has_more = self._au_ypage > 0 or _in_range(self._au_year)
+        except Exception as exc:
+            logger.error('[Browse] animeunity year-walk: %s' % str(exc)[:160])
+            self._has_more = False
+        return out
+
+    def _dedup_new(self, existing, sc_new, other_new):
+        """SC-wins dedup of the NEW items against what's already shown.
+        SC listed first so its version wins on duplicate normalized titles."""
+        seen = set()
+        for it in existing:
+            nt = _br_norm_title(it)
+            if nt:
+                seen.add(nt)
+        out = []
+        for it in list(sc_new) + list(other_new):
+            if not _br_valid_thumb(it):
+                continue
+            nt = _br_norm_title(it)
+            if nt:
+                if nt in seen:
+                    continue
+                seen.add(nt)
+            out.append(it)
+        return out
+
+    # ── grid / hero ───────────────────────────────────────────────────────
+    def _make_li(self, it):
+        li = xbmcgui.ListItem(label=it.fulltitle or it.title or '', offscreen=True)
+        li.setArt({'thumb': it.thumbnail or ''})
+        li.setProperty('thumbnail', it.thumbnail or '')
+        y = _br_year(it)
+        li.setProperty('ylabel', str(y) if y else '')
+        return li
+
+    def _populate_grid(self, items):
+        if self._cancelled.is_set():
+            return
+        try:
+            self.getControl(BROWSE_GRID).reset()
+            self.getControl(BROWSE_GRID).addItems([self._make_li(it) for it in items])
+        except Exception as exc:
+            logger.error('[Browse] populate grid: %s' % str(exc))
+
+    def _append_grid(self, items, keep=0):
+        """Append new cards WITHOUT the scroll-to-top glide. addItems on a FOCUSED
+        panel animates the selection back to position 0 (a ~0.5s cubic scroll up, then
+        our restore scrolls back) — visible with both mouse and keyboard. Fix (same
+        trick the Continua-a-guardare row uses): park focus on an off-screen button so
+        the panel is UNFOCUSED while we addItems + re-select the spot; an unfocused
+        container sets its position with no animation, so refocusing lands the user
+        exactly where they were, no movement at all. The park button's self-referencing
+        navigation means a held-down arrow key does nothing during the parked instant.
+        Returns the grid position it pinned (the caller arms its restore backup on it)."""
+        if self._cancelled.is_set() or not items:
+            return keep
+        try:
+            grid = self.getControl(BROWSE_GRID)
+            try:
+                need_park = (self.getFocusId() == BROWSE_GRID)
+            except Exception:
+                need_park = False
+            parked = False
+            if need_park:
+                # Move focus off the grid so addItems can't animate the panel back to
+                # the top. CRUCIAL: addItems runs synchronously, but a focus change can
+                # lag behind a held-key auto-repeat flood — so addItems would hit the
+                # STILL-focused grid and reset to 0 (the occasional keyboard
+                # scroll-to-top; the mouse never floods input, so it never raced). Wait
+                # (re-asserting) until the park really took effect before mutating.
+                for _ in range(24):
+                    try:
+                        if self.getFocusId() == BROWSE_PARK:
+                            parked = True
+                            break
+                        self.setFocusId(BROWSE_PARK)
+                    except Exception:
+                        break
+                    xbmc.sleep(5)
+                if not parked:
+                    logger.error('[Browse] append: focus-park not confirmed')
+            # Position is frozen now (focus is OFF the grid), so read the REAL current
+            # spot here rather than trusting the value captured before the park wait —
+            # during that wait the held key kept moving the selection, so the old value
+            # was stale.
+            try:
+                pos = int(grid.getSelectedPosition() or 0)
+            except Exception:
+                pos = keep
+            if pos <= 0:
+                pos = keep
+            try:
+                grid.addItems([self._make_li(it) for it in items])
+                if pos > 0:
+                    grid.selectItem(pos)        # single, unfocused → no scroll animation
+            finally:
+                if parked:
+                    # SINGLE refocus. Re-asserting setFocusId(GRID) when the grid is
+                    # ALREADY focused makes Kodi reset the panel selection to 0 — that
+                    # re-assert loop was itself the "returns to the top" regression.
+                    try:
+                        self.setFocusId(BROWSE_GRID)
+                    except Exception:
+                        pass
+            return pos
+        except Exception as exc:
+            logger.error('[Browse] append grid: %s' % str(exc))
+            return keep
+
+    def _arm_restore(self, keep):
+        """Hold the post-append grid selection at *keep* so addItems can't drag focus
+        away. The bg re-assert loop below is the ONLY thing the mouse path uses — it is
+        the behaviour confirmed flicker-free in testing, so it must stay exactly this:
+        re-select keep a few times over a short window, stopping the instant the user
+        has scrolled past it (never fighting forward navigation). It also stamps a brief
+        window so onAction can re-assert on the GUI thread for held-down ARROW keys,
+        whose auto-repeat flood out-races a bg-only restore."""
+        if keep <= 0:
+            self._restore_to = None
+            return
+        import time as _t
+        self._restore_to = keep
+        self._restore_until = _t.time() + 0.5
+        try:
+            grid = self.getControl(BROWSE_GRID)
+        except Exception:
+            return
+        for _ in range(5):
+            try:
+                if int(grid.getSelectedPosition() or 0) >= keep:
+                    self._restore_to = None     # already at/past keep (focus-park worked)
+                    return
+                grid.selectItem(keep)           # backup: a real reset slipped through
+            except Exception:
+                return
+            xbmc.sleep(20)
+
+    def _apply_restore(self):
+        """GUI-thread re-assert, called from onAction on the ARROW keys ONLY (the mouse
+        path relies solely on _arm_restore's bg loop). Holds the selection at the armed
+        keep until the user scrolls past it or the short window lapses — beating the
+        auto-repeat input flood that a background thread loses to when DOWN is held."""
+        keep = self._restore_to
+        if keep is None:
+            return
+        import time as _t
+        if _t.time() > self._restore_until:
+            self._restore_to = None
+            return
+        try:
+            if self.getFocusId() != BROWSE_GRID:
+                return                          # not the grid now → retry later, don't disarm
+            grid = self.getControl(BROWSE_GRID)
+            if int(grid.getSelectedPosition() or 0) >= keep:
+                self._restore_to = None         # at/past keep (focus-park worked) → done
+            else:
+                grid.selectItem(keep)           # backup: a real reset slipped through
+        except Exception:
+            self._restore_to = None
+
+    def _update_hero(self, item):
+        if item is None:
+            for cid in (BROWSE_HERO_TITLE, BROWSE_HERO_META, BROWSE_HERO_PLOT):
+                try:
+                    self.getControl(cid).setLabel('')
+                except Exception:
+                    pass
+            try:
+                self.getControl(BROWSE_HERO_POSTER).setImage('')
+            except Exception:
+                pass
+            return
+        try:
+            try:
+                self.getControl(BROWSE_HERO_POSTER).setImage(item.thumbnail or '')
+            except Exception:
+                pass
+            self.getControl(BROWSE_HERO_TITLE).setLabel(item.fulltitle or item.title or '')
+            info = item.infoLabels or {}
+            year   = str(info.get('year', '')) if info.get('year') else ''
+            rating = ('★ %.1f' % float(info.get('rating', 0))) if info.get('rating') else ''
+            ct = (getattr(item, 'contentType', '') or '').lower()
+            tlabel = ('SERIE' if ct in ('tvshow', 'season', 'episode')
+                      else ('FILM' if ct == 'movie' else ''))
+            if self._macro == 'anime':
+                tlabel = 'ANIME'
+            parts = [p for p in [tlabel, year, rating] if p]
+            self.getControl(BROWSE_HERO_META).setLabel('   ·   '.join(parts))
+            plot = str(info.get('plot', '') or '').strip()
+            if len(plot) > 240:
+                plot = plot[:237].rstrip() + '…'
+            self.getControl(BROWSE_HERO_PLOT).setLabel(plot)
+        except Exception as exc:
+            logger.error('[Browse] _update_hero: %s' % str(exc))
+
+    # ── play / detail (delegates to the home window) ──────────────────────
+    def _restore_focus(self):
+        """Re-select the last-focused card (covers backing out of the detail card
+        when the window was NOT re-created)."""
+        try:
+            with self._lock:
+                n = len(self._items)
+            if n:
+                pos = self._last_pos if 0 <= self._last_pos < n else 0
+                self.getControl(BROWSE_GRID).selectItem(pos)
+                self.setFocusId(BROWSE_GRID)
+        except Exception:
+            pass
+
+    def _open_detail(self, item):
+        try:
+            dw = DetailWindow('DetailWindow.xml', config.get_runtime_path(), item=item)
+            dw.doModal()
+            result = getattr(dw, '_result', None)
+            sel_s  = getattr(dw, '_selected_season',  None)
+            sel_e  = getattr(dw, '_selected_episode', None)
+            dl_eps = getattr(dw, '_download_eps', None)
+            del dw
+            pw = self._parent_window
+            if result == 'play':
+                if sel_s is not None and sel_e is not None and pw is not None:
+                    _is_sc = (getattr(item, 'channel', '') == 'streamingcommunity'
+                              or getattr(item, '_search_channel', '') == 'sc')
+                    if _is_sc:
+                        threading.Thread(target=pw._play_episode_direct,
+                                         args=(item, sel_s, sel_e), daemon=True).start()
+                    else:
+                        threading.Thread(target=pw._play_episode_direct_nonsc,
+                                         args=(item, sel_e), daemon=True).start()
+                elif pw is not None:
+                    pw._launch(item, source_window=self)
+            elif result == 'download' and pw is not None:
+                threading.Thread(target=pw._start_download,
+                                 args=(item, dl_eps), daemon=True).start()
+            else:
+                # Just closed the detail card → keep the last selected card focused.
+                self._restore_focus()
+        except Exception as exc:
+            logger.error('[Browse] _open_detail: %s' % str(exc))
+
+
+xbmc.log('[PrippiBrowse] MODULE: PrippiBrowseWindow defined OK', xbmc.LOGINFO)
+
+
+def _purge_legacy_videolibrary():
+    """One-shot removal of the abandoned video-library saved content (the .strm/.nfo
+    the old Stream4me 'save to library' feature created). PrippiStream has no
+    video-library UI, so these files are orphaned. Runs ONCE per device after the
+    update that ships this code (guarded by a marker file) → propagates to every
+    install. Only the addon's OWN default library dir is touched; a user-customised
+    videolibrarypath (which could point at a real external folder) is left alone."""
+    try:
+        import os, shutil
+        data = config.get_data_path()
+        marker = os.path.join(data, '.vl_purged_v1')
+        if os.path.exists(marker):
+            return
+        vl_dir = os.path.join(data, 'videolibrary')   # addon-owned default location
+        if os.path.isdir(vl_dir):
+            shutil.rmtree(vl_dir, ignore_errors=True)
+            logger.info('[VLPurge] removed legacy videolibrary data: %s' % vl_dir)
+        try:
+            with open(marker, 'w') as fh:
+                fh.write('1')
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.error('[VLPurge] %s' % str(exc))
+
+
+def open_prippi_home():
+    """Public entry point — called from launcher.py."""
+    # Clear a stale flag from a previous home BEFORE checking Kodi. Clearing it
+    # after the check lost an abort delivered in between and let onInit create a
+    # new window while Kodi was already destroying controls (1.9.954 race).
+    _shutdown_event.clear()
+    try:
+        from platformcode import live_remote
+        live_remote.clear_session()
+    except Exception:
+        pass
+    monitor = xbmc.Monitor()
+    if monitor.abortRequested():
+        _shutdown_event.set()
+        logger.info('[PrippiHome] apertura ignorata: Kodi è in arresto')
+        return
+    _purge_legacy_videolibrary()   # one-shot legacy library cleanup (per device)
+    # The previous session may have been force-killed (blocked network threads →
+    # "script didn't stop in 5 seconds"), leaving module locks/flags in a broken
+    # state that would deadlock playback.  Reset them for a clean slate.
+    try:
+        sportchannels.reset_state()
+    except Exception:
+        pass
+    win = PrippiHomeWindow('PrippiHome.xml', config.get_runtime_path())
+    win.show()
+    while not monitor.abortRequested() and win._alive:
+        monitor.waitForAbort(0.5)
+    # Signal all background threads to stop BEFORE destroying the window.
+    # _shutdown_event tells every BG network thread not to issue new HTTP requests.
+    # The currently-in-flight request will finish within its 3-second socket timeout,
+    # then the thread checks the flag and returns — all within Kodi's 5-second window.
+    win._alive = False
+    try:
+        win._end_live_remote_session()
+    except Exception:
+        pass
+    _shutdown_event.set()     # unblocks all BG network threads immediately
+    try:
+        sportchannels.abort_probes()   # stop any running probe from blocking exit
+    except Exception:
+        pass
+    xbmc.sleep(300)   # brief pause so threads notice _alive=False / _shutdown_event
+    del win

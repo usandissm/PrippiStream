@@ -643,6 +643,8 @@ class Session(SessionRedirectMixin):
 
         # Send the request
         r = adapter.send(request, **kwargs)
+        if r is None:
+            raise ConnectionError('transport returned no HTTP response')
 
         # Total elapsed time of the request (approximately)
         elapsed = preferred_clock() - start

@@ -1,0 +1,12 @@
+{
+  "id": "onepiece",
+  "name": "One Piece",
+  "active": true,
+  "adult": false,
+  "language": ["ita", "sub-ita"],
+  "thumbnail": "animeunity.png",
+  "banner": "animeunity.png",
+  "categories": ["anime"],
+  "include_in_global_search": false,
+  "settings": []
+}

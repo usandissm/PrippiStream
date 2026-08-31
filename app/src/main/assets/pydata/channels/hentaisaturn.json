@@ -1,0 +1,12 @@
+{
+    "id": "hentaisaturn",
+    "name": "HentaiSaturn",
+    "active": true,
+    "adult": true,
+    "language": ["ita"],
+    "thumbnail": "hentaisaturn.png",
+    "banner": "hentaisaturn.png",
+    "categories": ["hentai"],
+    "include_in_global_search": false,
+    "settings": []
+}

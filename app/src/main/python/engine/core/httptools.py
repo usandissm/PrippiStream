@@ -42,16 +42,9 @@ cf_proxy_list = [{'url': 'quiet-base-584a.ifewfijdqwji.workers.dev', 'token': 'c
 
 # direct IP access for some hosts
 directIP = {
-    'akki.monster': '31.220.1.77',
-    'akvi.club': '31.220.1.77',
-    'akvi.icu': '31.220.1.77',
-    'akvideo.stream': '31.220.1.77',
     'vcrypt.net': '31.220.1.77',
     'vcrypt.pw': '31.220.1.77',
-    # 'vidtome.host': '94.75.219.1',
     'nored.icu': '31.220.1.77',
-    'wstream.icu': '31.220.1.77',
-    'wstream.video': '31.220.1.77',
     'krask.xyz': '31.220.1.77',
 }
 
@@ -453,6 +446,19 @@ def downloadpage(url, **opt):
                 req = session.get(url, allow_redirects=opt.get('follow_redirects', True),
                                   timeout=opt['timeout'])
         except Exception as e:
+            try:
+                from platformcode import perf
+                if perf.ENABLED:
+                    _err = e.__class__.__name__
+                    _ms = (time.time() - inicio) * 1000
+                    # classe dell'errore in chiaro: Timeout/ConnectionError =
+                    # linea o blocco; SSLError = intercettazione/certificati
+                    perf.note('http.err', '%s %s %.0f ms (%s)'
+                              % (domain, _err, _ms, str(e)[:120]))
+                    from platformcode import netdiag
+                    netdiag.record(domain, False, 0, _ms, 0, err=_err)
+            except Exception:
+                pass
             from lib import requests
             req = requests.Response()
             if not opt.get('ignore_response_code', False) and not proxy_data.get('stat', ''):
@@ -488,6 +494,13 @@ def downloadpage(url, **opt):
 
     if req.headers.get('Server', '').startswith('cloudflare') and response_code in [429, 503, 403]\
             and not opt.get('CF', False): # and not opt.get('post', None):
+        try:
+            from platformcode import perf
+            if perf.ENABLED:
+                perf.note('net.block', 'cloudflare HTTP %s su %s -> retry via proxy'
+                          % (response_code, domain))
+        except Exception:
+            pass
         if 'Px-Host' in req_headers:  # first try with proxy
             logger.debug("CF retry with google translate for domain: %s" % domain)
             from lib import proxytranslate
@@ -527,7 +540,33 @@ def downloadpage(url, **opt):
     try:
         from platformcode import perf
         if perf.ENABLED:
-            perf.note('http', '%s %s %.0f ms' % (domain, response_code, (time.time() - inicio) * 1000))
+            _ms = (time.time() - inicio) * 1000
+            try:
+                _ttfb = req.elapsed.total_seconds() * 1000
+            except Exception:
+                _ttfb = 0
+            try:
+                _nb = len(req.content) if req.content else 0
+            except Exception:
+                _nb = 0
+            # ttfb = attesa server/rete; il resto e' download del corpo:
+            # ttfb alto = latenza/linea o server lento, KB/s bassi su corpi
+            # grossi = banda. Cosi' si separa "linea" da "codice".
+            _extra = ''
+            if _nb and _ms > _ttfb > 0:
+                _body_s = max((_ms - _ttfb) / 1000.0, 0.05)
+                _extra = ', %.0f KB @ %.0f KB/s' % (_nb / 1024.0, _nb / 1024.0 / _body_s)
+            elif _nb:
+                _extra = ', %.0f KB' % (_nb / 1024.0)
+            perf.note('http', '%s %s %.0f ms (ttfb %.0f ms%s)'
+                      % (domain, response_code, _ms, _ttfb, _extra))
+            try:
+                _ok = int(response_code) < 400
+            except Exception:
+                _ok = False
+            from platformcode import netdiag
+            netdiag.record(domain, _ok, _ttfb, _ms, _nb,
+                           err='' if _ok else 'HTTP %s' % response_code)
     except Exception:
         pass
 

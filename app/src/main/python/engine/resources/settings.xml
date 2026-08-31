@@ -11,19 +11,26 @@
          hidden settings is tracked as a future task ("Option 3").
          ════════════════════════════════════════════════════════════════════ -->
 
-    <!-- Generale -->
-    <category label="70168">
+    <!-- Generale. Etichette LETTERALI (non id .po): Kodi risolve gli id numerici
+         nella lingua della SUA interfaccia, quindi con Kodi in inglese uscivano
+         "Network"/"Enable debug logging". Come Download/Personalizzazione/Supporto. -->
+    <category label="Generale">
         <setting id="addon_version_display" type="text" label="Versione installata" enable="false" default=""/>
-        <setting label="70787" type="lsep"/>
-        <setting id="autostart" type="bool" label="70706" default="true"/>
-        <setting id="resolver_dns" type="bool" label="707408" default="true" enable="true" visible="true"/>
+        <setting label="Rete" type="lsep"/>
+        <setting id="autostart" type="bool" label="Esegui PrippiStream all'avvio di Kodi" default="true"/>
+        <setting id="resolver_dns" type="bool" label="Attiva override DNS" default="true" enable="true" visible="true"/>
+        <!-- eq(-1,true) = "il setting PRECEDENTE è true", cioè resolver_dns: perciò le
+             due impostazioni nascoste sotto NON possono stare in mezzo ai due (prima
+             ci stavano, e il menù a tendina restava visibile col DNS override spento). -->
+        <setting id="resolver_dns_provider" type="select" label="Scegli il fornitore DNS" default="Google" values="Cloudflare|Google" visible="eq(-1,true)"/>
         <!-- v2 FASE 2: riuso connessioni HTTP (adapter condiviso). false = percorso legacy -->
         <setting id="http_session_reuse" type="bool" default="true" visible="false"/>
         <!-- v2 FASE 3: snapshot su disco delle righe home (paint istantaneo alla riapertura). false = sempre cold -->
         <setting id="home_snapshot" type="bool" default="true" visible="false"/>
-        <setting id="resolver_dns_provider" type="select" label="707409" default="Google" values="Cloudflare|Google" visible="eq(-1,true)"/>
-        <setting label="70788" type="lsep"/>
-        <setting id="debug" type="bool" label="30003" default="false"/>
+        <setting label="Logging" type="lsep"/>
+        <setting id="debug" type="bool" label="Abilita logging di debug" default="false"/>
+        <setting id="quiet_debug_default_applied" type="bool" default="false" visible="false"/>
+        <setting id="quiet_perf_default_applied" type="bool" default="false" visible="false"/>
 
         <!-- ── Hidden engine settings: read by the live engine, kept with their
              defaults; UI removed. Do NOT delete (would break playback / resolver /
@@ -77,25 +84,28 @@
         <setting id="lista_activa" type="text" default="addonfavorites-default.json" visible="false"/>
     </category>
 
-    <!-- Download (feature PrippiStream "I miei download") -->
-    <category label="30153">
-        <setting id="downloadenabled" type="bool" label="70689" default="false"/>
-        <setting id="downloadpath" type="folder" label="30017" visible="eq(-1,true)" default="" option="writeable"/>
-        <setting id="download_concurrency" type="slider" label="32101" range="1,1,3" option="int" default="1"/>
-        <setting id="show_downloads_row" type="bool" label="32103" default="true"/>
-        <!-- Hidden legacy download settings (kept with defaults) -->
+    <!-- Download (feature PrippiStream "I miei download").
+         Rimosse le voci legacy Stream4me: 'downloadenabled' (letto solo da codice
+         morto/irraggiungibile, NON dalla nostra feature) e library_move / browser /
+         server_speed / language / quality (mai lette da nessuno).
+         'downloadpath' era nascosta dietro 'downloadenabled' (visible="eq(-1,true)"),
+         cioè dietro un interruttore morto: ora è sempre visibile. -->
+    <!-- Etichette LETTERALI (non id .po): l'addon è italiano, ma Kodi risolve gli
+         id numerici nella lingua della sua UI (se Kodi è in inglese uscivano
+         "Download path"/"Parallel downloads"). Come Personalizzazione/Supporto. -->
+    <category label="Download">
+        <setting id="downloadpath" type="folder" label="Percorso download" default="" option="writeable"/>
+        <setting id="download_concurrency" type="slider" label="Download simultanei" range="1,1,3" option="int" default="1"/>
+        <setting id="show_downloads_row" type="bool" label="Mostra sezione 'I miei download'" default="true"/>
+        <!-- Legacy ma ancora letta (config.py, servers/torrent.py): tenuta col default -->
         <setting id="downloadlistpath" type="folder" default="" option="writeable" visible="false"/>
-        <setting id="library_move" type="bool" default="true" visible="false"/>
-        <setting id="browser" type="bool" default="true" visible="false"/>
-        <setting id="server_speed" type="bool" default="true" visible="false"/>
-        <setting id="language" type="select" values="ITA|Sub-ITA" default="ITA" visible="false"/>
-        <setting id="quality" type="select" lvalues="70241|70763|70764|70765" default="0" visible="false"/>
     </category>
 
     <!-- Personalizzazione -->
-    <category label="70126">
+    <category label="Personalizzazione">
         <setting id="home_loop_rows" type="bool" label="Home: scorrendo oltre l'ultima riga torna alla prima" default="false"/>
         <setting id="show_adult_anime" type="bool" label="Sfoglia: abilita la sezione HENTAI 18+" default="true"/>
+        <setting id="show_4k_row" type="bool" label="Mostra riga Film in 4K nella Home" default="false"/>
         <setting id="fourk_ask_quality" type="bool" label="Film in 4K: chiedi se riprodurre in 4K o Full HD" default="false"/>
         <setting id="reduced_animations" type="bool" label="Animazioni ridotte (per dispositivi lenti)" default="false"/>
 
@@ -106,6 +116,17 @@
         <setting id="show_sport_row" type="bool" label="Mostra riga Sport Live" default="true"/>
         <setting id="show_sky_row" type="bool" label="Mostra riga SKY" default="true"/>
         <setting id="show_tv_row" type="bool" label="Mostra riga TV" default="true"/>
+        <setting label="Telecomando canali live" type="lsep"/>
+        <setting id="live_remote_enabled" type="bool" label="Cambia canale con il telecomando" default="true"/>
+        <setting id="live_remote_overlay" type="bool" label="Mostra nome e posizione durante il cambio" default="true"/>
+        <setting id="live_remote_learn" type="action"
+                 label="Rileva tasti canale successivo/precedente"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJyZW1vdGVfa2V5bWFwIn0=)"/>
+        <setting id="live_remote_mapped" type="bool" default="false" visible="false"/>
+        <setting id="live_remote_next_action" type="text" default="" visible="false"/>
+        <setting id="live_remote_next_button" type="text" default="" visible="false"/>
+        <setting id="live_remote_previous_action" type="text" default="" visible="false"/>
+        <setting id="live_remote_previous_button" type="text" default="" visible="false"/>
 
         <!-- Hidden legacy customization settings (read by engine, kept with defaults) -->
         <setting id="touch_view" type="bool" default="false" visible="false"/>
@@ -132,9 +153,15 @@
     <!-- Supporto -->
     <category label="Supporto">
         <setting label="Diagnostica" type="lsep"/>
+        <setting id="network_info" type="action"
+                 label="Mostra indirizzo IP e informazioni di rete"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJuZXR3b3JrX2luZm8ifQ==)"/>
         <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING).
              Visibile nei build di test 1.9.9xx; da nascondere per la release 2.0. -->
-        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="true"/>
+        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="false"/>
+        <!-- Auto-rilevato al primo evento touchscreen (vedi prippihome._note_touch_action):
+             attiva le protezioni/gesti touch. Nascosto: mai da toccare a mano. -->
+        <setting id="touch_device" type="bool" label="touch_device" default="false" visible="false"/>
         <setting id="send_log_to_dev" type="action"
                  label="Invia Log allo Sviluppatore"
                  action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiAic2VuZF9sb2dfdG9fZGV2IiwgImNoYW5uZWwiOiAic2V0dGluZyJ9)"/>

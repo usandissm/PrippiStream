@@ -426,9 +426,8 @@ def verify_directories_created():
         from platformcode import xbmc_videolibrary
         xbmc_videolibrary.update_sources(get_setting("videolibrarypath"))
         xbmc_videolibrary.update_sources(get_setting("downloadpath"))
-    elif get_setting('downloadenabled'):
-        from platformcode import xbmc_videolibrary
-        xbmc_videolibrary.update_sources(get_setting("downloadpath"))
+    # (rimosso il ramo 'elif get_setting("downloadenabled")': impostazione legacy
+    #  Stream4me eliminata — la nostra feature "I miei download" non la leggeva.)
 
     try:
         from core import scrapertools

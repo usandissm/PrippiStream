@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "source": "PrippiStream-v2",
+  "source_version": "1.9.970",
+  "source_commit": "e37eed1dd313413c5b26550eebc4c3364f721965",
+  "manifest_sha256": "b3040200001933072c7b7dce3108cc203d7dd8c67d509ff8ff72d5407818f51e",
+  "synced_at_utc": "2026-07-21T20:12:38+00:00"
+}

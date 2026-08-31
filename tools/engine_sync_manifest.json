@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "source": {
+    "default_relative_path": "../PrippiStream-v2",
+    "version_file": "addon.xml"
+  },
+  "engine": {
+    "destination": "app/src/main/python/engine",
+    "directories": [
+      "channels",
+      "core",
+      "lib",
+      "platformcode",
+      "resources/language",
+      "servers",
+      "specials"
+    ],
+    "files": [
+      "__init__.py",
+      "channels.json",
+      "channelselector.py",
+      "default_channel_settings.json",
+      "resources/settings.xml"
+    ]
+  },
+  "assets": {
+    "destination": "app/src/main/assets/pydata",
+    "files": [
+      "channels.json",
+      "default_channel_settings.json",
+      "resources/settings.xml"
+    ],
+    "json_directories": [
+      "channels",
+      "servers",
+      "specials"
+    ],
+    "directories": [
+      "resources/language",
+      "resources/media/sport_posters",
+      "resources/media/tv_logos"
+    ]
+  },
+  "exclude": {
+    "paths": [
+      "platformcode/platformtools.py"
+    ],
+    "directory_names": [
+      "__pycache__"
+    ],
+    "file_names": [
+      ".DS_Store"
+    ],
+    "suffixes": [
+      ".pyc",
+      ".pyo"
+    ]
+  },
+  "state_file": "tools/engine_sync_state.json"
+}

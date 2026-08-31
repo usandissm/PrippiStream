@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PrippiStream" parent="android:Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#0A0E13</item>
+        <item name="android:windowSplashScreenBackground">#0A0E13</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/prippistream_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#0A0E13</item>
+        <item name="android:colorAccent">#9FCBFF</item>
+        <item name="android:navigationBarColor">#0A0E13</item>
+        <item name="android:statusBarColor">#0A0E13</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

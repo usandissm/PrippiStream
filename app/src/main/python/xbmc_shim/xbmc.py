@@ -7,6 +7,8 @@ import os
 import re
 import sys
 import time
+import threading
+from datetime import datetime
 
 import prippi_env
 
@@ -21,12 +23,32 @@ LOGNONE = 7
 
 # Marcatore usato da alcuni moduli per capire se sono sotto uno stub
 KodiStub = True
+_log_lock = threading.Lock()
 
 
 def log(msg, level=LOGINFO):
     try:
         prefix = {LOGERROR: 'ERROR', LOGWARNING: 'WARN', LOGDEBUG: 'DEBUG'}.get(level, 'INFO')
-        sys.stderr.write('[xbmc:%s] %s\n' % (prefix, msg))
+        timestamp = datetime.now().astimezone().isoformat(timespec='milliseconds')
+        line = '%s [xbmc:%s] %s\n' % (timestamp, prefix, msg)
+        sys.stderr.write(line)
+        prippi_env._ensure()
+        log_dir = os.path.join(prippi_env.DATA_DIR, 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        path = os.path.join(log_dir, 'prippistream.log')
+        with _log_lock:
+            if os.path.isfile(path) and os.path.getsize(path) > 512 * 1024:
+                with open(path, 'rb') as handle:
+                    tail = handle.read()[-256 * 1024:]
+                # Rotate on a complete line: reports must never begin with an
+                # arbitrary fragment of a tokenized URL or traceback.
+                first_newline = tail.find(b'\n')
+                if first_newline >= 0:
+                    tail = tail[first_newline + 1:]
+                with open(path, 'wb') as handle:
+                    handle.write(tail)
+            with open(path, 'a', encoding='utf-8', errors='replace') as handle:
+                handle.write(line)
     except Exception:
         pass
 

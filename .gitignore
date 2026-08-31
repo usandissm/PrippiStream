@@ -13,3 +13,9 @@ build/
 .cxx/
 /app/release/
 /captures/
+
+# Firma APK: conservare e fare backup fuori da Git
+/keystore.properties
+/*.jks
+/*.keystore
+/release-output/

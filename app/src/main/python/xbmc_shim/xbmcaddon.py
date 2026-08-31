@@ -6,28 +6,47 @@ import json
 import os
 import re
 import threading
+import ast
 
 import prippi_env
 
 _DEFAULTS = None
+_DEFAULTS_PATH = None
 _DEFAULTS_LOCK = threading.Lock()
 _STORE_LOCK = threading.Lock()
+_LANGUAGE = None
+_LANGUAGE_PATH = None
+_LANGUAGE_LOCK = threading.Lock()
 
 _SETTING_RE = re.compile(r'<setting\b([^>]*)/?>', re.IGNORECASE)
 _ATTR_ID_RE = re.compile(r'\bid\s*=\s*"([^"]*)"')
 _ATTR_DEF_RE = re.compile(r'\bdefault\s*=\s*"([^"]*)"')
 
+# Kodi restituisce sempre stringhe da getSetting. Questi fallback permettono
+# al motore di avviarsi anche se un aggiornamento trova uno store precedente
+# con valori nulli o se settings.xml non è ancora stato copiato.
+_SAFE_DEFAULTS = {
+    'chrome_ua_version': '120.0.6099.225',
+    'view_mode_channel': 'Default, 0',
+    'view_mode_channels': 'Default, 0',
+    'resolve_priority': '0',
+}
+
 
 def _load_defaults():
     """Parsa i default da resources/settings.xml (formato Kodi 'vecchio':
     <setting id="x" ... default="y"/>)."""
-    global _DEFAULTS
+    global _DEFAULTS, _DEFAULTS_PATH
     with _DEFAULTS_LOCK:
-        if _DEFAULTS is not None:
-            return _DEFAULTS
         prippi_env._ensure()
-        _DEFAULTS = {}
         path = os.path.join(prippi_env.RUNTIME_DIR, 'resources', 'settings.xml')
+        # Su Chaquopy un import può chiedere un setting prima che bridge.init
+        # abbia assegnato il runtime filesystem. Non rendere permanente quella
+        # lettura vuota: ricarica quando il path runtime diventa quello reale.
+        if _DEFAULTS is not None and _DEFAULTS_PATH == path and _DEFAULTS:
+            return _DEFAULTS
+        _DEFAULTS = {}
+        _DEFAULTS_PATH = path
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 txt = f.read()
@@ -64,6 +83,53 @@ def _save_store(store):
         pass
 
 
+def _load_language():
+    """Carica le stringhe italiane Kodi dal PO sincronizzato con la v2."""
+    global _LANGUAGE, _LANGUAGE_PATH
+    with _LANGUAGE_LOCK:
+        prippi_env._ensure()
+        path = os.path.join(
+            prippi_env.RUNTIME_DIR, 'resources', 'language',
+            'resource.language.it_it', 'strings.po')
+        if _LANGUAGE is not None and _LANGUAGE_PATH == path:
+            return _LANGUAGE
+        result = {}
+        current_id = None
+        chunks = None
+
+        def flush():
+            if current_id is not None and chunks:
+                result[str(current_id)] = ''.join(chunks)
+
+        try:
+            with open(path, 'r', encoding='utf-8-sig', errors='replace') as handle:
+                for raw in handle:
+                    line = raw.strip()
+                    if line.startswith('msgctxt '):
+                        flush()
+                        match = re.match(r'msgctxt\s+"#(\d+)"', line)
+                        current_id = match.group(1) if match else None
+                        chunks = None
+                    elif current_id is not None and line.startswith('msgstr '):
+                        chunks = []
+                        quoted = line[len('msgstr '):]
+                        try:
+                            chunks.append(ast.literal_eval(quoted))
+                        except Exception:
+                            pass
+                    elif current_id is not None and chunks is not None and line.startswith('"'):
+                        try:
+                            chunks.append(ast.literal_eval(line))
+                        except Exception:
+                            pass
+                flush()
+        except Exception:
+            result = {}
+        _LANGUAGE = result
+        _LANGUAGE_PATH = path
+        return result
+
+
 class Addon(object):
     def __init__(self, id=None):
         self.id = id or 'plugin.video.prippistream'
@@ -72,9 +138,12 @@ class Addon(object):
     def getSetting(self, key):
         with _STORE_LOCK:
             store = _load_store()
-        if key in store:
-            return store[key]
-        return _load_defaults().get(key, '')
+        if key in store and store[key] not in (None, ''):
+            return str(store[key])
+        value = _load_defaults().get(key, _SAFE_DEFAULTS.get(key, ''))
+        if value in (None, ''):
+            value = _SAFE_DEFAULTS.get(key, '')
+        return str(value)
 
     def setSetting(self, key, value):
         with _STORE_LOCK:
@@ -111,8 +180,7 @@ class Addon(object):
         }.get(k, '')
 
     def getLocalizedString(self, code):
-        # Nessuna tabella lingua headless: ritorna il codice come stringa.
-        return str(code)
+        return _load_language().get(str(code), str(code))
 
     def openSettings(self):
         pass

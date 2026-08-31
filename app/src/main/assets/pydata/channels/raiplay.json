@@ -1,0 +1,14 @@
+{
+    "id": "raiplay",
+    "name": "Rai Play",
+    "active": true,
+    "include_in_global_search": true,
+    "language": ["ita"],
+    "thumbnail": "raiplay.png",
+    "banner": "raiplay.png",
+    "categories": ["movie", "tvshow", "documentary", "live"],
+    "not_active": ["include_in_newest"],
+    "default_off": [],
+    "settings": [],
+    "cloudflare": true
+}

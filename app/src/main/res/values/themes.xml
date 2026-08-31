@@ -1,6 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tema base: framework Android (nessuna dipendenza extra). La grafica vera
-         la fa Compose (MaterialTheme). NoActionBar per non avere doppia barra. -->
-    <style name="Theme.PrippiStream" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.PrippiStream" parent="android:Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#0A0E13</item>
+        <item name="android:colorAccent">#9FCBFF</item>
+        <item name="android:navigationBarColor">#0A0E13</item>
+        <item name="android:statusBarColor">#0A0E13</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="Theme.PrippiStream.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0A0E13</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/prippistream_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.PrippiStream</item>
+    </style>
+
+    <!-- Durante la risoluzione di un download lascia visibile la schermata sottostante. -->
+    <style name="Theme.PrippiStream.DownloadPreparation" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

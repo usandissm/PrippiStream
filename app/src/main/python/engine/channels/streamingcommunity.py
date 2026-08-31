@@ -3,7 +3,7 @@
 # Canale per StreamingCommunity
 # ------------------------------------------------------------
 
-import json, re, sys
+import json, os, re, sys
 PY3 = False
 if sys.version_info[0] >= 3: PY3 = True
 
@@ -21,6 +21,71 @@ else:
 # streamingcommunity.codes blocca connessioni non-browser, redirect via JS puro.
 # Il dominio viene aggiornato automaticamente tramite daily sync di channels.json.
 host = config.get_channel_url()
+
+# These two endpoints remained in old app/Kodi caches but currently time out.
+# Keep the daily channels.json update authoritative for future migrations while
+# repairing the known stale values before the first request.
+_STALE_HOSTS = ('streamingcommunityz.plus', 'streamingcommunityz.tech')
+_WORKING_FALLBACK = 'https://streamingcommunityz.run'
+if any(stale in (host or '').lower() for stale in _STALE_HOSTS):
+    host = _WORKING_FALLBACK
+
+
+def _current_url(url):
+    """Rebuild a stored SC URL against the current host before requesting it."""
+    try:
+        parsed = urllib_parse.urlsplit(url or '')
+        current = urllib_parse.urlsplit(host or '')
+        if parsed.netloc and current.netloc and parsed.netloc != current.netloc:
+            return urllib_parse.urlunsplit((current.scheme or 'https', current.netloc,
+                                            parsed.path, parsed.query, parsed.fragment))
+    except Exception:
+        pass
+    return url
+
+
+def refresh_host_on_startup():
+    """Validate and persist the current SC host once per app/Kodi opening.
+
+    This runs before Android loads Home, so stale cached URLs never win a race
+    against the asynchronous channels.json sync. Redirects are followed and the
+    final domain is written both to the runtime channels map and channel cache.
+    """
+    global host
+    candidates = []
+    for value in (host, _WORKING_FALLBACK):
+        value = (value or '').rstrip('/')
+        if value and value not in candidates:
+            candidates.append(value)
+    for candidate in candidates:
+        try:
+            response = httptools.downloadpage(candidate, follow_redirects=True,
+                                              verify=False, timeout=8)
+            raw = getattr(response, 'data', '') or ''
+            final = (getattr(response, 'url', '') or candidate).rstrip('/')
+            if 'data-page=' not in raw:
+                continue
+            parsed = urllib_parse.urlsplit(final)
+            if not parsed.netloc:
+                continue
+            host = '%s://%s' % (parsed.scheme or 'https', parsed.netloc)
+            try:
+                config.channels_data.setdefault('direct', {})['streamingcommunity'] = host
+                runtime_file = os.path.join(config.get_runtime_path(), 'channels.json')
+                with open(runtime_file, 'w', encoding='utf-8') as stream:
+                    json.dump(config.channels_data, stream, ensure_ascii=False, indent=2)
+            except Exception as exc:
+                logger.error('[SC] cannot persist runtime host: %s' % str(exc)[:120])
+            try:
+                jsontools.update_node(host, 'streamingcommunity', 'url')
+            except Exception:
+                pass
+            logger.info('[SC] startup host ready: %s' % host)
+            return host
+        except Exception as exc:
+            logger.error('[SC] startup probe %s: %s' % (candidate, str(exc)[:120]))
+    logger.error('[SC] startup host validation failed; keeping %s' % host)
+    return host
 
 
 def findhost(url):
@@ -107,6 +172,7 @@ def mainlist(item):
 
 
 def get_data(url):
+    url = _current_url(url)
     raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
     # Self-heal: empty page usually means the SC domain moved. Re-discover via
     # findhost, rebuild the URL against the new host and retry once.
@@ -119,7 +185,11 @@ def get_data(url):
         except Exception:
             pass
         raw = support.match(url, patron='data-page="([^"]+)', debug=False).match
-    return jsontools.load(support.scrapertools.decodeHtmlentities(raw))
+    if not raw:
+        logger.error('[SC] empty data-page response: %s' % str(url)[:180])
+        return {}
+    data = jsontools.load(support.scrapertools.decodeHtmlentities(raw))
+    return data if isinstance(data, dict) else {}
 
 
 def genres(item):
@@ -309,14 +379,18 @@ def episodios(item):
     logger.debug()
     itemlist = []
 
-    data_page = get_data(item.url)    
-    seasons = data_page['props']['title']['seasons']
+    data_page = get_data(item.url)
+    props = (data_page or {}).get('props', {})
+    seasons = ((props.get('title') or {}).get('seasons') or [])
+    if not seasons:
+        logger.error('[SC] episodios: seasons unavailable for %s' % str(item.url)[:180])
+        return []
     # episodes = data_page['props']['loadedSeason']['episodes']
     # support.dbg()
 
     for se in seasons:
         data_page = get_data(item.url + '/season-' + str(se['number']))
-        episodes = data_page['props']['loadedSeason']['episodes']
+        episodes = (((data_page or {}).get('props', {}).get('loadedSeason') or {}).get('episodes') or [])
 
         for ep in episodes:
             itemlist.append(
