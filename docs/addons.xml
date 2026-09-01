@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="1.5.7" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="1.9.990" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -24,6 +24,14 @@
     <!-- <import addon="script.module.web-pdb" /> -->
   </requires>
   <extension point="xbmc.python.pluginsource" library="default.py">
+    <!-- v2 FASE 6: riusa l'interprete Python tra le invocazioni plugin — dal
+         secondo play in poi si salta l'intera catena di import (~1-3s su ARM).
+         Lo stato module-level che ora persiste è progettato per farlo o si
+         auto-ripara (cookiejar, adapter condivisi F2, cache tmdb/servertools,
+         host canali con _refresh_host, core.db riaperto da __missing__).
+         Nota: i flag letti a import (logger.DEBUG_ENABLED, timeout httptools)
+         non riflettono più cambi mid-session sul path play fino al riavvio. -->
+    <reuselanguageinvoker>true</reuselanguageinvoker>
     <provides>video</provides>
   </extension>
   <extension point="xbmc.addon.metadata">
@@ -32,13 +40,17 @@
     <assets>
       <icon>resources/media/logo.png</icon>
       <fanart>resources/media/fanart.jpg</fanart>
-      <screenshot>resources/media/screenshot-1.png</screenshot>
-      <screenshot>resources/media/screenshot-2.png</screenshot>
-      <screenshot>resources/media/screenshot-3.png</screenshot>
     </assets>
-      <news>- Risolto il caricamento continuo (buffering) che poteva comparire quando partiva in automatico l'episodio successivo di una serie, su alcune TV box Android.
-- Risolta la lingua di audio e sottotitoli che, guardando più episodi di fila, dopo qualche episodio tornava a quella predefinita.
-- Piccole correzioni ai dettagli dei film (trama, anno, valutazione).
+      <news>- Home più veloce e leggera, soprattutto sui dispositivi meno potenti.
+- La riga Film in 4K ora è disattivata di default e si può riattivare da Personalizzazione; i film 4K restano disponibili nelle normali sezioni e nella ricerca.
+- La ricerca ricorda le ultime 10 ricerche, permette di riutilizzarle o cancellare la cronologia.
+- Riaprire la stessa ricerca entro 15 minuti riutilizza i risultati già ottenuti, evitando nuove attese sui servizi temporaneamente non disponibili.
+- Caricamenti in background, metadati, trailer e controlli live consumano meno CPU e memoria sui dispositivi con poca RAM.
+- Le righe SKY, Sport e TV mostrano esclusivamente canali verificati come riproducibili nella sessione corrente; le vecchie cache non espongono più canali scaduti.
+- La chiusura di Kodi interrompe correttamente i caricamenti della Home senza riaprire finestre o lasciare controlli in background.
+- Debug e misure diagnostiche restano disattivati durante l'uso normale e si possono riattivare dalle impostazioni per un test.
+- Grafica della home rifinita: sfondo del riquadro in alto più pulito e migliore risalto del titolo selezionato.
+- Nuova opzione in Impostazioni › Personalizzazione: "Animazioni ridotte (per dispositivi lenti)".
 </news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
