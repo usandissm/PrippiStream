@@ -41,13 +41,37 @@
       <icon>resources/media/logo.png</icon>
       <fanart>resources/media/fanart.jpg</fanart>
     </assets>
-      <news>- Nuova Home Live unificata: SKY, Sport Live, DAZN e TV nello stesso ordine dell'app Android.
-- I canali IPTV FHD sono integrati come fallback dietro ClearKey/Daddy, con catalogo, loghi e ordinamento coerenti.
-- Nuova riga DAZN; Cinema, Intrattenimento e Documentari confluiscono in SKY, mentre Sport e Calcio confluiscono in Sport Live.
-- Smistamento automatico sugli account disponibili al momento del play, con retry su liste diverse senza coordinamento fra utenti.
-- Zapping Live più robusto: i canali offline vengono saltati senza dover tornare alla Home.
-- Le dirette ufficiali Rai, Mediaset, La7 e Discovery restano nella riga TV.
-</news>
+      <news>PrippiStream 2.0
+
+Home e catalogo
+• Home più veloce, stabile e leggibile su PC, TV e box.
+• Nuove righe per generi, contenuti popolari, novità, anime, 4K e titoli aggiornati.
+• Locandine, voti, trailer, metadati e ricerca migliorati.
+• Ricerca unificata: più fonti disponibili, risultati più completi e migliore riconoscimento dei titoli.
+• Continua a guardare più affidabile per film, serie, stagioni ed episodi.
+
+Serie, player e download
+• Scelta di stagione ed episodio migliorata, anche da Continua a guardare.
+• Player più solido: ripresa, cambio episodio, prossimo episodio e ritorno alla Home.
+• Download offline migliorati: qualità, code, ripresa, avanzamento e informazioni dettagliate.
+• Aggiornamento automatico di domini e URL dopo le migrazioni.
+
+Dirette
+• Esperienza Live completamente rinnovata e organizzata in sezioni dedicate.
+• Canali caricati e verificati automaticamente all’apertura.
+• Intrattenimento, cinema, documentari e sport riuniti in modo più ordinato.
+• Canali duplicati rimossi, ordine fisso e loghi dedicati.
+• Verifica automatica delle fonti e passaggio a un’alternativa se un canale non è disponibile.
+• Guida “in onda adesso” e cambio canale direttamente dal player con telecomando.
+
+TV e telecomando
+• Focus, contrasto, navigazione e layout riprogettati per l’uso con telecomando.
+• Zapping più affidabile: i canali non disponibili vengono saltati automaticamente.
+
+Affidabilità e prestazioni
+• Avvio e caricamento Home ottimizzati per TV e box meno potenti.
+• Cache più sicure: le risposte incomplete non bloccano più la Home.
+• Diagnostica e gestione degli errori migliorate.</news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
     [COLOR yellow]Kodi ┬® is a registered trademark of the XBMC Foundation. We are not connected to or in any other way affiliated with Kodi, Team Kodi, or the XBMC Foundation. Furthermore, any software, addons, or products offered by us will receive no support in official Kodi channels, including the Kodi forums and various social networks.[/COLOR]</disclaimer>

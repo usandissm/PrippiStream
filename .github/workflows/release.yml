@@ -1,19 +1,11 @@
 name: Build and Release
 
-# Triggered on every push to main BY A HUMAN.
-# Bot commits (from this same workflow or updateDomains) include "[skip ci]"
-# so GitHub Actions skips them automatically.
-# The extra `github.actor` check is belt-and-suspenders safety.
+# The release package is built and verified locally because it includes the
+# locally managed runtime payload. GitHub Pages publishes the committed feed on
+# every push; this workflow remains available only for an explicitly configured
+# manual release environment.
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "tizen/**"
-      - "docs/tizen/**"
-      - "tools/publish_tizen_ota.py"
-      - ".github/workflows/tizen-ota.yml"
-      - ".github/workflows/release.yml"
-      - ".gitignore"
+  workflow_dispatch:
 
 jobs:
   release:
