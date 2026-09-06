@@ -20,7 +20,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from platformcode import config, logger
+from platformcode import config, logger, deviceprofile
 
 try:
     from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
@@ -305,7 +305,8 @@ def build_4k_index():
 
         tmdb_map = {}  # stream_id → tmdb_id
         completed = 0
-        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
+        with ThreadPoolExecutor(
+                max_workers=(2 if deviceprofile.is_low_power() else _MAX_WORKERS)) as pool:
             futures = {pool.submit(_fetch_vod_info, sid): sid for sid in stream_ids}
             for future in as_completed(futures):
                 try:

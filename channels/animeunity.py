@@ -280,7 +280,7 @@ def peliculas(item, _retry=True):
     except Exception as exc:
         logger.error('[AnimeUnity] get-animes request failed: %s' % str(exc)[:160])
     if not records:
-        logger.error('[AnimeUnity] peliculas: no records (code=%s)' % code)
+        logger.info('[AnimeUnity] peliculas: no records (code=%s)' % code)
         if _retry:
             # blocked/stale session → rebuild it (and re-discover the domain via
             # _ensure_init's findhost fallback), then retry once.

@@ -6,6 +6,7 @@ if sys.version_info[0] >= 3: PY3 = True
 from six.moves import urllib
     
 import ast
+import json
 import xbmc
 
 from core import httptools, support, filetools
@@ -16,6 +17,8 @@ vttsupport = False if int(xbmc.getInfoLabel('System.BuildVersion').split('.')[0]
 def test_video_exists(page_url):
     global iframeParams
     global urlParams
+    global bootstrap_url
+    global activeStreamUrl
     import re as _re
     _raw_match = support.match(page_url, patron=['<iframe [^>]+src="([^"]+)', 'embed_url="([^"]+)']).match
     if not _raw_match:
@@ -32,7 +35,18 @@ def test_video_exists(page_url):
         except Exception as _pte:
             logger.error('[SC-WS] proxytranslate failed: %s' % str(_pte))
     server_url = support.scrapertools.decodeHtmlentities(_raw_match or '')
-    iframeParams = support.match(server_url, patron=r'''window\.masterPlaylist\s+=\s+{[^{]+({[^}]+}),\s+url:\s+'([^']+).*?canPlayFHD\s=\s(true|false)''', debug=False).match
+    bootstrap_url = server_url
+    server_page = support.match(server_url, patron=r'''window\.masterPlaylist\s+=\s+{[^{]+({[^}]+}),\s+url:\s+'([^']+).*?canPlayFHD\s=\s(true|false)''', debug=False)
+    iframeParams = server_page.match
+    activeStreamUrl = ''
+    streams_match = _re.search(r'window\.streams\s*=\s*(\[[^;]+\])\s*;', server_page.data or '', _re.S | _re.I)
+    if streams_match:
+        try:
+            streams = json.loads(streams_match.group(1))
+            activeStreamUrl = next((entry.get('url', '') for entry in streams
+                                    if entry.get('active') and entry.get('url')), '')
+        except Exception as exc:
+            logger.debug('[SC-WS] active stream parse failed: %s' % str(exc))
 
     if not iframeParams or len(iframeParams) < 2:
         return 'StreamingCommunity', 'Prossimamente'
@@ -45,7 +59,7 @@ def get_video_url(page_url, premium=False, user="", password="", video_password=
     video_urls = list()
 
     params, url, canPlayFHD = iframeParams
-    split_url = urllib.parse.urlsplit(url)
+    split_url = urllib.parse.urlsplit(activeStreamUrl or url)
     url_params = urllib.parse.parse_qsl(split_url.query)
     logger.debug(url_params)
     masterPlaylistParams = ast.literal_eval(params)

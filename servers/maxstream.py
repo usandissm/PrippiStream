@@ -1,5 +1,6 @@
 import sys
 import re as _re
+import base64 as _base64
 if sys.version_info[0] >= 3:
     import urllib.parse as urlparse
     import json as _json
@@ -12,10 +13,49 @@ from platformcode import logger, config
 
 # Cache between test_video_exists and get_video_url
 _cache = {}
+_last_bootstrap_url = ''
 
 # Text that appears when a maxstream file is expired/deleted
 _DEAD_TEXT = ('File is no longer available', 'File is not longer available',
-              'expired or has been deleted', 'File id error')
+              'expired or has been deleted', 'File id error',
+              '<title>404 Not Found</title>', '<h1>Not Found</h1>')
+
+# Il gate cambia nome periodicamente. Dal luglio 2026 il vecchio watch_free è
+# diventato freeswatcee, ma entrambi conducono allo stesso endpoint /emhuih/.
+_GATE_PATH_RE = r'/(?:watch_?free|freewatcher|freeswatcee)/'
+
+
+def _embed_url_from_gate(final_url, html):
+    """Extract the real /emhuih/ player URL without executing gate JavaScript."""
+    if _re.search(r'/freeswatcee/', final_url or ''):
+        base64_url = scrapertools.find_single_match(
+            html or '', r'decodedBaseUrl\s*=\s*atob\(["\']([^"\']+)["\']\)')
+        base64_code = scrapertools.find_single_match(
+            html or '', r'decodedFileCode\s*=\s*atob\(["\']([^"\']+)["\']\)')
+        try:
+            if base64_url and base64_code:
+                base = _base64.b64decode(base64_url).decode('utf-8')
+                code = _base64.b64decode(base64_code).decode('utf-8')
+                if base.startswith('https://maxstream.video/emhuih/') and code:
+                    return base + code
+        except Exception as e:
+            logger.info('maxstream freeswatcee base64 decode error: %s' % e)
+
+        # Fallback: il primo segmento dopo /freeswatcee/ coincide col file code.
+        try:
+            parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
+            if len(parts) >= 2 and parts[0] == 'freeswatcee':
+                return 'https://maxstream.video/emhuih/' + parts[1]
+        except Exception:
+            pass
+        return None
+
+    try:
+        parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
+        session_id = parts[2] if len(parts) >= 3 else None
+        return 'https://maxstream.video/emhuih/' + session_id if session_id else None
+    except Exception:
+        return None
 
 
 def _is_dead(html):
@@ -77,6 +117,7 @@ def _get_embed_page(page_url):
     - uprot.net/msf/ URL: parse page HTML → try all unique /uprots/ tokens in reverse order
     - /emhuih/ or /e/ URL: download directly (from altadefinizione, watchfree, etc.)
     """
+    global _last_bootstrap_url
     url_lower = page_url.lower()
 
     # stayonline.pro wraps the real URL behind a (bypassable) reCaptcha
@@ -121,9 +162,9 @@ def _get_embed_page(page_url):
                             % (furl, html[:100]))
                 if _is_dead(html):
                     return None, None, True
-                if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
+                if not _re.search(_GATE_PATH_RE, furl) and html:
                     m = scrapertools.find_single_match(
-                        html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
+                        html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher|freeswatcee)/[^\s"\'<>]+)')
                     if m:
                         furl = m
                 return html, furl, False
@@ -149,9 +190,9 @@ def _get_embed_page(page_url):
             # Find watchfree URL: either resp.url (when redirect was followed),
             # or inside the HTML body (meta-refresh / JS redirect / iframe from proxy).
             # The host now uses the path "/watch_free/" (underscore); accept both.
-            if not _re.search(r'/(?:watch_?free|freewatcher)/', furl) and html:
+            if not _re.search(_GATE_PATH_RE, furl) and html:
                 m = scrapertools.find_single_match(
-                    html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher)/[^\s"\'<>]+)')
+                    html, r'(https?://[^\s"\'<>]+/(?:watch_?free|freewatcher|freeswatcee)/[^\s"\'<>]+)')
                 if m:
                     furl = m
                     logger.info('maxstream._get_embed_page uprots watchfree in HTML: %r' % furl)
@@ -171,7 +212,7 @@ def _get_embed_page(page_url):
         dead_confirmed = False
         for mode in ('raw', 'plain', 'cs', 'default'):
             html_uprots, final_url, dead = _try_uprots(mode)
-            if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
+            if _re.search(_GATE_PATH_RE, final_url or ''):
                 dead_confirmed = False
                 break
             if dead and mode != 'raw':
@@ -181,19 +222,15 @@ def _get_embed_page(page_url):
         if dead_confirmed:
             return None
 
-        if _re.search(r'/(?:watch_?free|freewatcher)/', final_url or ''):
-            # freewatcher path: /freewatcher/VIEW_ID/FILE_ID/TOKEN (era /watch_free/).
-            # FILE_ID (parts[2]) è l'id usato da emhuih, NON il view id (parts[1]).
-            try:
-                parts = [p for p in urlparse.urlparse(final_url).path.split('/') if p]
-                session_id = parts[2] if len(parts) >= 3 else None
-            except Exception:
-                session_id = None
-            if session_id:
-                page_url = 'https://maxstream.video/emhuih/' + session_id
+        if _re.search(_GATE_PATH_RE, final_url or ''):
+            # Conserva il gate già sbloccato per il fallback WebView invisibile
+            # dell'app Android. Non è la pagina uprot/captcha e non richiede input.
+            _last_bootstrap_url = final_url
+            page_url = _embed_url_from_gate(final_url, html_uprots)
+            if page_url:
                 logger.info('maxstream._get_embed_page uprots→emhuih: %r' % page_url)
             else:
-                logger.info('maxstream._get_embed_page uprots: no session_id in %r' % final_url)
+                logger.info('maxstream._get_embed_page uprots: no embed id in %r' % final_url)
                 return None
         else:
             logger.info('maxstream._get_embed_page uprots: no watchfree after both passes, final=%r' % final_url)
@@ -249,6 +286,11 @@ def _get_embed_page(page_url):
                 return None
 
     return html or None
+
+
+def get_bootstrap_url():
+    """Return the most recent already-unlocked browser gate, if available."""
+    return _last_bootstrap_url
 
 
 

@@ -40,7 +40,7 @@ except ImportError:  # py2
 import xbmc
 import xbmcgui
 
-from platformcode import config, logger
+from platformcode import config, logger, deviceprofile
 from core.item import Item
 
 # ── Backend / client identity ────────────────────────────────────────────────
@@ -153,6 +153,11 @@ _ROWS = {
     'sport': {'label': u'Sport Live', 'default': DEFAULT_SPORT},
     'sky':   {'label': u'SKY',        'default': DEFAULT_SKY},
     'tv':    {'label': u'TV',         'default': []},
+    'iptv_cinema': {'label': u'Cinema', 'default': []},
+    'iptv_intrattenimento': {'label': u'Intrattenimento', 'default': []},
+    'iptv_documentari': {'label': u'Documentari', 'default': []},
+    'iptv_calcio': {'label': u'Calcio', 'default': []},
+    'iptv_dazn': {'label': u'DAZN', 'default': []},
 }
 
 # Pars for which we ship a bundled poster.
@@ -160,10 +165,169 @@ _KNOWN_POSTERS = set(c["par"] for c in DEFAULT_SPORT + DEFAULT_SKY + CINEMA_CAND
     "skysport258",  # backend returns this par for Sky Sport Calcio (same logo as 257)
 }
 
+# Stable logical order for the merged SKY row.  Provider order is deliberately
+# ignored: native ClearKey/Daddy items are inserted first, then IPTV fallbacks;
+# this rank controls only their final visible position.
+_SKY_ORDER = [
+    'sky cinema uno', 'sky cinema uno +1', 'sky cinema uno +24',
+    'sky cinema stories', 'sky cinema collection', 'sky cinema family',
+    'sky cinema action', 'sky cinema suspense', 'sky cinema comedy',
+    'sky cinema romance', 'sky cinema drama', 'sky cinema due',
+    'sky cinema due +24',
+    'sky tg24', 'sky uno', 'sky uno +1', 'sky atlantic', 'sky atlantic +1',
+    'sky serie', 'sky collection', 'sky investigation', 'sky crime',
+    'sky adventure', 'sky documentaries', 'sky nature', 'history',
+    'comedy central', 'sky arte', 'mtv',
+    # IPTV additions: keep timeshift channels directly after their base.
+    'discovery', 'discovery giallo italia', 'sky comedy central',
+    'crime + inv',
+]
+_SKY_RANK = dict((name, pos) for pos, name in enumerate(_SKY_ORDER))
+_SKY_ALIASES = {
+    'tg 24': 'sky tg24', 'sky tg 24': 'sky tg24',
+    'uno': 'sky uno', 'sky uno hd': 'sky uno',
+    'sky uno +1 hd': 'sky uno +1',
+    'atlantic': 'sky atlantic', 'sky atlantic hd': 'sky atlantic',
+    'sky atlantic +1 hd': 'sky atlantic +1',
+    'serie': 'sky serie', 'collection': 'sky collection',
+    'investigation': 'sky investigation', 'crime': 'sky crime',
+    'adventure': 'sky adventure', 'documentaries': 'sky documentaries',
+    'nature': 'sky nature', 'history channel': 'history',
+    'comedy central': 'comedy central', 'arte': 'sky arte',
+    'mtv italia': 'mtv',
+}
+
+def _sky_canonical_title(title):
+    value = re.sub(r'\s+', ' ', str(title or '').lower()).strip()
+    value = re.sub(r'\s*\[(?:flh|fhd|hd)\]\s*', ' ', value)
+    value = re.sub(r'\s+(?:fhd|hd)$', '', value).strip()
+    # IPTV providers spell time-shift suffixes inconsistently ("+ 1",
+    # "+1", sometimes attached to the name).  Canonicalise them before
+    # ranking so the base channel is always immediately followed by +1/+24.
+    value = re.sub(r'\s*\+\s*24\b', ' +24', value)
+    value = re.sub(r'\s*\+\s*1\b', ' +1', value)
+    return _SKY_ALIASES.get(value, value)
+
+def _sky_sort_key(ch):
+    title = _sky_canonical_title(ch.get('title', ''))
+    suffix = 0
+    base = title
+    if title.endswith(' +24'):
+        base, suffix = title[:-4].rstrip(), 2
+    elif title.endswith(' +1'):
+        base, suffix = title[:-3].rstrip(), 1
+    return (_SKY_RANK.get(base, 10000), suffix, title)
+
+def _sport_canonical_title(title):
+    """Canonical key used to merge native Sport and IPTV aliases.
+
+    The backend calls the ClearKey channels ``SPORT UNO``/``SPORT 24`` while
+    IPTV lists use ``Sky Sport Uno``/``Sky Sport 24``.  They are the same
+    channel; native entries must win so an expired IPTV copy cannot shadow a
+    working ClearKey route.
+    """
+    value = re.sub(r'\s+', ' ', str(title or '').lower()).strip()
+    value = re.sub(r'\s*\[(?:flh|fhd|hd)\]\s*', ' ', value)
+    value = re.sub(r'\s+(?:fhd|full hd|hd)$', '', value).strip()
+    value = re.sub(r'^sky\s+', '', value)
+    # Sky Sport NBA è il feed alternativo dello stesso canale Basket: se il
+    # ClearKey nativo è online prevale; se è assente, l'IPTV resta disponibile
+    # come backup senza creare una seconda tessera duplicata.
+    if value in ('sport nba', 'nba'):
+        value = 'sport basket'
+    return value
+
+def _iptv_logo(title, remote=''):
+    """Reuse the same high-resolution bundled poster whenever an IPTV title
+    maps to a channel already branded by Prippi; otherwise keep its remote art."""
+    clean_title = re.sub(r'\s*\((?:buffering)\)\s*', ' ',
+                         str(title or ''), flags=re.I)
+    clean_title = re.sub(r'\b(?:exclusive|exclsuive)\b', ' ', clean_title,
+                         flags=re.I)
+    clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+    raw_slug = re.sub(r'[^a-z0-9+]+', '', clean_title.lower())
+    slug = raw_slug
+    aliases = {
+        'nature': 'skynature', 'documentaries': 'skydocumentaries',
+        'atlantic': 'skyatlantic', 'arte': 'skyarte', 'mtvitalia': 'mtv',
+        'collection': 'skycollection', 'investigation': 'skyinvestigation',
+        'adventure': 'skyadventure', 'crime': 'skycrime', 'tg24': 'tg24',
+        'history': 'historychannel', 'historychannel': 'historychannel',
+        'skycomedycentral': 'comedycentral', 'crime+inv': 'crimeinv',
+        'crimeandinvestigation': 'crimeinv', 'discoverychannel': 'discovery',
+        'discoverygialloitalia': 'discoverygialloitalia',
+        'zonadazn': 'ZonaDAZN', 'zonadaznseriea': 'ZonaDAZN',
+        'zonaseriea': 'ZonaDAZN',
+        'dazndirettagoalseriea': 'ZonaDAZN',
+        'dazndirettagoalserieb': 'ZonaDAZN',
+        'zonagoalseriea': 'ZonaDAZN', 'zonagoalserieb': 'ZonaDAZN',
+        'eventicalcioamazonprime': 'primevideo',
+        'eventinapolicalcio': 'napoli',
+        'eurosport1': 'eurosport1', 'eurosport2': 'eurosport2',
+        'skyacisporttv': 'acisporttv', 'acisporttv': 'acisporttv',
+        'supertennis': 'supertennis', 'ufctv': 'ufctv',
+        'skysportnba': 'skysportbasket',
+    }
+    slug = aliases.get(slug, slug)
+    if raw_slug.startswith('championsleagueinfinity'):
+        slug = 'championsinfinity'
+    elif raw_slug.startswith('molatvcalcio'):
+        slug = 'molatv'
+    elif raw_slug.startswith('skysportbar'):
+        slug = 'skysport'
+    elif raw_slug.startswith('dazn'):
+        # I quattro lineari hanno marchi ufficiali numerati; gli eventi
+        # virtuali/NFL/Sport condividono invece il marchio DAZN neutro.
+        numbered = re.match(r'dazn([1-4])(?:$|[^0-9])', raw_slug)
+        slug = ('dazn' + numbered.group(1)) if numbered else 'ZonaDAZN'
+    # Prefer an explicitly generated +1/+24 asset when present.
+    exact = _poster(str(title).lower().replace(' ', '_'))
+    if '+' in raw_slug:
+        variant = _POSTER_DIR + raw_slug.replace('+', 'plus') + '.png'
+        try:
+            from platformcode import config
+            variant_file = os.path.join(
+                config.get_runtime_path(), 'resources', 'media', 'sport_posters',
+                raw_slug.replace('+', 'plus') + '.png',
+            )
+            if os.path.isfile(variant_file):
+                return variant
+        except Exception:
+            pass
+    # New IPTV-only channels are bundled by slug too; don't require adding
+    # every asset to the static provider poster set.
+    # On Android the xbmc shim cannot always resolve ``special://`` in
+    # xbmcvfs.exists(), although the asset is present in the copied runtime.
+    # Check the real runtime path and return the canonical special URI used by
+    # _from_item() to expose it as a file:// URI to Coil.
+    try:
+        from platformcode import config
+        bundled_file = os.path.join(
+            config.get_runtime_path(), 'resources', 'media', 'sport_posters',
+            slug + '.png',
+        )
+        if os.path.isfile(bundled_file):
+            return _poster(slug)
+    except Exception:
+        pass
+    return remote or ''
+
 # ── per-row cache (memory + disk) ────────────────────────────────────────────
 _CACHE_TTL = 6 * 3600
 _mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0},
-              'tv': {"data": None, "ts": 0}}
+              'tv': {"data": None, "ts": 0},
+              'iptv_cinema': {"data": None, "ts": 0},
+              'iptv_intrattenimento': {"data": None, "ts": 0},
+              'iptv_documentari': {"data": None, "ts": 0},
+              'iptv_calcio': {"data": None, "ts": 0},
+              'iptv_dazn': {"data": None, "ts": 0}}
+_ready_rows = set()
+
+def mark_row_ready(row):
+    _ready_rows.add(row)
+
+def row_ready(row):
+    return row in _ready_rows
 
 # Resolved-stream cache: par -> (manifest, kid, key, expiry_epoch).
 # Populated by the probe (_sky_channel_valid already fetches a fully valid
@@ -500,7 +664,7 @@ def _urlopen_lax(req, timeout=15):
         return urlopen(req, timeout=timeout, context=ssl._create_unverified_context())
 
 
-def _http_get(url, headers=None, timeout=15):
+def _http_get(url, headers=None, timeout=15, quiet=False):
     try:
         resp = _urlopen_lax(Request(url, headers=headers or {}), timeout=timeout)
         try:
@@ -511,7 +675,11 @@ def _http_get(url, headers=None, timeout=15):
             data = data.decode('utf-8', 'replace')
         return data
     except Exception as exc:
-        logger.error('[Sport] http_get %s: %s' % (url, str(exc)))
+        message = '[Sport] http_get %s: %s' % (url, str(exc))
+        # Offline sources are an expected probe result. Keep the detail in
+        # debug without emitting ERROR I/O for every candidate on low-power
+        # devices. Real playback resolution keeps quiet=False.
+        (logger.debug if quiet else logger.error)(message)
         return None
 
 
@@ -535,7 +703,7 @@ _cf_scraper = None
 _cf_lock = threading.Lock()
 
 
-def _cf_get(url, headers=None, timeout=10):
+def _cf_get(url, headers=None, timeout=10, quiet=False):
     """GET for freeshot CDNs (popcdn.day / lovetier.bz).
 
     Strategy:
@@ -557,11 +725,13 @@ def _cf_get(url, headers=None, timeout=10):
             logger.info('[Sport] cf_get %s: HTTP 403, retrying with cloudscraper' % url)
             cf_challenge = True
         else:
-            logger.error('[Sport] cf_get %s: HTTP %s' % (url, r.status_code))
+            (logger.debug if quiet else logger.error)(
+                '[Sport] cf_get %s: HTTP %s' % (url, r.status_code))
             return None
     except Exception as exc:
         # Connection error / timeout → host unreachable; don't double the wait.
-        logger.error('[Sport] cf_get %s (requests): %s' % (url, str(exc)))
+        (logger.debug if quiet else logger.error)(
+            '[Sport] cf_get %s (requests): %s' % (url, str(exc)))
         return None
     if not cf_challenge:
         return None
@@ -574,11 +744,13 @@ def _cf_get(url, headers=None, timeout=10):
                 _cf_scraper = cloudscraper.create_scraper()
         r = _cf_scraper.get(url, headers=hdrs, timeout=timeout)
         if r.status_code != 200:
-            logger.error('[Sport] cf_get %s (cloudscraper): HTTP %s' % (url, r.status_code))
+            (logger.debug if quiet else logger.error)(
+                '[Sport] cf_get %s (cloudscraper): HTTP %s' % (url, r.status_code))
             return None
         return r.text
     except Exception as exc:
-        logger.error('[Sport] cf_get %s (cloudscraper): %s' % (url, str(exc)))
+        (logger.debug if quiet else logger.error)(
+            '[Sport] cf_get %s (cloudscraper): %s' % (url, str(exc)))
         return None
 
 
@@ -676,7 +848,7 @@ def _hls_playable(url, headers, timeout=6):
         raggiungibilità reale (status 200) con un GET di pochi byte.
     Un canale morto (segmenti 403 / CDN vuota) viene così escluso dalla home."""
     try:
-        body = _http_get(url, headers=headers, timeout=timeout)
+        body = _http_get(url, headers=headers, timeout=timeout, quiet=True)
     except Exception:
         body = None
     if not body or '#EXTM3U' not in body:
@@ -703,7 +875,7 @@ def _hls_playable(url, headers, timeout=6):
         if not var:
             return False
         try:
-            sub = _http_get(var, headers=headers, timeout=timeout)
+            sub = _http_get(var, headers=headers, timeout=timeout, quiet=True)
         except Exception:
             sub = None
         if not sub or '#EXTM3U' not in sub:
@@ -759,7 +931,8 @@ def _sky_channel_valid(par):
                          % (par, e.group(1), int(time.time())))
             return False  # expired/near-expiry → dead by click time, segments 403
         mpd = _http_get(man, headers={'User-Agent': _NOWTV_UA,
-                                      'Referer': _NOWTV_HOST + '/'}, timeout=6)
+                                      'Referer': _NOWTV_HOST + '/'}, timeout=6,
+                        quiet=True)
         if not mpd:
             logger.debug('[Sport] sky_valid %s: CDN MPD unreachable' % par)
             return False
@@ -790,7 +963,7 @@ def _freeshot_ok(code):
     returns a real HLS manifest (#EXTM3U) within a short timeout — dead channels
     stay off the row instead of showing as online and failing on click.  Costs one
     extra round-trip per channel, but the probe runs all channels in parallel."""
-    url = resolve_freeshot(code)
+    url = resolve_freeshot(code, quiet=True)
     if not url:
         logger.debug('[Sport] freeshot_ok %s: no token/url' % code)
         return False
@@ -803,7 +976,7 @@ def _iptvorg_ok(display_name):
     """True if the iptv-org channel resolves to a stream that actually responds.
     Without this an entry stays in the row even when its upstream URL is dead
     (e.g. FIFA+), so clicking it just fails."""
-    url = resolve_iptvorg(display_name)
+    url = resolve_iptvorg(display_name, quiet=True)
     if not url:
         logger.debug('[Sport] iptvorg_ok %s: not found in iptv-org list' % display_name)
         return False
@@ -823,6 +996,8 @@ def _channel_token_valid(ch):
     kind = ch.get('kind', '')
     par  = ch.get('par', '')
     fs   = ch.get('fs')
+    ch.pop('_validated_route', None)
+    ch.pop('_validated_code', None)
 
     # Ground truth wins over any HTTP check: a channel that just failed to play
     # in ISA stays hidden until its deny-list TTL elapses.
@@ -831,26 +1006,38 @@ def _channel_token_valid(ch):
         return False
 
     if kind == 'iptvorg':
-        return _iptvorg_ok(par)
+        ok = _iptvorg_ok(par)
+        if ok:
+            ch['_validated_route'] = 'primary'
+        return ok
 
     # DaddyLive standalone channel: online iff it resolves to a live manifest.
     if kind == 'daddy':
-        return _daddy_ok(par)
+        ok = _daddy_ok(par)
+        if ok:
+            ch['_validated_route'] = 'daddy'
+            ch['_validated_code'] = par
+        return ok
 
     # Sky ClearKey: full check (expiry gates the MPD fetch, so expired channels
     # cost only the resolve call — no wasted CDN round-trip).
     if kind == 'sky' and _sky_channel_valid(par):
+        ch['_validated_route'] = 'sky'
         return True
 
     # Freeshot: fallback for sky channels, or the channel's own resolver.
     fs_code = fs if fs else (par if kind == 'freeshot' else None)
     if fs_code and _freeshot_ok(fs_code):
+        ch['_validated_route'] = 'freeshot'
+        ch['_validated_code'] = fs_code
         return True
 
     # Last resort: the channel's DaddyLive Italian feed (fallback only, so a
     # channel whose sky@@/freeshot are down still shows if daddy is live).
     dcode = _DADDY_FALLBACK.get(par)
     if dcode and _daddy_ok(dcode):
+        ch['_validated_route'] = 'daddy'
+        ch['_validated_code'] = dcode
         return True
 
     return False
@@ -861,29 +1048,52 @@ def _probe_parallel(channels, timeout=25):
     Channels still running after *timeout* WALL-CLOCK seconds get excluded."""
     if not channels:
         return []
+    # Four workers need a wider wall-clock window to cover the full list. The
+    # work is deferred until after paint, so duration is preferable to spawning
+    # one thread per channel and starving the UI.
+    if deviceprofile.is_low_power():
+        timeout = max(timeout, 90)
     results = {}
     t0 = time.time()
     logger.info('[Sport] probe_parallel: starting %d channels (timeout=%ds)' % (len(channels), timeout))
 
-    def _probe(ch):
-        par = ch.get('par', '')
-        try:
-            ok = _channel_token_valid(ch)
-            results[par] = ok
-            logger.debug('[Sport] probe %s [%s]: %s' % (par, ch.get('kind', '?'), 'ONLINE' if ok else 'offline'))
-        except Exception as exc:
-            results[par] = False
-            logger.debug('[Sport] probe %s: exception %s' % (par, exc))
+    try:
+        import queue
+    except ImportError:
+        import Queue as queue
+    jobs = queue.Queue()
+    for channel in channels:
+        jobs.put(channel)
+    deadline = t0 + timeout
 
-    threads = [threading.Thread(target=_probe, args=(ch,), daemon=True)
-               for ch in channels]
+    def _probe_worker():
+        while time.time() < deadline and not _abort_event.is_set():
+            try:
+                ch = jobs.get_nowait()
+            except queue.Empty:
+                return
+            par = ch.get('par', '')
+            try:
+                ok = _channel_token_valid(ch)
+                results[par] = ok
+                logger.debug('[Sport] probe %s [%s]: %s' % (
+                    par, ch.get('kind', '?'), 'ONLINE' if ok else 'offline'))
+            except Exception as exc:
+                results[par] = False
+                logger.debug('[Sport] probe %s: exception %s' % (par, exc))
+            finally:
+                jobs.task_done()
+
+    worker_count = min(len(channels), deviceprofile.worker_count('live_probe', 10))
+    logger.info('[Sport] probe_parallel: %d bounded workers' % worker_count)
+    threads = [threading.Thread(target=_probe_worker, daemon=True)
+               for _ in range(worker_count)]
     for t in threads:
         t.start()
     # Wait against ONE shared deadline, polling so we can bail the instant the
     # home shuts down.  The old per-thread `join(timeout)` added up to N×timeout
     # when several channels hung (probe took 82-121 s in the wild → froze the UI
     # on Back/exit because Kodi waited on these threads).
-    deadline = t0 + timeout
     while time.time() < deadline:
         if _abort_event.is_set():
             logger.info('[Sport] probe_parallel: aborted (home closing)')
@@ -957,18 +1167,65 @@ def _parse_sky_backend():
 
 
 def _parse_tv_backend():
-    """Build the TV row: free-to-air generalisti (Rai, Mediaset, La7…) from the
-    DaddyLive Italian list.  Online-only — empty row if none are live."""
-    channels = _daddy_channels('tv')
-    if not channels:
-        return None  # backend unreachable → keep previous list
-    online = _probe_parallel(channels, timeout=35)
-    logger.info('[Sport] tv online: %d/%d channels' % (len(online), len(channels)))
-    return online
+    """Dirette gratuite ufficiali Rai/Mediaset/La7/Discovery (logica S4Me)."""
+    from platformcode import tvchannels
+    channels = []
+    for index, item in enumerate(tvchannels.load()):
+        try:
+            channels.append({
+                'title': item.fulltitle or item.title,
+                'logo': item.thumbnail or item.fanart,
+                'kind': 'provider',
+                'par': 'provider@@%s@@%d' % (item.channel, index),
+                'provider_item': json.loads(item.tojson()),
+            })
+        except Exception as exc:
+            logger.error('[TV] serializzazione: %s' % str(exc))
+    return channels
 
+
+def _parse_iptv_row(row):
+    """Load private FHD IPTV entries for one logical row."""
+    try:
+        from platformcode import iptv_pool
+        category = row.replace('iptv_', '', 1)
+        out = []
+        seen = set()
+        for item in iptv_pool.channels(category):
+            title = item.get('title') or ''
+            if not title:
+                continue
+            if title.casefold().strip() == 'netflix live':
+                continue
+            # Peter Pan pubblica spesso la stessa voce due volte e una seconda
+            # variante "(Buffering)". Mostrare entrambe rallenta la riga e crea
+            # decine di tessere senza logo: conserviamo una sola voce canonica,
+            # preferendo naturalmente quella normale che arriva per prima.
+            canonical = re.sub(r'\s*\((?:buffering)\)\s*', ' ', title,
+                               flags=re.I)
+            canonical = re.sub(r'\s+', ' ', canonical).casefold().strip()
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            from platformcode import iptv_pool
+            local_logo = _iptv_logo(title, item.get('logo', ''))
+            if not local_logo:
+                local_logo = iptv_pool.logo_for(title, item.get('logo', ''))
+            out.append({'title': title, 'kind': 'iptv', 'par': title,
+                        'fs': None, 'logo': local_logo,
+                        'sources': item.get('sources', [])})
+        return out
+    except Exception as exc:
+        logger.error('[Sport] IPTV %s: %s' % (row, exc))
+        return []
 
 _PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend,
-            'tv': _parse_tv_backend}
+            'tv': _parse_tv_backend,
+            'iptv_cinema': lambda: _parse_iptv_row('iptv_cinema'),
+            'iptv_intrattenimento': lambda: _parse_iptv_row('iptv_intrattenimento'),
+            'iptv_documentari': lambda: _parse_iptv_row('iptv_documentari'),
+            'iptv_calcio': lambda: _parse_iptv_row('iptv_calcio'),
+            'iptv_dazn': lambda: _parse_iptv_row('iptv_dazn')}
 
 
 def _load_disk_cache(row):
@@ -999,7 +1256,7 @@ def _save_disk_cache(row, data):
 def refresh_background():
     """Refresh rows whose cache is stale; skip rows that are still fresh."""
     now = time.time()
-    stale = [r for r in ('sport', 'sky', 'tv')
+    stale = [r for r in _PARSERS
              if (now - _mem_cache[r]['ts']) >= _CACHE_TTL]
     if not stale:
         return  # both caches fresh — nothing to do
@@ -1073,6 +1330,7 @@ def reset_state():
     _keepalive_running = False
     _cf_scraper = None   # a half-initialised scraper from a killed thread is unusable
     _abort_event.clear()
+    _ready_rows.clear()
     logger.info('[Sport] module state reset for new session')
 
 
@@ -1105,13 +1363,8 @@ def get_channels(row):
     if mc and mc['data'] and (time.time() - mc['ts']) < _CACHE_TTL:
         logger.debug('[Sport] get_channels %s: from memory (%d items)' % (row, len(mc['data'])))
         return mc['data']
-    disk = _load_disk_cache(row)
-    if disk:
-        logger.info('[Sport] get_channels %s: from disk cache (%d items)' % (row, len(disk)))
-        if mc is not None:
-            mc['data'] = disk
-            mc['ts'] = time.time()
-        return disk
+    # La cache su disco non prova che un live sia riproducibile oggi. Ogni
+    # processo parte vuoto e rivela la riga solo dopo il probe corrente.
     logger.info('[Sport] get_channels %s: cold start — no cache yet' % row)
     return []
 
@@ -1122,8 +1375,44 @@ def build_items(row):
     sport_* payload used by the home's click handler to play them directly.
     infoLabels['_enr']=1 makes the home's TMDB-enrichment loops skip them."""
     items = []
-    for ch in get_channels(row):
+    if row in ('sky', 'sport') and not row_ready(row):
+        return []
+    channel_rows = list(get_channels(row))
+    if row == 'sky':
+        for cat in ('cinema', 'intrattenimento', 'documentari'):
+            channel_rows += _parse_iptv_row('iptv_' + cat)
+    elif row == 'sport':
+        for cat in ('sport', 'calcio'):
+            channel_rows += _parse_iptv_row('iptv_' + cat)
+    elif row.startswith('iptv_'):
+        # Standalone IPTV rows (currently DAZN) must populate from the private
+        # catalog just like the merged SKY/SPORT rows.
+        channel_rows += _parse_iptv_row(row)
+    # Merge by visible title while preserving native ClearKey/Daddy priority.
+    seen = set()
+    def _dedupe_key(ch):
+        if row == 'sky':
+            return _sky_canonical_title(ch.get('title', ''))
+        if row == 'sport':
+            return _sport_canonical_title(ch.get('title', ''))
+        return str(ch.get('title', '')).casefold().strip()
+    channel_rows = [ch for ch in channel_rows
+                    if not (_dedupe_key(ch) in seen or seen.add(_dedupe_key(ch)))]
+    if row == 'sky':
+        channel_rows.sort(key=_sky_sort_key)
+    elif row == 'iptv_dazn':
+        # I feed Champions vengono pubblicati in testa da alcune liste Peter
+        # Pan; nella riga DAZN devono rimanere sempre in coda.
+        channel_rows.sort(key=lambda ch: (
+            1 if 'champions' in str(ch.get('title', '')).casefold() else 0,))
+    for ch in channel_rows:
         try:
+            if ch.get('kind') == 'provider' and ch.get('provider_item'):
+                it = Item().fromjson(json.dumps(ch['provider_item']))
+                it.is_live_channel = True
+                it._app_live_provider = True
+                items.append(it)
+                continue
             it = Item(
                 fulltitle=ch['title'], title=ch['title'],
                 thumbnail=ch.get('logo', ''), fanart=ch.get('logo', ''),
@@ -1134,6 +1423,11 @@ def build_items(row):
             it.sport_kind = ch['kind']
             it.sport_par = ch['par']
             it.sport_fs = ch.get('fs')
+            it.sport_sources = ch.get('sources', [])
+            it.sport_validated_route = ch.get('_validated_route', '')
+            if ch.get('kind') == 'iptv':
+                it.sport_validated_route = 'primary'
+            it.sport_validated_code = ch.get('_validated_code', '')
             items.append(it)
         except Exception as exc:
             logger.error('[Sport] build_items %s: %s' % (ch.get('title'), str(exc)))
@@ -1202,17 +1496,18 @@ def resolve_sky(channel_id):
         return None
 
 
-def resolve_freeshot(code):
+def resolve_freeshot(code, quiet=False):
     """Return an HLS m3u8 URL for a freeshot channel, or None.
     Goes through cloudscraper (popcdn.day is behind a Cloudflare challenge)."""
     page = _cf_get("https://popcdn.day/player/" + code,
                    headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                   timeout=10)
+                   timeout=10, quiet=quiet)
     if not page:
         return None
     m = re.search(r'currentToken:\s*"(.*?)"', page)
     if not m:
-        logger.error('[Sport] resolve_freeshot %s: no token' % code)
+        (logger.debug if quiet else logger.error)(
+            '[Sport] resolve_freeshot %s: no token' % code)
         return None
     return "https://lovely.lovetier.bz/%s/tracks-v1a1/mono.m3u8?token=%s" % (code, m.group(1))
 
@@ -1538,6 +1833,36 @@ def _ffmpeg_listitem(url, title, art, referer=None):
         li.setArt(art)
     return li
 
+def _iptv_listitem(url, title, art):
+    """Xtream MPEG-TS item matching TheGroove's known-good VLC transport."""
+    ua = 'VLC/3.0.21 LibVLC/3.0.21'
+    li = xbmcgui.ListItem(path=url + '|!User-Agent=' + ua, offscreen=True)
+    li.setLabel(title)
+    li.setContentLookup(False)
+    li.setMimeType('video/mp2t')
+    if art:
+        li.setArt(art)
+    return li
+
+def resolve_iptv_attempt(item, attempt=0):
+    """Resolve one IPTV attempt from a different remotely-free Group-E list."""
+    try:
+        from platformcode import iptv_pool
+        title = item.fulltitle or item.title or getattr(item, 'sport_par', '')
+        art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+               'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+        lease_id = '%s#%d' % (title, int(attempt or 0))
+        url = iptv_pool.acquire(title, lease_id, attempt=int(attempt or 0))
+        if not url:
+            return None
+        if '.ts' in url.lower() and '|' not in url:
+            return _iptv_listitem(url, title, art)
+        return _hls_listitem(url, title, art)
+    except Exception as exc:
+        logger.error('[IPTV] resolve attempt %s/%s: %s' %
+                     (getattr(item, 'sport_par', ''), attempt, exc))
+        return None
+
 
 def resolve_listitem(item):
     """Resolve a live-channel Item to a playable xbmcgui.ListItem.
@@ -1589,12 +1914,41 @@ def resolve_listitem(item):
             return _hls_listitem(url, title, art)
         return None
 
+    if kind == 'iptv':
+        return resolve_iptv_attempt(item, 0)
+
     return None
 
 
-def resolve_iptvorg(display_name):
+def resolve_validated_listitem(item):
+    """Resolve esclusivamente la sorgente ammessa dal probe corrente."""
+    route = getattr(item, 'sport_validated_route', '')
+    code = getattr(item, 'sport_validated_code', '')
+    par = getattr(item, 'sport_par', '')
+    title = item.fulltitle or item.title or par
+    art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+           'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+
+    if route == 'sky':
+        sky = resolve_sky(par)
+        return (_clearkey_listitem(sky[0], sky[1], sky[2], title, art)
+                if sky else None)
+    if route == 'freeshot':
+        url = resolve_freeshot(code or getattr(item, 'sport_fs', None) or par)
+        return (_hls_listitem(url, title, art, referer=_FREESHOT_REFERER)
+                if url else None)
+    if route == 'daddy':
+        res = resolve_daddy(code or par)
+        return _hls_listitem(res[0], title, art, referer=res[1]) if res else None
+    if route == 'primary':
+        return resolve_listitem(item)
+    logger.info('[Sport] %s senza sorgente validata: rifiutato' % par)
+    return None
+
+
+def resolve_iptvorg(display_name, quiet=False):
     """Resolve a channel from the iptv-org Italy list by matching its name."""
-    m3u = _http_get(_IPTVORG_IT, timeout=10)
+    m3u = _http_get(_IPTVORG_IT, timeout=10, quiet=quiet)
     if not m3u:
         return None
     lines = m3u.splitlines()

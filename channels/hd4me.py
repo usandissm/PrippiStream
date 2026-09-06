@@ -103,12 +103,60 @@ def _get_catalog():
     return _catalog['data'] or []
 
 
+def _catalog_item(parent, movie):
+    """Convert one static catalog row into a normal navigable movie Item."""
+    pid = movie.get('pid')
+    if not pid:
+        return None
+    title = movie.get('twy') or movie.get('to') or ''
+    if not title:
+        return None
+    poster_id = movie.get('pa') or ''
+    thumb = ('https://image.tmdb.org/t/p/w500/%s.jpg' % poster_id) if poster_id else ''
+    result = parent.clone(
+        action='findvideos', title=title, fulltitle=title,
+        contentTitle=title, contentType='movie', folder=True,
+        url='%s/posts/%s.json' % (_CACHE, pid),
+        thumbnail=thumb, fanart=thumb, infoLabels={},
+    )
+    if movie.get('y'):
+        result.infoLabels['year'] = str(movie.get('y'))
+    if movie.get('rt'):
+        result.infoLabels['rating'] = movie.get('rt')
+    if movie.get('iid'):
+        result.infoLabels['imdb_id'] = str(movie.get('iid'))
+    return result
+
+
 @support.menu
 def mainlist(item):
-    # hd4me è usato solo dalla ricerca globale; il menu-browse non è più
-    # supportato dal sito React. Voce minima per non rompere il caricamento.
+    # Il sito React non espone più pagine HTML navigabili; peliculas() usa il
+    # suo catalogo JSON statico, quindi il canale resta sfogliabile anche fuori
+    # dalla ricerca globale.
     film = []
     return locals()
+
+
+def peliculas(item):
+    """Catalogo HD4Me paginato, alimentato dallo stesso JSON della web app."""
+    data = _get_catalog()
+    try:
+        page = max(1, int(getattr(item, 'page', 1) or 1))
+    except Exception:
+        page = 1
+    page_size = 40
+    start = (page - 1) * page_size
+    itemlist = []
+    for movie in data[start:start + page_size]:
+        result = _catalog_item(item, movie)
+        if result:
+            itemlist.append(result)
+    if start + page_size < len(data):
+        itemlist.append(item.clone(
+            action='peliculas', title='Pagina successiva',
+            page=page + 1, thumbnail='', folder=True,
+        ))
+    return itemlist
 
 
 def search(item, text):
@@ -126,18 +174,9 @@ def search(item, text):
                 to = f.get('to') or ''
                 if not (_match(q, qsig, ntwy, stwy) or _match(q, qsig, nto, sto)):
                     continue
-                pid = f.get('pid')
-                if not pid:
+                it = _catalog_item(item, f)
+                if not it:
                     continue
-                title = twy or to
-                pa = f.get('pa') or ''
-                thumb = ('https://image.tmdb.org/t/p/w500/%s.jpg' % pa) if pa else ''
-                it = item.clone(action='findvideos', title=title, fulltitle=title,
-                                contentTitle=title, contentType='movie',
-                                url='%s/posts/%s.json' % (_CACHE, pid),
-                                thumbnail=thumb, fanart=thumb, infoLabels={})
-                if f.get('y'):
-                    it.infoLabels['year'] = str(f.get('y'))
                 itemlist.append(it)
                 if len(itemlist) >= 40:
                     break

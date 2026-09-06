@@ -170,7 +170,10 @@ def update_node(dict_node, name_file, node, path=None, silent=False):
 
     try:
         data = filetools.read(fname)
-        dict_data = load(data)
+        # filetools.read returns False when the per-channel cache does not
+        # exist yet. Passing that bool to json.loads produced a noisy TypeError
+        # during the first StreamingCommunity domain refresh.
+        dict_data = load(data) if isinstance(data, (str, bytes)) and data else {}
         # it's a dict
         if dict_data:
             if node in dict_data:

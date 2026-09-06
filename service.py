@@ -69,6 +69,9 @@ def get_ua_list():
 
 
 def run_threaded(job_func, args):
+    # reuselanguageinvoker keeps this module alive: discard completed workers so
+    # the shutdown list does not grow for the whole Kodi session.
+    threads[:] = [th for th in threads if th.is_alive()]
     job_thread = threading.Thread(target=job_func, args=args)
     job_thread.daemon = True   # daemon=True: Python interpreter can exit even if this
     job_thread.start()         # thread is still running (e.g. long library update scan)
@@ -77,43 +80,22 @@ def run_threaded(job_func, args):
 
 def join_threads():
     logger.debug(threads)
+    deadline = datetime.datetime.now() + datetime.timedelta(seconds=3.5)
     for th in threads:
         try:
-            th.join(timeout=5)   # cap wait — network threads may block indefinitely
+            remaining = (deadline - datetime.datetime.now()).total_seconds()
+            if remaining <= 0:
+                break
+            th.join(timeout=remaining)
         except:
             logger.error(traceback.format_exc())
+    threads[:] = [th for th in threads if th.is_alive()]
 
 
 def _update_channels_json():
-    """
-    Downloads channels.json from the GitHub repo and updates the local copy if changed.
-    Runs once at Kodi startup and then every 24h via schedule.
-    When the file changes, invalidates the in-memory cache in config.py so that
-    the next call to get_channel_url() uses the fresh domains.
-    """
-    REMOTE_URL = 'https://raw.githubusercontent.com/usandissm/PrippiStream/main/channels.json'
-    local_path = os.path.join(config.get_runtime_path(), 'channels.json')
-    try:
-        try:
-            import urllib.request as _urllib
-        except ImportError:
-            import urllib as _urllib
-        remote_data = _urllib.urlopen(REMOTE_URL, timeout=10).read().decode('utf-8')
-        try:
-            with open(local_path, 'r', encoding='utf-8') as f:
-                local_data = f.read()
-        except Exception:
-            local_data = ''
-        if remote_data.strip() != local_data.strip():
-            with open(local_path, 'w', encoding='utf-8') as f:
-                f.write(remote_data)
-            # Invalidate in-memory cache so next call re-reads the file
-            config.channels_data = dict()
-            logger.info('[channels_update] channels.json aggiornato dal repository')
-        else:
-            logger.debug('[channels_update] channels.json già aggiornato')
-    except Exception as e:
-        logger.error('[channels_update] errore aggiornamento channels.json: %s' % str(e))
+    """Refresh unico Kodi: validato e atomico, sempre fuori dal primo paint."""
+    from platformcode import remote_registry
+    return remote_registry.sync(config, logger=logger, timeout=10)
 
 
 def _prune_tmdb_cache():
@@ -142,6 +124,7 @@ def _prune_tmdb_cache():
         return
 
     pruned = 0
+    maintenance_ok = True
     try:
         no_expire = str(config.get_setting('tmdb_cache_expire', default=2)) == '4'
         if not no_expire:
@@ -168,22 +151,26 @@ def _prune_tmdb_cache():
         logger.info('[tmdb_prune] voci esaminate ok, potate %d (no_expire=%s)'
                     % (pruned, no_expire))
     except Exception:
+        maintenance_ok = False
         logger.error('[tmdb_prune] potatura: ' + traceback.format_exc())
 
     # VACUUM condizionale con connessione raw (fuori da SqliteDict)
     try:
         import sqlite3
         from core import db_name as _db_path
-        conn = sqlite3.connect(_db_path, timeout=30)
+        conn = sqlite3.connect(_db_path, timeout=5)
         conn.isolation_level = None
         try:
-            conn.execute('PRAGMA busy_timeout=30000')
+            conn.execute('PRAGMA busy_timeout=5000')
             freelist = conn.execute('PRAGMA freelist_count').fetchone()[0]
             page_size = conn.execute('PRAGMA page_size').fetchone()[0]
             free_mb = freelist * page_size / (1024.0 * 1024.0)
             if free_mb > 8:
                 size_before = os.path.getsize(_db_path)
                 conn.execute('VACUUM')
+                integrity = conn.execute('PRAGMA integrity_check').fetchone()[0]
+                if str(integrity).lower() != 'ok':
+                    raise RuntimeError('integrity_check=%s' % integrity)
                 logger.info('[tmdb_prune] VACUUM: %.1fMB liberi recuperati, file %d -> %d byte'
                             % (free_mb, size_before, os.path.getsize(_db_path)))
             else:
@@ -191,15 +178,17 @@ def _prune_tmdb_cache():
         finally:
             conn.close()
     except Exception as exc:
+        maintenance_ok = False
         # SQLITE_BUSY (home aperta che scrive) o altro: riprova domani
         logger.info('[tmdb_prune] VACUUM rimandato: %s' % str(exc)[:120])
 
-    try:
-        with open(marker, 'a'):
+    if maintenance_ok:
+        try:
+            with open(marker, 'a'):
+                pass
+            os.utime(marker, None)
+        except Exception:
             pass
-        os.utime(marker, None)
-    except Exception:
-        pass
 
 
 class AddonMonitor(xbmc.Monitor):
@@ -262,13 +251,13 @@ class AddonMonitor(xbmc.Monitor):
 
     def scheduleUpdater(self):
         if not config.dev_mode():
-            updaterCheck()
+            run_threaded(updaterCheck, ())
             self.updaterPeriod = config.get_setting('addon_update_timer')
             schedule.every(self.updaterPeriod).hours.do(updaterCheck).tag('updater')
             logger.debug('scheduled updater every ' + str(self.updaterPeriod) + ' hours')
 
     def scheduleUA(self):
-        get_ua_list()
+        run_threaded(get_ua_list, ())
         schedule.every(1).day.do(get_ua_list)
 
     def scheduleScreenOnJobs(self):
@@ -294,6 +283,15 @@ if __name__ == "__main__":
 
     # Test if all the required directories are created
     config.verify_directories_created()
+
+    # A crash or a kill durante un live può lasciare il keymap temporaneo nel
+    # profilo Kodi. Ripristina sempre i comandi video nativi al boot; la Home lo
+    # riattiverà soltanto quando parte una nuova sessione SKY/Sport/TV.
+    try:
+        from platformcode import live_remote
+        live_remote.clear_session()
+    except Exception:
+        logger.error(traceback.format_exc())
 
     # Install keymap: copy back_stops_video.xml to userdata/keymaps/ so that
     # pressing Back in fullscreen video stops playback on every device.
@@ -365,6 +363,31 @@ if __name__ == "__main__":
     config.set_setting('resolver_dns', True)
     config.set_setting('resolver_dns_provider', 'Google')
 
+    # Build v2: the generic addon debug used to be enabled automatically by
+    # "Invia Log" and persisted across updates, producing thousands of noisy
+    # per-request lines on low-power devices.  Reset that legacy state once;
+    # afterwards the user remains free to enable the visible switch manually.
+    # La telemetria mirata resta disponibile dal toggle, ma non deve restare
+    # accesa dopo l'aggiornamento: produce molto rumore durante l'uso normale.
+    if not config.get_setting('quiet_debug_default_applied', default=False):
+        config.set_setting('debug', False)
+        config.set_setting('quiet_debug_default_applied', True)
+        try:
+            logger.DEBUG_ENABLED = False
+        except Exception:
+            pass
+        logger.info('[Setup] debug generico disattivato')
+
+    if not config.get_setting('quiet_perf_default_applied', default=False):
+        config.set_setting('perf_log', False)
+        config.set_setting('quiet_perf_default_applied', True)
+        try:
+            from platformcode import perf as _perf
+            _perf.ENABLED = False
+        except Exception:
+            pass
+        logger.info('[Setup] telemetria PERF/NET disattivata; riattivabile dalle impostazioni')
+
     # Suppress the YouTube addon setup wizard so it never appears to the user.
     # The wizard key is 'kodion.setup_wizard'; setting it to 'false' prevents it
     # from showing both on first install and after YouTube updates.
@@ -400,7 +423,8 @@ if __name__ == "__main__":
     # can trigger an immediate install while RunAddon is still initialising the addon,
     # causing Kodi to show the "Add-on required: PrippiStream" popup.
     def _deferred_update_repos():
-        xbmc.sleep(20000)
+        if xbmc.Monitor().waitForAbort(20):
+            return
         xbmc.executebuiltin('UpdateAddonRepos')
     run_threaded(_deferred_update_repos, ())
 
@@ -525,6 +549,11 @@ if __name__ == "__main__":
 
         if monitor.waitForAbort(1): # every second
             logger.debug('PrippiStream service EXIT')
+            try:
+                from platformcode import live_remote
+                live_remote.clear_session()
+            except Exception:
+                logger.error(traceback.format_exc())
             # db need to be closed when not used, it will cause freezes
             join_threads()
             logger.debug('Close Threads')

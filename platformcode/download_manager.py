@@ -53,6 +53,25 @@ _active = [0]
 _FLAG_PROP = 'prippistream_dl_active'
 
 
+def _network_is_available():
+    manager = globals().get('_manager')
+    return manager is None or manager.network_available()
+
+
+def _is_network_unavailable_error(exc):
+    text = str(exc).lower()
+    return (not _network_is_available() or
+            'network is unreachable' in text or
+            'network unreachable' in text or
+            '[errno 101]' in text)
+
+
+def _raise_if_offline(exc=None):
+    if not _network_is_available() or (exc is not None and
+                                       _is_network_unavailable_error(exc)):
+        raise hls_downloader.NetworkUnavailableError('network unavailable')
+
+
 def _sync_flag():
     try:
         import xbmcgui
@@ -180,7 +199,15 @@ def _session_get(url, headers=None, timeout=30):
     """Addon path (DoH + cipher) — for the master/media playlist + AES key, which
     live on vixcloud.co (Cloudflare, frequently ISP-DNS-blocked)."""
     s = _session_for(url)
-    r = s.get(url, headers=headers or {}, timeout=timeout)
+    _raise_if_offline()
+    try:
+        r = s.get(url, headers=headers or {}, timeout=timeout)
+    except Exception as exc:
+        _raise_if_offline(exc)
+        raise
+    if r is None:
+        _raise_if_offline(RuntimeError('empty HTTP response'))
+        raise IOError('empty HTTP response')
     if r.status_code in (403, 410):
         err = Exception('HTTP %d' % r.status_code)
         err.code = r.status_code
@@ -189,7 +216,25 @@ def _session_get(url, headers=None, timeout=30):
     return r.content
 
 
-_STALL_DEADLINE = 12   # max seconds for one segment before we abandon+retry
+_STALL_MIN = 20.0
+_STALL_MAX = 60.0
+_segment_timing = [None]
+_segment_timing_lock = threading.Lock()
+
+
+def _stall_deadline():
+    """Adaptive hard deadline based on successful segment transfer times."""
+    with _segment_timing_lock:
+        average = _segment_timing[0]
+    return max(_STALL_MIN, min(_STALL_MAX, (average or 8.0) * 3.0))
+
+
+def _record_segment_time(seconds):
+    if seconds <= 0:
+        return
+    with _segment_timing_lock:
+        old = _segment_timing[0]
+        _segment_timing[0] = seconds if old is None else (old * 0.8 + seconds * 0.2)
 
 
 def _stdlib_get(url, headers=None, timeout=30):
@@ -208,7 +253,9 @@ def _stdlib_get(url, headers=None, timeout=30):
          if k.lower() != 'accept-encoding'}
     req = _urlreq.Request(url, headers=h)
     sock_timeout = min(timeout, 8)
-    _step = _dbg_seg[0] < 30
+    _raise_if_offline()
+    started = _t.time()
+    _step = _dbg_seg[0] < 5
     def _slog(s):
         if _step:
             try:
@@ -231,8 +278,12 @@ def _stdlib_get(url, headers=None, timeout=30):
             err.code = code
             raise err
         raise
+    except Exception as exc:
+        _raise_if_offline(exc)
+        raise
     try:
-        deadline = _t.time() + _STALL_DEADLINE
+        stall_limit = _stall_deadline()
+        deadline = _t.time() + stall_limit
         chunks = []
         while True:
             chunk = resp.read(131072)
@@ -240,8 +291,9 @@ def _stdlib_get(url, headers=None, timeout=30):
                 break
             chunks.append(chunk)
             if _t.time() > deadline:
-                raise IOError('segment stalled (> %ds)' % _STALL_DEADLINE)
+                raise IOError('segment stalled (> %ds)' % int(stall_limit))
         _slog('D read done %dKB' % (sum(len(c) for c in chunks) // 1024))
+        _record_segment_time(_t.time() - started)
         return b''.join(chunks)
     finally:
         try:
@@ -265,6 +317,7 @@ def _is_dns_error(exc):
 
 
 def _http_get(url, headers=None, timeout=30):
+    _raise_if_offline()
     host = (_urlsplit(url).netloc or '').lower()
     # Playlist + key (vixcloud.co, Cloudflare/ISP-blocked) → DoH+cipher session.
     if 'vixcloud' in host or 'streamingcommunit' in host:
@@ -274,7 +327,7 @@ def _http_get(url, headers=None, timeout=30):
     # hazard was concurrent getaddrinfo hanging — eliminated by prewarm_dns()
     # which resolves every host once, serially, before the parallel fetch.
     import time as _t
-    _dbg = _dbg_seg[0] < 500
+    _dbg = _dbg_seg[0] < 20
     t0 = _t.time()
     try:
         data = _stdlib_get(url, headers, timeout)
@@ -283,6 +336,7 @@ def _http_get(url, headers=None, timeout=30):
             logger.info('[DLseg] stdlib OK %s %.2fs %dKB' % (host, _t.time() - t0, len(data) // 1024))
         return data
     except Exception as e:
+        _raise_if_offline(e)
         if getattr(e, 'code', None) in (403, 410):
             raise
         if _is_dns_error(e):
@@ -399,6 +453,14 @@ def _resolve_media(page_url, channel='', item=None):
     SC keeps the streamingcommunityws path; other channels resolve via their
     findvideos() server items + servertools.resolve_video_urls_for_playing."""
     from core import servertools
+    # Le app native possono dover autorizzare il CDN in un WebView (VixCloud
+    # richiede cookie/sessione browser). In quel caso il bridge passa al motore
+    # la playlist già autorizzata, mantenendo invariata tutta la coda/download.
+    if item is not None:
+        prepared_url = getattr(item, '_app_media_url', '') or ''
+        if prepared_url:
+            prepared_headers = getattr(item, '_app_media_headers', {}) or {}
+            return prepared_url, _kind_for(prepared_url), dict(prepared_headers)
     ch = (channel or '').lower()
     logger.info('[DLManager] _resolve_media ch=%r page=%.80s' % (ch, page_url or ''))
     if ch in ('', 'streamingcommunity'):
@@ -507,10 +569,27 @@ def probe_tracks(page_url, channel='', item=None):
     synthesized so the UI doesn't treat it as 'no stream'."""
     try:
         media_url, kind, headers = _resolve_media(page_url, channel, item)
+        external_urls = getattr(item, '_app_subtitle_urls', []) if item is not None else []
+        if isinstance(external_urls, str):
+            external_urls = [external_urls]
+        external_subs = []
+        for index, sub_url in enumerate(external_urls or []):
+            if not sub_url:
+                continue
+            low = sub_url.lower()
+            language = 'it' if any(marker in low for marker in ('.it.', '_it.', '-it.', 'ita')) else ''
+            external_subs.append({
+                'name': u'Italiano' if language == 'it' else u'Sottotitoli %d' % (index + 1),
+                'label': u'Italiano' if language == 'it' else u'Sottotitoli %d' % (index + 1),
+                'language': language,
+                'default': index == 0,
+                'forced': False,
+                'url': sub_url,
+            })
         if kind == 'file':
             return {'variants': [{'height': 0, 'resolution': 'auto',
                                   'bandwidth': 0, 'url': media_url}],
-                    'audios': [], 'subtitles': [], 'master_url': media_url,
+                    'audios': [], 'subtitles': external_subs, 'master_url': media_url,
                     'kind': 'file', 'media_url': media_url, 'headers': headers}
         text = _http_get(media_url, headers=headers).decode('utf-8', 'ignore')
         info = hls_downloader.parse_master(text, media_url)
@@ -522,11 +601,17 @@ def probe_tracks(page_url, channel='', item=None):
             a['label'] = _lang_label(a)
         for s in info.get('subtitles', []):
             s['label'] = _lang_label(s)
+        known_sub_urls = {s.get('url') for s in info.get('subtitles', [])}
+        info.setdefault('subtitles', []).extend(
+            s for s in external_subs if s.get('url') not in known_sub_urls
+        )
         info['master_url'] = media_url
         info['kind'] = 'hls'
         info['headers'] = headers
         return info
     except Exception as exc:
+        if _is_network_unavailable_error(exc):
+            raise hls_downloader.NetworkUnavailableError('network unavailable')
         logger.error('[DLManager] probe_tracks: %s' % str(exc)[:160])
         return {}
 
@@ -672,6 +757,9 @@ class DownloadManager(object):
         self._started = False
         self._lock = threading.Lock()
         self._cancels = {}      # key -> threading.Event
+        self._scheduled = set() # keys queued or owned by a worker
+        self._network_event = threading.Event()
+        self._network_event.set()
         self._bg = None
         self._bg_lock = threading.Lock()
         self.on_change = None   # optional callback fired when downloads change
@@ -696,7 +784,17 @@ class DownloadManager(object):
             # 'download_protection' option was removed. Existing downloads keep
             # whatever mode is stored in their DB entry, so they still play back.
             protection = 'xor'
-        entry = db_entry or _entry_from_item(item)
+        entry = dict(db_entry or _entry_from_item(item))
+        key = entry['key']
+        with self._lock:
+            current = downloads_db.get(key) or {}
+            if key in self._scheduled:
+                logger.info('[DLManager] duplicate ignored key=%s' % key)
+                return False
+            if current.get('status') == 'done':
+                logger.info('[DLManager] completed key ignored=%s' % key)
+                return False
+            self._scheduled.add(key)
         entry['protection'] = protection
         entry['target_height'] = int(target_height or 0)
         entry['status'] = 'queued'
@@ -718,6 +816,32 @@ class DownloadManager(object):
                      'audio_langs': entry.get('audio_langs'),
                      'sub_langs': entry.get('sub_langs')})
         # The BG bar is shown by the poller thread (no GUI on this path).
+        return True
+
+    def network_available(self):
+        return self._network_event.is_set()
+
+    def set_network_available(self, available):
+        available = bool(available)
+        before = self._network_event.is_set()
+        if available:
+            self._network_event.set()
+        else:
+            self._network_event.clear()
+        if before != available:
+            logger.info('[DLManager] network %s' %
+                        ('available' if available else 'unavailable'))
+
+    def _wait_for_network(self, key):
+        if self._network_event.is_set():
+            return True
+        downloads_db.update_fields_unless_done(
+            key, status='waiting_network', error='')
+        while not self._network_event.wait(1.0):
+            state = downloads_db.get(key) or {}
+            if state.get('status') == 'paused':
+                return False
+        return (downloads_db.get(key) or {}).get('status') != 'paused'
 
     def enqueue_many(self, jobs, target_height, protection=None,
                      audio_langs=None, sub_langs=None):
@@ -772,7 +896,7 @@ class DownloadManager(object):
     def resume_pending(self):
         """Re-enqueue downloads left unfinished by a previous session."""
         from core.item import Item
-        for e in downloads_db.get_active():
+        for e in downloads_db.get_resumable():
             try:
                 item = Item().fromurl(e['item_url'])
                 self.enqueue(item, e.get('target_height', 0),
@@ -802,20 +926,39 @@ class DownloadManager(object):
         while True:
             job = self._q.get()
             try:
-                if job is not None:
-                    self._run_job(job)
-            except Exception as exc:
-                logger.error('[DLManager] worker: %s' % str(exc)[:200])
-                try:
-                    downloads_db.update_fields(job['key'], status='error',
-                                               error=str(exc)[:200])
-                except Exception:
-                    pass
+                if job is None:
+                    continue
+                key = job['key']
+                while True:
+                    if not self._wait_for_network(key):
+                        break
+                    if (downloads_db.get(key) or {}).get('status') == 'done':
+                        break
+                    try:
+                        self._run_job(job)
+                        break
+                    except hls_downloader.NetworkUnavailableError:
+                        downloads_db.update_fields_unless_done(
+                            key, status='waiting_network', error='')
+                        logger.info('[DLManager] waiting for network key=%s' % key)
+                        continue
+                    except Exception as exc:
+                        logger.error('[DLManager] worker key=%s: %s' % (
+                            key, str(exc)[:200]))
+                        downloads_db.update_fields_unless_done(
+                            key, status='error', error=str(exc)[:200])
+                        break
+                state = downloads_db.get(key) or {}
+                logger.info('[DLManager] finish key=%s status=%s progress=%s' % (
+                    key, state.get('status', '?'), state.get('progress', '?')))
             finally:
                 # No GUI work here — the poller thread owns all UI updates so a
                 # busy GUI can't block the download worker.
                 _active[0] = max(0, _active[0] - 1)
                 _sync_flag()
+                if job is not None:
+                    with self._lock:
+                        self._scheduled.discard(job.get('key'))
                 self._q.task_done()
 
     def _notify(self, force=False):
@@ -837,9 +980,14 @@ class DownloadManager(object):
         item = job['item']
         cancel_evt = threading.Event()
         self._cancels[key] = cancel_evt
-        downloads_db.update_fields(key, status='downloading', error='')
+        if not self.network_available():
+            raise hls_downloader.NetworkUnavailableError('network unavailable')
+        downloads_db.update_fields_unless_done(key, status='downloading', error='')
 
         entry = downloads_db.get(key) or {}
+        logger.info('[DLManager] start key=%s title=%s season=%s episode=%s' % (
+            key, entry.get('title', ''), entry.get('season', ''),
+            entry.get('episode', '')))
         page_url = item.url
         channel = (getattr(item, 'channel', '') or '')
 
@@ -977,6 +1125,9 @@ class DownloadManager(object):
                     downloads_db.update_fields(key, status='paused')
                     return
                 except Exception as exc:
+                    if _is_network_unavailable_error(exc):
+                        raise hls_downloader.NetworkUnavailableError(
+                            'network unavailable')
                     if retried:
                         raise
                     retried = True
@@ -999,7 +1150,18 @@ class DownloadManager(object):
         finally:
             self._cancels.pop(key, None)
 
-        downloads_db.update_fields(key, status='done', progress=100.0, sub_path='')
+        sub_path = ''
+        external_urls = getattr(job.get('item'), '_app_subtitle_urls', []) or []
+        if isinstance(external_urls, str):
+            external_urls = [external_urls]
+        for sub_url in external_urls:
+            candidate = os.path.join(out_dir, fname + '.vtt')
+            if hls_downloader.download_subtitle(
+                    sub_url, headers, candidate, http_get=_http_get):
+                sub_path = candidate
+                break
+        downloads_db.update_fields(key, status='done', progress=100.0,
+                                   sub_path=sub_path)
         self._notify_done(entry)
 
     def _dl_one(self, url, headers, out_path, cipher, cancel_evt, progress_cb,
@@ -1082,7 +1244,11 @@ class DownloadManager(object):
             audio_metas = []
             for i, a in enumerate(audios):
                 am = {}
-                self._dl_one(a['url'], _default_headers(a['url']),
+                # Le rendition separate appartengono alla stessa sessione del
+                # master: su VixCloud cookie/referer autorizzati dal browser sono
+                # richiesti anche per l'audio, non solo per il video.
+                track_headers = dict(headers)
+                self._dl_one(a['url'], track_headers,
                              _os.path.join(bundle_dir, 'audio.%d.ts' % i), cipher,
                              cancel_evt, _audio_progress(i), job, 'audio', i, am)
                 prog_state['bytes'] += am.get('bytes', 0)
@@ -1097,7 +1263,7 @@ class DownloadManager(object):
             sub_metas = []
             for i, s in enumerate(subs):
                 ok = hls_downloader.download_subtitle(
-                    s['url'], _default_headers(s['url']),
+                    s['url'], dict(headers),
                     _os.path.join(bundle_dir, 'sub.%d.vtt' % i), http_get=_http_get)
                 if ok:
                     sub_metas.append({'idx': i, 'label': _lang_label(s),
@@ -1162,7 +1328,17 @@ class DownloadManager(object):
             n = int(config.get_setting('download_segment_workers') or 0)
         except Exception:
             n = 0
-        return n if n >= 1 else 16
+        if n >= 1:
+            return max(1, min(32, n))
+        # Mobile radios/hotspots and the VixCloud CDN are more stable with a
+        # smaller connection fan-out. Desktop Kodi keeps the faster default.
+        try:
+            import xbmc
+            if xbmc.getCondVisibility('system.platform.android'):
+                return 8
+        except Exception:
+            pass
+        return 16
 
     # -- background progress dialog --
 
@@ -1172,7 +1348,7 @@ class DownloadManager(object):
         except Exception:
             return
         active = [e for e in downloads_db.get_all()
-                  if e.get('status') in ('queued', 'downloading')]
+                  if e.get('status') in ('queued', 'downloading', 'waiting_network')]
         with self._bg_lock:
             if not active:
                 if self._bg is not None:

@@ -3,6 +3,7 @@
 # Canale per Mediaset Play
 # ------------------------------------------------------------
 import functools
+import re
 import time
 from platformcode import logger, config
 import uuid, datetime, xbmc
@@ -18,12 +19,17 @@ else:
     from urllib import urlencode, quote
 
 host = 'https://www.mediasetplay.mediaset.it'
+public_host = 'https://mediasetinfinity.mediaset.it'
 loginUrl = 'https://api-ott-prod-fe.mediaset.net/PROD/play/idm/anonymous/login/v2.0'
+graph_url = 'https://mediasetplay.api-graph.mediaset.it'
+graph_search_hash = '0cbec614877306e7f2814d2c16163d510c8fc87f1677bc34f95f4f55dc027dce'
+web_app_name = 'web//mediasetplay-web/1.3.0-h1-8d023f0'
+web_app_version = '1.3.0-h1'
 
 clientid = 'f66e2a01-c619-4e53-8e7c-4761449dd8ee'
 
 
-loginData = {"client_id": clientid, "platform": "pc", "appName": "web//mediasetplay-web/5.1.493-plus-da8885b"}
+loginData = {"client_id": clientid, "platform": "pc", "appName": web_app_name}
 sessionUrl = "https://api.one.accedo.tv/session?appKey=59ad346f1de1c4000dfd09c5&uuid={uuid}&gid=default"
 
 session = requests.Session()
@@ -149,23 +155,141 @@ def live(item):
     return itemlist
 
 
-def search(item, text):
-    item.args = {'uxReference':'main', 'params':'channel≈', 'query':text}
+def _graph_items(data):
+    """Extract unique content cards from the current search response."""
+    found = []
+    seen = set()
 
+    def walk(value):
+        if isinstance(value, dict):
+            kind = value.get('__typename')
+            guid = value.get('guid')
+            if kind in ('SeriesItem', 'VideoItem') and guid and guid not in seen:
+                seen.add(guid)
+                found.append(value)
+            for child in value.values():
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(data)
+    return found
+
+
+def _graph_image(card, image_type, width, height):
+    image = next((value for value in (card.get('cardImages') or [])
+                  if value.get('type') == image_type
+                  or value.get('sourceType') == image_type), None)
+    if not image or not image.get('engine') or not image.get('id'):
+        return ''
+    url = ('https://img-prod-api2.mediasetplay.mediaset.it/api/images/'
+           '{}/v5/ita/{}/{}/{}/{}').format(
+               image['engine'], image['id'],
+               image.get('sourceType') or image_type, width, height)
+    if image.get('r'):
+        url += '?r=' + str(image['r'])
+    return url
+
+
+def _season_number(season, fallback):
+    value = ((season.get('cardLink') or {}).get('value') or '').lower()
+    match = re.search(r'(?:stagione|season)[-_]?(\d+)', value)
+    return int(match.group(1)) if match else fallback
+
+
+def _free_media_selector(content_id):
+    """Return the selector only when the anonymous user can really play it."""
+    payload = {
+        'contentId': content_id, 'streamType': 'VOD',
+        'delivery': 'Streaming', 'createDevice': 'true',
+        'overrideAppName': web_app_name,
+    }
     try:
-        itemlist = peliculas(item)
-        # Nella ricerca l'API restituisce anche le singole PUNTATE (type
-        # 'episode') e le clip/backstage (type 'extra'): ognuna diventava una
-        # tile "film". Teniamo solo le serie (epmenu) e i film veri; gli
-        # episodi si raggiungono dalla serie.
-        return [it for it in itemlist
-                if getattr(it, 'msp_type', '') not in ('episode', 'extra')]
-    # Continua la ricerca in caso di errore
-    except:
-        import sys
-        for line in sys.exc_info():
-            support.logger.error("%s" % line)
+        data = session.post(
+            'https://api-ott-prod-fe.mediaset.net/PROD/play/playback/check/v2.0?sid=' + sid,
+            json=payload,
+        ).json()
+        return (data.get('response') or {}).get('mediaSelector')
+    except Exception:
+        return None
+
+
+def search(item, text):
+    """Search Mediaset Infinity through its current GraphQL catalogue."""
+    query = str(text or '').strip()
+    if not query:
         return []
+    variables = {
+        'after': None, 'first': 24, 'property': 'search', 'query': query,
+        'uxReference': 'main', 'variant': None,
+    }
+    extensions = {
+        'persistedQuery': {'version': 1, 'sha256Hash': graph_search_hash}
+    }
+    headers = {
+        'x-m-platform': 'WEB', 'x-m-property': 'MPLAY',
+        'x-m-app-version': web_app_version,
+        'User-Agent': support.httptools.get_user_agent(),
+        'Referer': public_host + '/',
+    }
+    try:
+        response = requests.get(
+            graph_url,
+            params={'extensions': jsontools.dump(extensions),
+                    'variables': jsontools.dump(variables)},
+            headers=headers,
+            timeout=httptools.HTTPTOOLS_DEFAULT_DOWNLOAD_TIMEOUT,
+        )
+        response.raise_for_status()
+        cards = _graph_items(response.json())
+    except Exception as exc:
+        logger.error('[mediasetplay] GraphQL search failed: %s' % str(exc))
+        return []
+
+    itemlist = []
+    for card in cards:
+        kind = card.get('__typename')
+        if kind == 'VideoItem' and (card.get('editorialType') or '').lower() != 'movie':
+            continue
+        title = card.get('cardTitle') or ''
+        if not title:
+            continue
+        link = (card.get('cardLink') or {}).get('value') or public_host
+        if kind == 'SeriesItem':
+            seasons = []
+            for index, season in enumerate(reversed(card.get('seasons') or []), 1):
+                number = _season_number(season, index)
+                seasons.append({
+                    'id': season.get('guid') or '',
+                    'title': season.get('seasonTitle') or 'Stagione %d' % number,
+                    'url': (season.get('cardLink') or {}).get('value') or link,
+                    'number': number,
+                })
+            seasons = [season for season in seasons if season['id']]
+            seasons.sort(key=lambda season: season['number'])
+            action, content_type = 'epmenu', 'tvshow'
+            series_id, video_id, content_series = seasons, '', title
+        else:
+            action, content_type = 'findvideos', 'movie'
+            series_id, video_id, content_series = '', card.get('guid') or '', ''
+            # GraphQL also returns Infinity subscription titles. PrippiStream
+            # exposes only content playable by the anonymous official account.
+            if not _free_media_selector(video_id):
+                continue
+
+        itemlist.append(item.clone(
+            title=support.typo(title, 'bold'), fulltitle=title,
+            contentTitle=title, contentSerieName=content_series,
+            action=action, contentType=content_type,
+            thumbnail=_graph_image(card, 'image_vertical', 400, 600),
+            fanart=_graph_image(card, 'image_header_poster', 1200, 630),
+            plot=card.get('cardText') or card.get('description') or '',
+            url=link, video_id=video_id, seriesid=series_id,
+            msp_type='series' if kind == 'SeriesItem' else 'movie',
+            disable_videolibrary=True, forcethumb=True,
+        ))
+    return itemlist
 
 
 def peliculas(item):
@@ -173,7 +297,7 @@ def peliculas(item):
     res = get_programs(item)
     video_id= ''
 
-    for it in res['items']:
+    for it in (res.get('items') or []):
         if not 'MediasetPlay_ANY' in it.get('mediasetprogram$channelsRights',['MediasetPlay_ANY']): continue
         thumb = ''
         fanart = ''
@@ -249,8 +373,10 @@ def epmenu(item):
             for s in seasons:
                 itemlist.append(
                     item.clone(seriesid = s['id'],
-                               title=support.typo(s['title'], 'bold')))
-            if len(itemlist) == 1: return epmenu(itemlist[0])
+                               title=support.typo(s['title'], 'bold'),
+                               url=s.get('url', item.url),
+                               action='episodios'))
+            if len(itemlist) == 1: return episodios(itemlist[0])
         else:
             res = requests.get(epUrl.format(item.seriesid)).json()['entries']
             for it in res:
@@ -276,6 +402,85 @@ def episodios(item):
     order = 'desc' if '/programmi-tv/' in item.url else 'asc'
 
     itemlist = []
+
+    # The legacy ThePlatform sub-brand feeds are now empty. Search-created
+    # seasons carry an official page whose server-rendered cards contain all
+    # episodes, including their current ids and artwork.
+    if not getattr(item, 'subbrand', '') and getattr(item, 'url', ''):
+        try:
+            page_response = requests.get(
+                item.url,
+                headers={'User-Agent': support.httptools.get_user_agent(),
+                         'Referer': public_host + '/'},
+                timeout=httptools.HTTPTOOLS_DEFAULT_DOWNLOAD_TIMEOUT,
+            )
+            page = page_response.content.decode('utf-8', 'replace')
+            full_episode_ids = set(re.findall(
+                r'editorialType\\?":\\?"Full Episode\\?",\\?"guid\\?":\\?"(F[A-Z0-9]+)',
+                page, re.I))
+            pattern = re.compile(
+                r'href="(?P<url>/video/[^"]+_(?P<id>[A-Z0-9]+))"'
+                r'.{0,5000}?<img[^>]+alt="(?P<title>[^"]+)"'
+                r'[^>]+src="(?P<thumb>[^"]+)"',
+                re.I | re.S,
+            )
+            seen = set()
+            for match in pattern.finditer(page):
+                video_id = match.group('id')
+                if video_id in seen:
+                    continue
+                seen.add(video_id)
+                import html as _html
+                title = _html.unescape(match.group('title'))
+                itemlist.append(item.clone(
+                    title=support.typo(title, 'bold'), fulltitle=title,
+                    contentTitle=title, contentType='episode',
+                    action='findvideos',
+                    url=public_host + match.group('url'),
+                    video_id=video_id,
+                    thumbnail=match.group('thumb').replace('&amp;', '&'),
+                    forcethumb=True,
+                ))
+            if itemlist:
+                return itemlist
+
+            # Programmes/reality (for example Temptation Island) point to
+            # WittyTV and render a different card layout. Keep only GUIDs whose
+            # embedded metadata marks them as complete episodes, excluding the
+            # many clips/extras on the same page.
+            card_pattern = re.compile(
+                r'<a[^>]+href="(?P<url>[^"]*(?P<id>F[A-Z0-9]{14,}))"'
+                r'.{0,6000}?<h4[^>]*>(?P<title>.*?)</h4>',
+                re.I | re.S,
+            )
+            for match in card_pattern.finditer(page):
+                video_id = match.group('id')
+                if video_id not in full_episode_ids or video_id in seen:
+                    continue
+                seen.add(video_id)
+                import html as _html
+                title = _html.unescape(re.sub(r'<[^>]+>', '', match.group('title'))).strip()
+                itemlist.append(item.clone(
+                    title=support.typo(title, 'bold'), fulltitle=title,
+                    contentTitle=title, contentType='episode',
+                    action='findvideos', url=match.group('url'),
+                    video_id=video_id,
+                    thumbnail=_graph_image({
+                        'cardImages': [{
+                            'engine': 'mp', 'id': video_id,
+                            'sourceType': 'image_keyframe_poster',
+                            'type': 'image_keyframe_poster',
+                        }]
+                    }, 'image_keyframe_poster', 360, 203),
+                    forcethumb=True,
+                ))
+            if itemlist:
+                return itemlist
+        except Exception as exc:
+            logger.error('[mediasetplay] season page failed: %s' % str(exc))
+
+    if not getattr(item, 'subbrand', ''):
+        return []
     res = requests.get('https://feed.entertainment.tv.theplatform.eu/f/PR1GhC/mediaset-prod-all-programs-v2?byCustomValue={subBrandId}{' + item.subbrand +'}&range=0-10000&sort=:publishInfo_lastPublished|' + order + ',tvSeasonEpisodeNumber').json()['entries']
 
     for it in res:
@@ -332,11 +537,14 @@ def findvideos(item):
         return support.server(item, itemlist=[item], Download=False, Videolibrary=False)
 
     elif item.video_id:
-        payload = {"contentId":item.video_id, "streamType":"VOD", "delivery":"Streaming", "createDevice":"true", "overrideAppName":"web//mediasetplay-web/5.2.4-6ad16a4"}
-        res = session.post('https://api-ott-prod-fe.mediaset.net/PROD/play/playback/check/v2.0?sid=' + sid, json=payload).json()['response']['mediaSelector']
+        res = _free_media_selector(item.video_id)
+        if not res:
+            logger.info('[mediasetplay] content unavailable to anonymous playback: %s'
+                        % item.video_id)
+            return []
 
     else:
-        payload = {"channelCode":item.callSign, "streamType":"LIVE", "delivery":"Streaming", "createDevice":"true", "overrideAppName":"web//mediasetplay-web/5.2.4-6ad16a4"}
+        payload = {"channelCode":item.callSign, "streamType":"LIVE", "delivery":"Streaming", "createDevice":"true", "overrideAppName":web_app_name}
         res = session.post('https://api-ott-prod-fe.mediaset.net/PROD/play/playback/check/v2.0?sid=' + sid, json=payload).json()['response']['mediaSelector']
 
     url = res['url']

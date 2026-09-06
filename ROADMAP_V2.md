@@ -1,9 +1,14 @@
-# PrippiStream 2.0 — Roadmap ottimizzazione prestazioni
+# PrippiStream 2.0 — Prestazioni addon Kodi e gate prodotto condiviso
 
 > **Documento di lavoro** del progetto v2.0. Si aggiorna a ogni fase completata
 > (checkbox + numeri `[PERF]` before/after). Questa cartella (`PrippiStream-v2`)
 > è un clone locale **scollegato da GitHub**: nessun remote, nessun push possibile.
 > Il repo pubblico (v1.5.x) resta intoccato fino al rilascio finale della 2.0.0.
+
+> Le Fasi 0–10 e FASE 2 ARM di questo documento sono lo storico tecnico
+> dell'addon Kodi. Lo stato autoritativo e le milestone comuni addon + app sono
+> in `PROJECT_STATUS.md`; il dettaglio Android è in
+> `PrippiStreamApp/APP_ROADMAP.md`. La release non è più Kodi-only.
 
 ## Obiettivo
 
@@ -14,6 +19,10 @@ Raspberry Pi, PC datati) **senza alcun cambiamento visibile** se non la velocit�
 
 Aree lente percepite: avvio/home, scorrimento righe/griglie, apertura
 liste/ricerca/Sfoglia, avvio riproduzione.
+
+Il gate prodotto aggiunge la stessa verifica per l'app adattiva: primo frame
+Compose, bootstrap Chaquopy, RAM/frame persi, touch, D-pad, Media3, download e
+ritorno focus su telefono, tablet/emulatore e box TV.
 
 Vincoli:
 - Cache disco generosa OK (100–300 MB).
@@ -124,10 +133,10 @@ Note baseline PC: workers.dev (proxy CF live) 2,7-2,8 s/richiesta; youtube (trai
 
 | Metrica | Come si misura | PC (post 9-10, build 1.9.939/940, 2026-07-08) | BOX | FS |
 |---|---|---|---|---|
-| Focus→hero aggiornato (ms) | mark `home.hero_ms` in `_update_hero` | n=123: mediana **8 ms**, max 126 (fetch trama 1° focus ~90) | | |
-| Popolamento riga addItems (ms) | mark `home.row_populate_ms` | tipico **0-15 ms** (anche riga 4K da 251 item: 14 ms); outlier 2-2,9 s su 1 riga durante il flood enrich post-paint (contesa GIL/rete — candidato Tier-3 defer, da guardare su ARM) | | |
-| RAM sistema al paint / post-enrich | mark `home.mem_mb` (System.Memory used — su PC rumorosa, significativa sul BOX 2GB) | 12,4→13,2 GB (PC 32GB, delta ~0,2-0,45 GB con tutto il sistema) | | |
-| Warm reopen (assemble+paint) | mark esistenti F3 | 0,55-1,2 s (3 riaperture: 387+164 / 805+125 / 673+414 ms) ≈ baseline F3 | | |
+| Focus→hero aggiornato (ms) | mark `home.hero_ms` in `_update_hero` | n=123: mediana **8 ms**, max 126 (fetch trama 1° focus ~90) | 1.9.948: mediana 55, p90 179, max 1470 ms → **1.9.949: mediana 32, p90 70, max 762 ms** | |
+| Popolamento riga addItems (ms) | mark `home.row_populate_ms` | tipico **0-15 ms** (anche riga 4K da 251 item: 14 ms); outlier 2-2,9 s su 1 riga durante il flood enrich post-paint (contesa GIL/rete — candidato Tier-3 defer, da guardare su ARM) | 1.9.948: mediana 352, p90 6988, max 29417 ms → **1.9.949: 202 / 357 / 1108 ms** | |
+| RAM sistema al paint / post-enrich | mark `home.mem_mb` (System.Memory used — su PC rumorosa, significativa sul BOX 2GB) | 12,4→13,2 GB (PC 32GB, delta ~0,2-0,45 GB con tutto il sistema) | 1.9.948: 855 / 1064 MB → **1.9.949: 821 / 827 MB** (1976 MB totali) | |
+| Warm reopen (assemble+paint) | mark esistenti F3 | 0,55-1,2 s (3 riaperture: 387+164 / 805+125 / 673+414 ms) ≈ baseline F3 | 1.9.947 ~14,06 s; 1.9.948 primo 9,42 s, seconda 3,16 s → **1.9.949 primo post-riavvio 2,873 s** | |
 | FPS durante scroll righe | overlay debug Kodi, zoom on/off | n/a su PC | | |
 | Peso zip installabile (MB) | file in docs/ | **5,4 MB** (era 7,8) | = | = |
 
@@ -474,6 +483,126 @@ image con `<bordertexture border="N">` a cornice arrotondata 9-slice =
 poster scuri SKY/Sport); FPS/scroll su FS al giro di validazione.
 **Rollback**: revert del singolo commit (nessuna dipendenza dalle altre fasi).
 
+## FASE 2 ARM — Alleggerimento guidato dai log BOX (build 1.9.949)
+
+Baseline: log BOX 1.9.948 del 2026-07-14/15. La GUI è veloce quando il
+background è quieto; il collo di bottiglia è la partenza simultanea di
+popolamento, enrichment, TMDB, trailer e probe live. Implementazione completata
+e validata sulla BOX con la 1.9.949 (log del 2026-07-15).
+
+1. **Popolamento su richiesta sui dispositivi non touch**: dopo il primo paint
+   non vengono più creati i `ListItem` di tutte le 36 righe. `onFocus` prepara
+   solo la riga raggiunta e le vicine. Il populater completo resta esclusivamente
+   per il touch, dove lo swipe verticale non genera focus.
+2. **Profilo automatico low-power (RAM <= 3 GB)**: enrichment pesante in una
+   sola corsia, massimo 2 worker TMDB e 3 worker nella ricerca globale. Sul PC
+   rimangono i valori validati. Fetch dei pool film/serie seriale e dedup delle
+   richieste identiche già in corso.
+3. **Canali live dopo il paint**: mostra subito la cache; probe solo dopo il
+   primo disegno e 5 secondi senza navigazione. Sulla BOX le tre righe vengono
+   controllate in sequenza con 4 worker bounded, senza cambiare resolver o
+   DaddyLive. Un HTTP 403 Daddy resta distinto dal precedente errore SSL.
+4. **Trailer lazy**: eliminato il prefetch YouTube/proxy della home. La
+   `DetailWindow` continua a cercare il singolo trailer su richiesta. Sulla BOX
+   è disattivato anche il preload texture dei backdrop CW; il dettaglio li
+   recupera quando serve.
+5. **ListItem leggeri**: le card home usano proprietà skin + `InfoTagVideo`
+   diretto; rimosso il `setInfo('video')` per-card che generava centinaia di
+   warning Kodi 21. Resume point e playcount CW restano sull'InfoTag.
+6. **Cache persistente e negativa**: pool extra-source serializzati per 6 ore;
+   query TMDB valide con zero risultati cachate per 6 ore; richieste TMDB
+   identiche in-flight condivise. Errori di rete e payload vuoti non vengono
+   cachati, quindi continuano ad auto-ripararsi.
+7. **Riga 4K opzionale**: nuova impostazione live `show_4k_row`, default OFF.
+   L'indice e il lookup 4K restano attivi per film normali e ricerca, ma la home
+   non aspetta più fino a 8 s e non crea oltre 250 card. Se attivata, la riga si
+   inserisce senza bloccare il paint e si riempie appena l'indice è pronto.
+8. **Cronologia ricerca**: ultime 10 query locali, deduplicate senza distinzione
+   maiuscole/minuscole, selezionabili prima della tastiera e cancellabili con
+   conferma. Scrittura JSON atomica nel profilo Kodi, mai nel pacchetto addon.
+
+**Checklist BOX 1.9.949**: Debug OFF e `perf_log` ON; riavvio; home ferma 2 min;
+scroll completo; seconda apertura; toggle riga 4K OFF/ON/OFF senza riavvio;
+due ricerche nuove + riuso recente + cancellazione; dettaglio/trailer; un film
+SC; 5 episodi consecutivi per autoplay/lingua; live SKY/Sport/TV. Inviare i log
+solo alla fine e confrontare assemble/paint, p90 righe, picco RAM e richieste
+TMDB con la tabella BOX sopra.
+
+**Esito BOX 1.9.949**: home warm completa **2,873 s** (assemble 2,408 s +
+paint 465 ms), contro 9,42 s sulla 1.9.948 e ~14,06 s sulla 1.9.947. RAM
+post-enrich **827 MB** contro 1064 MB; righe mediana **202 ms**, p90 **357 ms**,
+massimo **1,108 s** contro 352 ms / 6,99 s / 29,4 s. Nessun popolamento totale
+in background, nessun crash/OOM/errore apertura codec. Autoplay The Office
+1→2→3→4 e preferenze lingua/sottotitoli validati; trailer lazy e live differiti
+confermati. La riga 4K è nascosta e l'indice da 252 film resta disponibile;
+rimane da provare il toggle live OFF/ON/OFF. Daddy restituisce HTTP 403, non un
+errore CA; prova su altra rete differita. I messaggi MediaCodec coincidono con
+seek manuali e non hanno interrotto la riproduzione.
+
+**Passo 1.9.950 — quiet logging e riuso ricerca**:
+- `debug` resta default OFF e una migrazione una tantum spegne il valore legacy
+  che il vecchio invio-log aveva lasciato attivo; il pulsante non lo riaccende
+  più. `perf_log`, `[PERF]` e `[NET]` restano indipendenti e attivi nella build.
+- Rimossi i vecchi `xbmc.log(... LOGINFO)` diagnostici della schermata ricerca.
+- Cache per-sessione e per-provider delle stesse query, TTL 15 minuti, massimo
+  80 coppie provider/query. Anche un risultato vuoto viene riusato per la stessa
+  query, evitando di martellare una fonte guasta quando si sceglie la cronologia;
+  query diverse continuano a interrogare tutte le fonti. Gli `Item` vengono
+  serializzati e ricostruiti per non condividere stato mutabile.
+- Misura dedicata: `[PERF] search.provider_cache hit=N miss=N query=...`.
+
+## Sequenza attiva: Kodi 1.9.988 + app 0.9.11 → RC combinata → linea 2.x
+
+Il documento di design chiamato storicamente “V3” non è una codebase separata:
+è assorbito in questa stessa linea v2, che diventa 2.0 e cresce a 2.1/2.2/2.3.
+
+### Gate 1 — Validazione Kodi 1.9.988 sulla box
+
+1. Installazione esclusivamente da zip locale e riavvio Kodi.
+2. Debug generico OFF; errori/traceback/warning e `[PERF]/[NET]` presenti.
+3. Home e scroll; ricerca nuova e riuso dalla cronologia; cancellazione storia;
+   riga 4K OFF→ON→OFF; trailer, VOD, live e invio log senza riaccendere debug.
+4. Raccogliere log `(5)` e confrontare home/RAM/righe/cache ricerca. Fare una
+   1.9.987 solo se i log dimostrano una regressione.
+
+### Gate 2 — Freeze e release candidate ZIP + APK
+
+1. Test end-to-end Kodi PC + box e app telefono + box TV; tablet/emulatore e
+   Xiaomi Stick consigliati se disponibili.
+2. `perf_log` default false; rimuovere/disattivare logpush verso IP locale e
+   TouchProbe. Il codice PERF può restare inerte e il debug manuale resta utile.
+3. Audit `.claude`, log, credenziali, IP test, URL, import, JSON/XML, ZIP e APK;
+   per l'app verificare anche manifest, permessi, ABI, firma e revisione motore.
+   Nessun errore deve dipendere dal debug generico per essere visibile.
+4. Audit v1→v2 e trasferimento selettivo v2→v1, preservando i `git rm` del
+   cleanup. Vietata una copia additiva che resusciti file eliminati.
+5. Kodi 2.0.0 più versione app adattiva approvata, changelog comune con sezioni
+   client, ZIP/APK finali e installazione su dispositivi reali. Prima della
+   pubblicazione mostrare e far approvare note e hash all'utente.
+
+### Gate 3 — Deploy coordinato Kodi 2.0 + app adattiva
+
+Solo su comando esplicito: staging dei file nominati (mai `git add -A`), commit,
+push, verifica CI, feed Kodi, ZIP, APK, firma e aggiornamenti reali dei due
+client. Rollback indipendente e monitoraggio dei primi log.
+
+### Dopo 2.0, sempre nella stessa v2→2.x
+
+- **2.1 prestazioni residue:** DB a soglia/VACUUM, skin `<include>`, lazy import,
+  audit `lib`, circuit breaker solo su errori certi, SSL `popcdn.day`; bytecode
+  soltanto dopo verifica delle ABI Python Kodi e con fallback sicuro.
+- **2.2 sicurezza fondamentale:** fingerprint device, verifica Ed25519, stato
+  monotono, policy/revoche firmate, grazia offline fail-open, attivazione e
+  registrazione Telegram. Nessun blocco per semplice timeout rete.
+- **2.3+ protezione/distribuzione:** consegna e wrapping device-bound di
+  `K_engine`, loader/build `.pye` con decifratura in RAM, sorgente privata e feed
+  pubblico separato con migrazione sicura degli utenti esistenti.
+- **App adattiva:** non è lavoro “dopo 2.0”; partecipa alla stessa finestra di
+  rilascio. Dopo la baseline combinata proseguono copertura dispositivi,
+  accessibilità e parità avanzata in `PrippiStreamApp`.
+- Prima della cifratura/protezione proprietaria: decisione esplicita sulla
+  licenza del codice proprio e conservazione delle attribuzioni di terzi.
+
 ## FASE 8c — Chirurgia motore videolibrary (DIFFERITA)
 
 Solo dopo la validazione di tutte le fasi perf, con giro di test dedicato:
@@ -500,8 +629,10 @@ Solo dopo la validazione di tutte le fasi perf, con giro di test dedicato:
 1. Implementazione in questa cartella; un commit git locale per fase.
 2. Build: bump `1.9.9xx` in addon.xml → `python tools/make_addon_zip.py`
    (o copia diretta in `%APPDATA%\Kodi\addons\plugin.video.prippistream` sul PC).
-3. Test con la checklist della fase + confronto `[PERF]`.
-4. Checkbox + numeri in questo file, poi fase successiva.
+3. Se cambia il motore condiviso: controllare/sincronizzare l'app, eseguire
+   test Android, Gradle/lint e identificare l'APK risultante.
+4. Test con la checklist Kodi + app pertinente e confronto delle misure.
+5. Checkbox e numeri nei documenti tecnici e nel master, poi fase successiva.
 
 ## Verifica finale end-to-end
 
@@ -516,6 +647,61 @@ Solo dopo la validazione di tutte le fasi perf, con giro di test dedicato:
    `[PERF]` vs baseline, incluse le metriche grafiche/RAM nuove e gli FPS
    overlay con zoom on/off.
 5. `tools/test_*.py` verdi dove applicabili.
-6. Riporto nel repo principale (prima: allineamento fix v1.5.x → v2 con
+6. App: regressione telefono/tablet, stress D-pad box, VOD/live/download,
+   updater, diagnostica, RAM/frame/focus e confronto sulla stessa box.
+7. Riporto nel repo principale (prima: allineamento fix v1.5.x → v2 con
    `git fetch <path-v1>` + cherry-pick, vedi memoria di progetto) →
-   versione 2.0.0 → release standard.
+   versione 2.0.0 + APK approvata → release coordinata.
+
+## Addendum 26 luglio 2026 — box 1.9.970–1.9.973 e passaggio app TV
+
+- 1.9.970: popolamento eager e righe da 55–70 card bloccavano la GUI per minuti.
+- 1.9.971: corretto falso touch ed espansione extra, ma snapshot storico e
+  rivalidazione continuavano a saturare la box.
+- 1.9.972: massimo 20 card/riga low-power, niente popolamento globale,
+  rivalidazione o TMDB Home; miglioramento netto percepito sulla box.
+- Problema residuo live 1.9.972: i 20 secondi di quiete continua causavano
+  starvation; nella sessione non è partito alcun probe.
+- 1.9.973: margine fisso 8 secondi e ordine TV → SKY → Sport.
+- 1.9.973: retry automatico unico SC/VixCloud se il manifest cade prima
+  dell'avvio A/V, con nuova risoluzione e token fresco.
+- Build e server Range verificati; test reale box 1.9.973 pendente.
+
+Decisione prodotto: Kodi resta fallback mentre l'app Android esistente
+`com.prippi.stream` viene estesa a tablet, Android TV, Google TV e box con UI
+D-pad dedicata. Il motore v2 resta autorevole e condiviso. La roadmap operativa
+TV è in `PrippiStreamApp/APP_ROADMAP.md` (M8) e `TV_APP_HANDOFF.md`.
+## Candidate di chiusura Milestone 2 — 1.9.986
+
+La 1.9.986 è la build unica da usare per l'ultimo confronto box. Il gate PC è
+superato: mapper, seek VOD e chiusura ordinaria; prima apertura pulita 1,91 s
+durante la generazione bytecode, poi ingresso normale 1,10 s, assemble warm
+807 ms e paint 151 ms. Il caricamento della cache Film 4K,
+misurato a circa 354 ms, è ora differito dopo il primo paint quando la riga
+opzionale è disattivata. Il
+packaging è stato reso deterministico e non include più log di laboratorio,
+materiale Codex, APK o bytecode. Due build consecutive hanno prodotto lo stesso
+SHA-256:
+`3D13D176055BB8C6FFF4B2BF0CB1A47FE79BDE87C1C89483C93A1CC1B40C820D`.
+
+Gate statico completato:
+
+- 887 Python attivi compilabili con Python 3;
+- 28 XML e 140 JSON validi;
+- test changelog, download crypto, HLS, download manager e local stream server;
+- ZIP da 5.420.451 byte, 1.269 entry, CRC valido e nessun duplicato;
+- misure `[PERF]` degli import Home aggiunte;
+- versione Python aggiunta automaticamente ai report diagnostici.
+
+I primi gate fisici della stessa finestra sono ora parzialmente completati:
+
+1. Kodi box: Home navigabile durante enrich, RAM/Python, live e telecomando;
+2. app 0.9.11 sulla stessa box: installazione ARM32, Home/focus, Live/audio,
+   VOD SC e sessione superiore a 71 minuti senza nuovi crash/ANR superati;
+   restano stress D-pad reale, download e updater;
+3. regressione breve app su telefono e tablet/emulatore.
+
+Nota sync: la 0.9.11 corrente precede ancora alcune modifiche motore 1.9.988.
+`sync_engine.py --check` rileva +1/~7 file motore e ~1 asset divergenti. Dopo
+la validazione della sorgente v2 sporca serviranno sincronizzazione autorizzata,
+nuova APK e ripetizione dei test toccati prima della coppia RC.

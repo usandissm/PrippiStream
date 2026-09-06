@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<window type="dialog" id="1199">
+    <defaultcontrol always="true">3</defaultcontrol>
+    <coordinates><system>1</system></coordinates>
+    <controls>
+        <control type="image">
+            <left>300</left><top>300</top><width>1320</width><height>480</height>
+            <texture colordiffuse="F20D0D0D">white.png</texture>
+        </control>
+        <control type="image">
+            <left>300</left><top>300</top><width>12</width><height>480</height>
+            <texture colordiffuse="FFE50914">white.png</texture>
+        </control>
+        <control type="label" id="1">
+            <left>380</left><top>360</top><width>1160</width><height>60</height>
+            <label>CONFIGURAZIONE TELECOMANDO</label><font>font16</font>
+            <textcolor>FFE50914</textcolor><align>center</align>
+        </control>
+        <control type="label" id="2">
+            <left>380</left><top>470</top><width>1160</width><height>90</height>
+            <label>Premi un tasto…</label><font>font16</font>
+            <textcolor>FFFFFFFF</textcolor><align>center</align><aligny>center</aligny>
+        </control>
+        <control type="button" id="3">
+            <left>430</left><top>640</top><width>1060</width><height>70</height>
+            <label>BACK annulla</label><font>font12</font>
+            <textcolor>FFAAAAAA</textcolor><focusedcolor>FFFFFFFF</focusedcolor>
+            <texturefocus colordiffuse="28FFFFFF">white.png</texturefocus>
+            <texturenofocus colordiffuse="10FFFFFF">white.png</texturenofocus>
+            <align>center</align>
+        </control>
+    </controls>
+</window>

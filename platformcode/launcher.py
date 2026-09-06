@@ -3,7 +3,7 @@
 # XBMC Launcher (xbmc / kodi)
 # ------------------------------------------------------------
 
-import sys, xbmc
+import sys, time, xbmc
 from core.item import Item
 from core import filetools
 from platformcode import config, logger, platformtools
@@ -77,7 +77,11 @@ def run(item=None):
                 import xbmcplugin
                 xbmcplugin.endOfDirectory(int(sys.argv[1]), succeeded=True,
                                           updateListing=False, cacheToDisc=False)
+                _home_import_t0 = time.perf_counter()
                 from platformcode import prippihome
+                if config.get_setting('perf_log', default=False):
+                    logger.info('[PERF] launcher.prippihome_import: %.1fms' % (
+                        (time.perf_counter() - _home_import_t0) * 1000))
                 prippihome.open_prippi_home()
                 xbmc.executebuiltin('ActivateWindow(Home)')
                 return
@@ -121,7 +125,11 @@ def run(item=None):
                     item.page = int(page)
                 else:
                     import re
-                    item.url = re.sub('([=/])[0-9]+(/?)$', '\g<1>' + page + '\g<2>', item.url)
+                    item.url = re.sub(
+                        '([=/])[0-9]+(/?)$',
+                        r'\g<1>' + page + r'\g<2>',
+                        item.url,
+                    )
                 xbmc.executebuiltin("Container.Update(%s?%s)" % (sys.argv[0], item.tourl()))
 
         # Special action for adding a movie to the library
@@ -151,6 +159,21 @@ def run(item=None):
         elif item.action == "delete_key":
             from platformcode import keymaptools
             return keymaptools.delete_key()
+        elif item.action == "remote_keymap":
+            from platformcode import remote_keymap
+            return remote_keymap.learn()
+        elif item.action == "network_info":
+            from platformcode import network_info
+            return network_info.show()
+        elif item.action == "install_android_app":
+            from platformcode import android_app_installer
+            return android_app_installer.install()
+        elif item.action == "download_android_app":
+            from platformcode import android_app_installer
+            return android_app_installer.download_only()
+        elif item.action == "live_zap":
+            from platformcode import live_remote
+            return live_remote.request(getattr(item, 'direction', ''))
 
         # delete tmdb cache
         elif item.action == "script":

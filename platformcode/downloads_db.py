@@ -21,7 +21,7 @@ keyed by a stable download key:
     'sub_path':    str,    # local subtitle file or ''
     'quality':     str,    # e.g. '1080p'
     'protection':  str,    # 'aes' | 'xor' | 'none' (cipher the file was written with)
-    'status':      str,    # 'queued'|'downloading'|'done'|'error'|'paused'
+    'status':      str,    # 'queued'|'downloading'|'waiting_network'|'done'|'error'|'paused'
     'progress':    float,  # 0..100
     'total_bytes': int,
     'error':       str,    # last error message (status='error')
@@ -103,13 +103,93 @@ def update_fields(key, **fields):
         _write(data)
 
 
+def update_fields_unless_done(key, **fields):
+    """Patch an unfinished entry without ever downgrading a completed file.
+
+    A stale/duplicated worker must not turn a valid offline download from
+    ``done`` into ``error`` or ``paused``.
+    """
+    if not key:
+        return False
+    with _lock:
+        data = _read(safe=True)
+        if data is _READ_ERROR or key not in data:
+            return False
+        if data[key].get('status') == 'done':
+            return False
+        data[key].update(fields)
+        data[key]['timestamp'] = _time.time()
+        _write(data)
+        return True
+
+
+def _has_playable_file(entry):
+    path = entry.get('file_path') or ''
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        return os.path.getsize(path) > 0
+    except Exception:
+        return False
+
+
+def repair_completed():
+    """Recover rows which were completed and later overwritten by an old job.
+
+    Version 0.8.3 could enqueue the same key twice. The second copy sometimes
+    changed a 100% row to ``error`` although its encrypted file was intact.
+    Progress at 100% plus a non-empty target is the durable completion marker.
+    """
+    repaired = 0
+    with _lock:
+        data = _read(safe=True)
+        if data is _READ_ERROR:
+            return 0
+        for entry in data.values():
+            try:
+                complete = float(entry.get('progress', 0) or 0) >= 99.9
+            except Exception:
+                complete = False
+            if entry.get('status') != 'done' and complete and _has_playable_file(entry):
+                entry['status'] = 'done'
+                entry['progress'] = 100.0
+                entry['error'] = ''
+                entry['timestamp'] = _time.time()
+                repaired += 1
+        if repaired:
+            _write(data)
+    return repaired
+
+
+def migrate_legacy_network_errors():
+    """Turn 0.8.3's explicit offline failures back into resumable jobs."""
+    migrated = 0
+    markers = ('network is unreachable', 'network unreachable', '[errno 101]')
+    with _lock:
+        data = _read(safe=True)
+        if data is _READ_ERROR:
+            return 0
+        for entry in data.values():
+            error = str(entry.get('error') or '').lower()
+            if entry.get('status') == 'error' and any(m in error for m in markers):
+                entry['status'] = 'waiting_network'
+                entry['error'] = ''
+                entry['timestamp'] = _time.time()
+                migrated += 1
+        if migrated:
+            _write(data)
+    return migrated
+
+
 def get(key):
+    repair_completed()
     with _lock:
         return _read().get(key)
 
 
 def get_all():
     """All entries, most-recent first."""
+    repair_completed()
     with _lock:
         data = _read()
     entries = list(data.values())
@@ -126,11 +206,17 @@ def get_by_show(show_key):
     return eps
 
 
-def get_active():
-    """Entries still queued or downloading (for resume on startup)."""
+def get_resumable():
+    """Jobs interrupted by a process stop; deliberately paused jobs stay paused."""
     with _lock:
         data = _read()
-    return [e for e in data.values() if e.get('status') in ('queued', 'downloading', 'paused')]
+    return [e for e in data.values()
+            if e.get('status') in ('queued', 'downloading', 'waiting_network')]
+
+
+def get_active():
+    """Backward-compatible alias for callers which restore interrupted jobs."""
+    return get_resumable()
 
 
 def exists_done(key):

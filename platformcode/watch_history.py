@@ -19,6 +19,7 @@ Each entry (keyed by a stable content key):
 
 import json
 import os
+import re
 import threading
 import time as _time
 import io
@@ -38,6 +39,83 @@ def _get_path():
 # Callers that WRITE must treat this as "unknown" and abort the write, so a
 # transient read error never wipes the whole CW database.
 _READ_ERROR = object()
+
+
+_EPISODE_SUFFIX_RE = re.compile(r'\s+S\d+E\d+\s*$', re.IGNORECASE)
+_TITLE_TOKEN_RE = re.compile(r'[^a-z0-9]+')
+_SHOW_URL_ID_RE = re.compile(r'/titles/(\d+)(?:[-/?#]|$)', re.IGNORECASE)
+
+
+def _series_identity(entry):
+    """Return a conservative identity used only to collapse legacy TV aliases."""
+    title = _EPISODE_SUFFIX_RE.sub('', str(entry.get('title', '') or '')).strip().lower()
+    title = _TITLE_TOKEN_RE.sub('', title)
+    if not title:
+        return None
+    show_url = str(entry.get('show_url', '') or '')
+    match = _SHOW_URL_ID_RE.search(show_url)
+    return title, match.group(1) if match else ''
+
+
+def _same_series_alias(left_key, left, right_key, right):
+    if not (str(left_key).startswith('tv_') and str(right_key).startswith('tv_')):
+        return False
+    left_id = _series_identity(left)
+    right_id = _series_identity(right)
+    if not left_id or not right_id or left_id[0] != right_id[0]:
+        return False
+    if left_id[1] and right_id[1] and left_id[1] != right_id[1]:
+        return False
+    left_suffix = str(left_key)[3:]
+    right_suffix = str(right_key)[3:]
+    if left_suffix.isdigit() and right_suffix.isdigit() and left_suffix != right_suffix:
+        return False
+    return True
+
+
+def _merge_watched_episodes(*entries):
+    merged = []
+    for entry in entries:
+        for pair in entry.get('watched_episodes', []) or []:
+            try:
+                normalized = [int(pair[0]), int(pair[1])]
+            except (TypeError, ValueError, IndexError):
+                continue
+            if normalized not in merged:
+                merged.append(normalized)
+    return merged
+
+
+def _dedupe_series_entries(data):
+    """Collapse legacy series aliases, keeping the most recently updated row."""
+    result = dict(data)
+    changed = False
+    keys = list(result)
+    for index, left_key in enumerate(keys):
+        if left_key not in result:
+            continue
+        for right_key in keys[index + 1:]:
+            if right_key not in result:
+                continue
+            left = result[left_key]
+            right = result[right_key]
+            if not _same_series_alias(left_key, left, right_key, right):
+                continue
+            if float(right.get('timestamp', 0) or 0) > float(left.get('timestamp', 0) or 0):
+                keep_key, drop_key = right_key, left_key
+            else:
+                keep_key, drop_key = left_key, right_key
+            keep = dict(result[keep_key])
+            watched = _merge_watched_episodes(result[keep_key], result[drop_key])
+            if watched:
+                keep['watched_episodes'] = watched
+            keep['key'] = keep_key
+            result[keep_key] = keep
+            del result[drop_key]
+            changed = True
+            if drop_key == left_key:
+                left_key = keep_key
+    return result, changed
 
 
 def _read(safe=False):
@@ -85,6 +163,7 @@ def save_progress(key, title, thumbnail, fanart, time_watched, total_time, item_
         if data is _READ_ERROR:
             logger.error('[WatchHistory] save_progress aborted: CW file unreadable, refusing to overwrite')
             return
+        data, _ = _dedupe_series_entries(data)
         entry = {
             'key':          key,
             'title':        title,
@@ -102,14 +181,27 @@ def save_progress(key, title, thumbnail, fanart, time_watched, total_time, item_
             entry['episode'] = int(episode)
         if episode_title:
             entry['episode_title'] = str(episode_title)
+        aliases = []
+        if str(key).startswith('tv_'):
+            probe = dict(entry, title=title, show_url=show_url)
+            aliases = [old_key for old_key, old_entry in data.items()
+                       if old_key != key and _same_series_alias(key, probe, old_key, old_entry)]
+        previous_entries = [data[old_key] for old_key in aliases if old_key in data]
+        for old_key in aliases:
+            data.pop(old_key, None)
         # Preserve existing played_url if we don't have a new one
         if played_url:
             entry['played_url'] = played_url
         elif key in data and data[key].get('played_url'):
             entry['played_url'] = data[key]['played_url']
+        elif previous_entries:
+            latest = max(previous_entries, key=lambda old: float(old.get('timestamp', 0) or 0))
+            if latest.get('played_url'):
+                entry['played_url'] = latest['played_url']
         # Preserve existing watched_episodes list (never overwrite with empty)
-        if key in data and 'watched_episodes' in data[key]:
-            entry['watched_episodes'] = data[key]['watched_episodes']
+        watched = _merge_watched_episodes(data.get(key, {}), *previous_entries)
+        if watched:
+            entry['watched_episodes'] = watched
         data[key] = entry
         _write(data)
     logger.info('[WatchHistory] saved "%s" at %.0fs/%.0fs' % (title, time_watched, total_time))
@@ -139,6 +231,9 @@ def get_all():
     """Return all entries sorted by timestamp descending (most recent first)."""
     with _lock:
         data = _read()
+        data, changed = _dedupe_series_entries(data)
+        if changed:
+            _write(data)
     entries = list(data.values())
     entries.sort(key=lambda e: e.get('timestamp', 0), reverse=True)
     return entries

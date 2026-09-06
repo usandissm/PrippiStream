@@ -53,7 +53,7 @@ def search(item, text):
     except:
         import sys
         for line in sys.exc_info():
-            logger.error("search except: %s" % line)
+            support.logger.error("search except: %s" % line)
         return []
 
 def findvideos(item):

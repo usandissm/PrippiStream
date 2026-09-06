@@ -139,6 +139,7 @@ def search(item, text):
 
     itemlist = []
     seen = set()
+    grouped_programs = set()
 
     for url, thumb, title in results:
         if url in seen:
@@ -150,15 +151,29 @@ def search(item, text):
         if thumb.startswith("//"):
             thumb = "https:" + thumb
 
-        it = item.clone(
-            title=support.typo(title, 'bold'),
-            fulltitle=title,
-            show=title,
-            url=fullurl,
-            thumbnail=thumb,
-            fanart=thumb,
-            action="findvideos"
-        )
+        parts = [part for part in url.split('?')[0].strip('/').split('/') if part]
+        is_program_video = (len(parts) >= 3
+                            and parts[1] in ('video', 'rivedila7', 'articolo')
+                            and parts[0] not in ('la7-cinema-tutti-i-film', 'film'))
+        if is_program_video:
+            slug = parts[0]
+            if slug in grouped_programs:
+                continue
+            grouped_programs.add(slug)
+            program_title = ' '.join(slug.split('-')).title()
+            it = item.clone(
+                title=support.typo(program_title, 'bold'),
+                fulltitle=program_title, show=program_title,
+                contentSerieName=program_title, contentType='tvshow',
+                url=host + '/' + slug, thumbnail=thumb, fanart=thumb,
+                action='episodios'
+            )
+        else:
+            it = item.clone(
+                title=support.typo(title, 'bold'),
+                fulltitle=title, show=title, url=fullurl,
+                thumbnail=thumb, fanart=thumb, action="findvideos"
+            )
         itemlist.append(it)
 
     if f'query={encoded}&amp;page={page+1}' in html_data:

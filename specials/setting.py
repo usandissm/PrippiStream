@@ -794,8 +794,9 @@ def send_log_to_dev(item):
     Kodi ruota il log al riavvio — piu' eventuali log ruotati/crash presenti
     nella cartella), li impacchetta in un unico .zip e lo manda con
     sendDocument al bot: arriva subito come notifica, senza URL da copiare.
-    Se il debug addon era spento lo attiva DOPO l'invio, cosi' un'eventuale
-    seconda segnalazione e' piu' dettagliata.
+    L'invio non modifica il livello di logging: sulle box lente il debug
+    generico produce migliaia di righe e lavoro inutile. La telemetria mirata
+    [PERF]/[NET] resta governata separatamente da perf_log.
     Fallback se Telegram e' irraggiungibile: upload su dpaste.org e mostra
     l'URL da girare a mano.
     """
@@ -886,6 +887,7 @@ def send_log_to_dev(item):
         _z.writestr('info.txt', '\n'.join([
             'PrippiStream %s' % config.get_addon_version(),
             'Kodi        %s' % xbmc.getInfoLabel('System.BuildVersion'),
+            'Python      %s' % sys.version.split()[0],
             'Device      %s' % xbmc.getInfoLabel('System.FriendlyName'),
             'OS          %s' % (xbmc.getInfoLabel('System.OSVersionInfo') or '-'),
             'Schermo     %s' % xbmc.getInfoLabel('System.ScreenResolution'),
@@ -986,13 +988,5 @@ def send_log_to_dev(item):
             'Invia Log', 'Invio fallito:\n%s\n\nControlla la connessione e riprova.' % last_err[:200])
         return
 
-    # ── 6. Esito + attiva il debug per eventuali segnalazioni future ──────
-    if not config.get_setting('debug'):
-        config.set_setting('debug', True)
-        platformtools.dialog_ok(
-            'Log Inviato',
-            'Log inviato allo sviluppatore!\n\n'
-            'Ho attivato il log dettagliato: se il problema si ripresenta, '
-            'riproducilo e premi di nuovo "Invia Log".')
-    else:
-        platformtools.dialog_ok('Log Inviato', 'Log inviato allo sviluppatore!')
+    # ── 6. Esito ──────────────────────────────────────────────────────────
+    platformtools.dialog_ok('Log Inviato', 'Log inviato allo sviluppatore!')

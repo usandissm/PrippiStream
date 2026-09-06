@@ -29,6 +29,8 @@
         <setting id="home_snapshot" type="bool" default="true" visible="false"/>
         <setting label="Logging" type="lsep"/>
         <setting id="debug" type="bool" label="Abilita logging di debug" default="false"/>
+        <setting id="quiet_debug_default_applied" type="bool" default="false" visible="false"/>
+        <setting id="quiet_perf_default_applied" type="bool" default="false" visible="false"/>
 
         <!-- ── Hidden engine settings: read by the live engine, kept with their
              defaults; UI removed. Do NOT delete (would break playback / resolver /
@@ -103,6 +105,7 @@
     <category label="Personalizzazione">
         <setting id="home_loop_rows" type="bool" label="Home: scorrendo oltre l'ultima riga torna alla prima" default="false"/>
         <setting id="show_adult_anime" type="bool" label="Sfoglia: abilita la sezione HENTAI 18+" default="true"/>
+        <setting id="show_4k_row" type="bool" label="Mostra riga Film in 4K nella Home" default="false"/>
         <setting id="fourk_ask_quality" type="bool" label="Film in 4K: chiedi se riprodurre in 4K o Full HD" default="false"/>
         <setting id="reduced_animations" type="bool" label="Animazioni ridotte (per dispositivi lenti)" default="false"/>
 
@@ -113,6 +116,17 @@
         <setting id="show_sport_row" type="bool" label="Mostra riga Sport Live" default="true"/>
         <setting id="show_sky_row" type="bool" label="Mostra riga SKY" default="true"/>
         <setting id="show_tv_row" type="bool" label="Mostra riga TV" default="true"/>
+        <setting label="Telecomando canali live" type="lsep"/>
+        <setting id="live_remote_enabled" type="bool" label="Cambia canale con il telecomando" default="true"/>
+        <setting id="live_remote_overlay" type="bool" label="Mostra nome e posizione durante il cambio" default="true"/>
+        <setting id="live_remote_learn" type="action"
+                 label="Rileva tasti canale successivo/precedente"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJyZW1vdGVfa2V5bWFwIn0=)"/>
+        <setting id="live_remote_mapped" type="bool" default="false" visible="false"/>
+        <setting id="live_remote_next_action" type="text" default="" visible="false"/>
+        <setting id="live_remote_next_button" type="text" default="" visible="false"/>
+        <setting id="live_remote_previous_action" type="text" default="" visible="false"/>
+        <setting id="live_remote_previous_button" type="text" default="" visible="false"/>
 
         <!-- Hidden legacy customization settings (read by engine, kept with defaults) -->
         <setting id="touch_view" type="bool" default="false" visible="false"/>
@@ -139,9 +153,12 @@
     <!-- Supporto -->
     <category label="Supporto">
         <setting label="Diagnostica" type="lsep"/>
+        <setting id="network_info" type="action"
+                 label="Mostra indirizzo IP e informazioni di rete"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJuZXR3b3JrX2luZm8ifQ==)"/>
         <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING).
              Visibile nei build di test 1.9.9xx; da nascondere per la release 2.0. -->
-        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="true"/>
+        <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="false"/>
         <!-- Auto-rilevato al primo evento touchscreen (vedi prippihome._note_touch_action):
              attiva le protezioni/gesti touch. Nascosto: mai da toccare a mano. -->
         <setting id="touch_device" type="bool" label="touch_device" default="false" visible="false"/>

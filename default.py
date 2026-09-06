@@ -5,7 +5,10 @@
 
 import os
 import sys
+import time
 import xbmc
+
+_entry_t0 = time.time()
 
 # functions that on kodi 19 moved to xbmcvfs
 try:
@@ -24,6 +27,10 @@ sys.path.insert(0, librerias)
 os.environ['TMPDIR'] = config.get_temp_file('')
 
 from platformcode import launcher
+
+if config.get_setting('perf_log', default=False):
+    xbmc.log('[PERF] default.imports: %.0f ms' %
+             ((time.time() - _entry_t0) * 1000), xbmc.LOGWARNING)
 
 if sys.argv[2] == "":
     launcher.start()

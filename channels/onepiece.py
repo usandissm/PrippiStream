@@ -468,6 +468,16 @@ def get_curated_items(want_extras=True):
 
 
 # ── Channel API (search / episodios / findvideos / get_sagas) ────────────────
+def mainlist(item):
+    """Expose the curated One Piece hub to generic channel browsers.
+
+    The Kodi home injects these entries directly, while the native Android app
+    also has a generic "Canali" catalog. Providing mainlist keeps both entry
+    points equivalent and avoids a dead channel tile.
+    """
+    return get_curated_items(want_extras=True)
+
+
 def search(item, text):
     """Intentionally returns nothing for the GLOBAL search.
 

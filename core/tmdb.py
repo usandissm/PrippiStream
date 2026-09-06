@@ -19,7 +19,7 @@ import ast, copy, os, re, time
 
 from core import filetools, httptools, jsontools, scrapertools
 from core.item import InfoLabels
-from platformcode import config, logger, platformtools
+from platformcode import config, logger, platformtools, deviceprofile
 import threading
 
 info_language = ["de", "en", "es", "fr", "it", "pt"] # from videolibrary.json
@@ -73,6 +73,8 @@ def clean_cache():
 
 
 _cache_stats = [0, 0]  # [hit, miss] — solo strumentazione [PERF], contatori best-effort
+_cache_inflight = {}
+_cache_inflight_lock = threading.Lock()
 
 
 def _perf_cache_count(hit):
@@ -91,12 +93,20 @@ def cache_response(fn):
     # start_time = time.time()
 
     def wrapper(*args, **kwargs):
-        def check_expired(saved_date):
+        def check_expired(saved_date, saved_result=None):
             valided = False
 
             cache_expire = config.get_setting("tmdb_cache_expire", default=0)
             current_date = datetime.datetime.now()
             elapsed = current_date - saved_date
+
+            # A real TMDB search response with zero results is useful negative
+            # information, but only briefly: it avoids repeating the same failed
+            # title variants during a home build without freezing misses for days.
+            if (isinstance(saved_result, dict)
+                    and saved_result.get('results') == []
+                    and saved_result.get('total_results') == 0):
+                return elapsed <= datetime.timedelta(hours=6)
 
             # 1 day
             if cache_expire == 0:
@@ -150,11 +160,13 @@ def cache_response(fn):
                     # cachati, così gli errori transitori si auto-riparano.
                     return (bool(res) and isinstance(res, dict)
                             and 'status_code' not in res
-                            and ('results' not in res or res.get('results')))
+                            and ('results' not in res or bool(res.get('results'))
+                                 or (res.get('results') == []
+                                     and res.get('total_results') == 0)))
 
                 row = db['tmdb_cache'].get(url)
 
-                if row and check_expired(row[1]) and _cacheable(row[0]):
+                if row and check_expired(row[1], row[0]) and _cacheable(row[0]):
                     # HIT. Le risposte by-ID (/movie/{id}, /tv/{id}, stagioni) non
                     # hanno la chiave 'results': il vecchio check
                     # `if not result.get('results')` le trattava SEMPRE come miss
@@ -163,9 +175,36 @@ def cache_response(fn):
                     _perf_cache_count(True)
                 else:
                     _perf_cache_count(False)
-                    result = fn(*args)
-                    if _cacheable(result):
-                        db['tmdb_cache'][url] = [result, datetime.datetime.now()]
+                    # Deduplicate identical requests already being resolved by
+                    # another enrichment worker. Waiters reuse the owner's DB
+                    # result instead of hitting TMDB again.
+                    with _cache_inflight_lock:
+                        event = _cache_inflight.get(url)
+                        owner = event is None
+                        if owner:
+                            event = threading.Event()
+                            _cache_inflight[url] = event
+                    if owner:
+                        try:
+                            result = fn(*args)
+                            if _cacheable(result):
+                                db['tmdb_cache'][url] = [result, datetime.datetime.now()]
+                        finally:
+                            with _cache_inflight_lock:
+                                _cache_inflight.pop(url, None)
+                                event.set()
+                    else:
+                        event.wait(timeout=20)
+                        waited_row = db['tmdb_cache'].get(url)
+                        if (waited_row and check_expired(waited_row[1], waited_row[0])
+                                and _cacheable(waited_row[0])):
+                            result = waited_row[0]
+                        else:
+                            # Owner failed/timed out: preserve the old self-heal
+                            # behaviour and let this caller retry once itself.
+                            result = fn(*args)
+                            if _cacheable(result):
+                                db['tmdb_cache'][url] = [result, datetime.datetime.now()]
 
             # elapsed_time = time.time() - start_time
             # logger.debug("TARDADO %s" % elapsed_time)
@@ -245,7 +284,9 @@ def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, 
     # max_workers limitato: su CPU deboli (box ARM) il default (cpu+4, fino a 32)
     # satura GIL e socket; 8 = valore effettivo odierno sui quad-core, quindi
     # nessun cambio lì, solo un tetto dove il default esplodeva.
-    executor = futures.ThreadPoolExecutor(max_workers=max(2, min(8, (os.cpu_count() or 4))))
+    normal_workers = max(2, min(8, (os.cpu_count() or 4)))
+    executor = futures.ThreadPoolExecutor(
+        max_workers=deviceprofile.worker_count('tmdb', normal_workers))
     searchList = [executor.submit(sub_thread, item, i, seekTmdb) for i, item in enumerate(itemlist)]
     try:
         for res in futures.as_completed(searchList):
@@ -1102,7 +1143,7 @@ class Tmdb(object):
         else:
             # No search results
             msg = "The search for '%s' gave no results for page %s" % (searching, page)
-            logger.error(msg)
+            logger.debug(msg)
             return 0
 
     def __discover(self, index_results=0):
