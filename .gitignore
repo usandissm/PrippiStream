@@ -22,3 +22,8 @@ build/
 # ma i ZIP in docs/ devono essere su GitHub Pages per Kodi
 !docs/**/*.zip
 !docs/*.zip
+# runtime e artefatti locali Samsung Tizen
+tizen/**/.buildResult/
+tizen/chrome-debug-profile/
+tizen/.gateway-data/
+tizen/gateway-*.log

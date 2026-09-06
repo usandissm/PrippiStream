@@ -7,6 +7,13 @@ name: Build and Release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "tizen/**"
+      - "docs/tizen/**"
+      - "tools/publish_tizen_ota.py"
+      - ".github/workflows/tizen-ota.yml"
+      - ".github/workflows/release.yml"
+      - ".gitignore"
 
 jobs:
   release:
