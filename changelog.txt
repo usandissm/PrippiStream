@@ -1,164 +1,33 @@
-## 2.0.0
-- Home, catalogo, ricerca, dettagli e locandine rinnovati per PC, TV e box.
-- Continua a guardare, episodi, player e download resi più affidabili.
-- Esperienza Live riorganizzata: caricamento automatico, canali ordinati, loghi dedicati, controllo disponibilità, fallback e zapping robusto da telecomando.
-- Domini e cache aggiornati automaticamente; gli snapshot incompleti non possono più bloccare la Home.
-- Rimosso dalle Impostazioni il download della vecchia app Android TV di test.
+## 2.0.1
 
-## 1.9.989
-- Ponte Android aggiornato alla 0.9.13/code68 ARM32: scarica direttamente la release GitHub firmata, verifica SHA-256 e apre il Package Installer per il bootstrap una tantum dell'updater compatibile con Android legacy e ROM vendor.
+PrippiStream 2.0
 
-## 1.9.986
-- Chiusura gate PC Milestone 2: il costoso caricamento della cache Film 4K è stato rimosso dal percorso pre-paint quando la riga opzionale è disattivata e spostato in background dopo il primo paint. Aggiunte misure separate 4K, canali live ed EPG.
+### Home e catalogo
+- Home più veloce, stabile e leggibile su PC, TV e box.
+- Nuove righe per generi, contenuti popolari, novità, anime, 4K e titoli aggiornati.
+- Locandine, voti, trailer, metadati e ricerca migliorati.
+- Ricerca unificata: più fonti disponibili, risultati più completi e migliore riconoscimento dei titoli.
+- Continua a guardare più affidabile per film, serie, stagioni ed episodi.
 
-## 1.9.985
-- Candidate di chiusura Milestone 2: aggiunte misure separate del costo d'importazione della Home e versione Python reale nei report diagnostici, così PC e box producono automaticamente le ultime evidenze prestazionali.
+### Serie, player e download
+- Scelta di stagione ed episodio migliorata, anche da Continua a guardare.
+- Player più solido: ripresa, cambio episodio, prossimo episodio e ritorno alla Home.
+- Download offline migliorati: qualità, code, ripresa, avanzamento e informazioni dettagliate.
+- Aggiornamento automatico di domini e URL dopo le migrazioni.
 
-## 1.9.984
-- Ponte aggiornato alla candidate Android adattiva 0.9.9/code64 ARM32+ARM64: diagnostica Telegram accodata con fallback manuale, registro remoto siti/domìni condiviso con Kodi, Home da snapshot prima dell'avvio Python e primo paint protetto sui dispositivi lenti.
+### Dirette
+- Esperienza Live completamente rinnovata e organizzata in sezioni dedicate.
+- Canali caricati e verificati automaticamente all’apertura.
+- Intrattenimento, cinema, documentari e sport riuniti in modo più ordinato.
+- Canali duplicati rimossi, ordine fisso e loghi dedicati.
+- Verifica automatica delle fonti e passaggio a un’alternativa se un canale non è disponibile.
+- Guida “in onda adesso” e cambio canale direttamente dal player con telecomando.
 
-## 1.9.983
-- Ponte aggiornato alla candidate Android adattiva 0.9.8/code63 ARM32+ARM64: payload persistente, domini/download differiti dal primo paint, pipeline Home seriale sulle box lente, griglie TV adattive, focus stabile, zapping con timeout e diagnostica con fallback manuale.
+### TV e telecomando
+- Focus, contrasto, navigazione e layout riprogettati per l’uso con telecomando.
+- Zapping più affidabile: i canali non disponibili vengono saltati automaticamente.
 
-## 1.9.982
-- Ponte aggiornato alla candidate Android adattiva 0.9.7/code62 ARM32+ARM64: metadati dettaglio arricchiti, player/zapping robusti, policy 4K completa e diagnostica autonoma accodata.
-
-## 1.9.981
-- Ponte aggiornato alla candidate Android adattiva 0.9.6/code61 ARM32+ARM64; aggiunto download autonomo e verificato dell'APK senza aprire il Package Installer.
-
-## 1.9.979
-- Aggiornato il ponte Android alla build adattiva 0.9.4/code59: diagnostica affidabile e accodata, player mobile rifinito e policy 4K basata sulle capacità hardware.
-
-## 1.9.975
-- Il ponte di installazione Android scarica ora la preview TV 0.9.0, che corregge la gestione del focus durante lo scorrimento Home, limita la cache texture sulle box lente e salva automaticamente crash ed eventi diagnostici leggibili dalla rete locale.
-
-## 1.9.974
-- Aggiunta in Impostazioni > Supporto la voce "Installa app Android TV (test)": scarica la preview ARM32 dal server locale, verifica integralmente lo SHA-256 e apre l'installer di sistema senza richiedere Play Store, browser o Downloader.
-
-## 1.9.973
-- Se un manifest StreamingCommunity/VixCloud cade prima dell'avvio audio-video, PrippiStream rigenera automaticamente URL e token ed esegue un solo nuovo tentativo.
-- Sulle box low-power le righe live iniziano sempre a caricarsi dopo una breve attesa fissa: prima TV, poi SKY e infine Sport, senza dipendere da una pausa prolungata del telecomando.
-
-## 1.9.972
-- Sulle box low-power la Home limita a 20 le card materializzate per riga, ripulendo anche gli snapshot sovradimensionati delle build precedenti.
-- Disattivati il popolamento globale delle righe e la rivalidazione completa dello snapshot durante la sessione Home sui dispositivi lenti.
-- Probe live e caricamento Anime partono soltanto dopo una pausa continua della navigazione, evitando la saturazione CPU/rete durante lo scorrimento.
-
-## 1.9.971
-- La Home resta navigabile sui dispositivi low-power mentre le righe successive continuano a caricarsi.
-- Corretto il falso rilevamento touchscreen causato da alcuni telecomandi Android, che avviava il popolamento anticipato di tutte le righe.
-- Sulle box lente viene costruita graficamente soltanto la riga richiesta e le righe principali non vengono più ampliate in background fino a 60-70 elementi.
-
-## 1.9.970
-- Lo zapping della riga TV sostituisce direttamente lo stream nel player, senza ritorno intermedio alla Home e senza una nuova invocazione del plugin.
-- I canali live non possono più essere salvati in Continua a guardare; eventuali voci live già presenti vengono rimosse automaticamente all'apertura della Home.
-
-## 1.9.969
-- I tasti Canale+/Canale- cambiano ora circolarmente anche le dirette della nuova riga TV, conservando i resolver ufficiali HLS/DASH/DRM dei provider.
-- Completati i poster locali della riga TV: tutti i 48 canali hanno un logo dedicato nel formato verticale 480x600.
-
-## 1.9.968
-- I loghi della nuova riga TV usano lo stesso poster verticale 480x600 delle righe SKY/Sport, senza deformazioni.
-- Sulle box Android i tasti fisici Canale+/Canale- appresi come PageUp/PageDown vengono intercettati anche tramite i nomi Kodi.
-- I live DASH/ClearKey sui dispositivi low-power dispongono di più tempo per avviare il decoder, evitando la rimozione di canali che partono lentamente ma funzionano.
-
-## 1.9.967
-- La riga TV usa ora le dirette ufficiali RaiPlay, Mediaset, La7 e Discovery, con riproduzione HLS/DASH Widevine e loghi specifici dei canali.
-- La navigazione manuale dei provider resta nascosta, mentre i moduli continuano a servire internamente Home, Sfoglia, ricerca e riproduzione.
-
-## 1.9.965
-- Le informazioni di rete attendono ora il completamento delle InfoLabel Kodi e non mostrano più il valore temporaneo "Busy" sulle box Android; l'indirizzo IP conserva il fallback locale.
-
-## 1.9.964
-- Aggiunta in Impostazioni > Supporto una schermata con indirizzo IP, hostname, stato rete, MAC, subnet, gateway, DNS e versioni Kodi/Python, utile per collegare e diagnosticare PC, box e TV.
-
-## 1.9.963
-- I tasti appresi vengono intercettati soltanto durante i live SKY, Sport e TV; fuori dai live Kodi gestisce direttamente il salto rapido senza avviare PrippiStream.
-- Il keymap temporaneo viene rimosso alla fine del live e ripulito automaticamente all'avvio dopo eventuali arresti anomali.
-
-## 1.9.962
-- I tasti appresi mantengono il normale salto rapido avanti/indietro durante film, episodi e trailer.
-- Le pressioni rapide durante lo zapping vengono accodate senza conflitti tra processi e compattate nell'ultimo comando richiesto.
-
-## 1.9.961
-- La procedura di apprendimento ignora ora gli eventi interni ReloadKeymaps e il rumore del mouse, evitando mappature false sui diversi dispositivi.
-
-## 1.9.960
-- I tasti appresi del telecomando possono cambiare circolarmente il canale durante la riproduzione delle sole righe SKY, Sport e TV, con debounce, stato di connessione, fallback e salto dei canali non disponibili.
-- La mappatura telecomando è ora salvata in modo atomico fuori dalla finestra Impostazioni e genera un keymap limitato al fullscreen video.
-
-## 1.9.959
-- Aggiunta diagnostica guidata per rilevare e salvare i tasti canale successivo e precedente del telecomando; lo zapping non è ancora attivo in questa build.
-
-## 1.9.958
-- Completata la preparazione pre-2.0: cache trailer riutilizzata anche dalla scheda dettaglio, pool adattivi sui dispositivi meno potenti e manutenzione database resa verificabile e ritentabile.
-- Aggiornamenti periodici spostati fuori dal percorso sincrono di avvio e riferimenti ai thread terminati rimossi durante le sessioni lunghe.
-- Esclusi dallo ZIP ulteriori test e documenti interni delle librerie, senza rimuovere moduli runtime o fallback Python.
-
-## 1.9.955
-- Home più veloce e leggera, soprattutto sui dispositivi meno potenti.
-- La riga Film in 4K ora è disattivata di default e si può riattivare da Personalizzazione; i film 4K restano disponibili nelle normali sezioni e nella ricerca.
-- La ricerca ricorda le ultime 10 ricerche, permette di riutilizzarle o cancellare la cronologia.
-- Riaprire la stessa ricerca entro 15 minuti riutilizza i risultati già ottenuti, evitando nuove attese sui servizi temporaneamente non disponibili.
-- Caricamenti in background, metadati, trailer e controlli live consumano meno CPU e memoria sui dispositivi con poca RAM.
-- Le righe SKY, Sport e TV mostrano esclusivamente canali verificati come riproducibili nella sessione corrente; le vecchie cache non espongono più canali scaduti.
-- La chiusura di Kodi interrompe correttamente i caricamenti della Home senza riaprire finestre o lasciare controlli in background.
-- Debug e misure diagnostiche restano disattivati durante l'uso normale e si possono riattivare dalle impostazioni per un test.
-- Grafica della home rifinita: sfondo del riquadro in alto più pulito e migliore risalto del titolo selezionato.
-- Nuova opzione in Impostazioni › Personalizzazione: "Animazioni ridotte (per dispositivi lenti)".
-
-## 1.5.3
-- Nuova opzione in Impostazioni › Personalizzazione: "Film in 4K: chiedi se riprodurre in 4K o Full HD" — se attiva, all'avvio di un film disponibile in 4K scegli tu la qualità.
-- Riproduzione 4K più affidabile: se il flusso 4K non parte, viene avviata automaticamente la versione Full HD.
-
-## 1.5.2
-- Bug fix.
-- Nuova categoria HENTAI 18+, disattivabile da Impostazioni › Personalizzazione.
-
-## 1.5.1
-- Bug fix e upgrade minori.
-
-## 1.5.0
-- Canali in diretta: aggiunti canali italiani con una nuova riga "TV" per i generalisti.
-- Fallback automatico su SKY/Sport: se la fonte principale non parte, ne prova un'altra in automatico, molti più canali funzionanti.
-- Vengono mostrati solo i canali davvero online in quel momento.
-- Nuovi loghi in alta qualità per i canali SKY, Sport e TV.
-- Impostazioni › Personalizzazione: ora puoi mostrare/nascondere le righe Sport, SKY e TV.
-- Ricerca: risolto un caso in cui due titoli con lo stesso nome facevano sparire il risultato giusto.
-- Grafica più pulita: rimossi alcuni simboli che su certi dispositivi apparivano come quadratini.
-
-## 1.4.0
-- Sfoglia: scorrimento rivisto, niente più salti del focus, niente buchi tra gli anni, fluido con mouse e tastiera.
-- Canali SKY: "In onda adesso" corretto, con "A seguire" come una guida TV; Sky Uno +1 e altri canali sistemati.
-- Trailer: per gli Anime ora cerca anche le opening; ricerca migliorata per i K-Drama.
-- Nuove opzioni in Impostazioni › Personalizzazione (scorrimento Home, categorie Anime 18+).
-- Impostazioni semplificate e pulizia automatica di vecchi dati inutilizzati.
-
-## 1.3.0
-- Selezione delle stagioni più comoda con un nuovo menu a tendina.
-- Correzioni varie (locandine e riproduzione di alcuni contenuti).
-- Bug fix in Ricerca e Sfoglia.
-- Ottimizzazione Anime.
-
-## 1.2.0
-- Nuova schermata "Sfoglia": esplora il catalogo per categoria (Film, Serie TV, K-Drama, Anime) e per genere.
-- Ricerca rinnovata: nuova grafica, filtri (Tutti / Film / Serie / Anime) ed etichette di tipo sui titoli.
-- Migliorata la selezione con le frecce nelle righe SKY e Sport.
-- Migliorata l'affidabilità di alcuni contenuti.
-- Vari miglioramenti e correzioni.
-
-## 1.1.1
-- Sbloccati molti più film e serie, ora partono contenuti che prima non si riproducevano.
-- Download offline esteso ad altri contenuti.
-- Download: ora scarica sempre tutte le tracce audio e i sottotitoli disponibili, senza più chiedere.
-- Contenuti scaricati: cliccandoli si apre un menu "Riproduci / Elimina" (con conferma prima di eliminare).
-- DNS Google attivo di default: migliore raggiungibilità dei siti.
-
-## 1.1.0
-- Bug fix.
-- Upgrade vari.
-- Aggiunta della funzione Download offline: scarica film ed episodi e guardali senza connessione dalla sezione "I miei download", con scelta della qualità, selezione multipla degli episodi e avanzamento rapido durante la riproduzione.
-
-## 1.0.80
-- Aggiunta la sezione Anime in fondo alla schermata principale.
-- Vari bug fix.
+### Affidabilità e prestazioni
+- Avvio e caricamento Home ottimizzati per TV e box meno potenti.
+- Cache più sicure: le risposte incomplete non bloccano più la Home.
+- Diagnostica e gestione degli errori migliorate.
