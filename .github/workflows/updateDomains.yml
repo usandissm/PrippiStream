@@ -36,19 +36,15 @@ jobs:
             echo "Domain changes detected — will release."
           fi
 
-      - name: Rebuild addon ZIP, addons.xml e repository ZIP
-        if: steps.check_changes.outputs.changed == 'true'
-        run: |
-          python tools/make_addon_zip.py
-          python tools/make_addons_xml.py
-          python tools/make_repo_zip.py
-
       - name: Commit & Push changes
         if: steps.check_changes.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add channels.json docs/
+          # PrippiStream 2.0 legge questo registro direttamente in runtime.
+          # La release ZIP viene invece prodotta e verificata sul PC, dove sono
+          # disponibili i dati locali necessari: non ricompilarla su GitHub.
+          git add channels.json
           git diff --staged --quiet && echo "Nessuna modifica." || \
             git commit -m "Aggiornamento domini [skip ci]"
           git push
