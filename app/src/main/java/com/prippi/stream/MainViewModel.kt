@@ -127,7 +127,7 @@ class MainViewModel(
     private fun preloadLiveAtStartup() {
         if (liveRefreshJob?.isActive == true) return
         liveRefreshJob = viewModelScope.launch {
-            // Parte prima della Home e continua finche' tutte le tre righe Live
+            // Parte prima della Home e continua finche' tutte le quattro righe Live
             // sono state raccolte. L'ingresso nella pagina non avvia altri probe.
             repeat(60) {
                 while (uiPaused || state.page !in setOf(AppPage.HOME, AppPage.LIVE)) {
@@ -158,7 +158,10 @@ class MainViewModel(
                         )
                     }
                 }
-                if (rows.map { it.id }.containsAll(listOf("live_sky", "live_sport", "live_tv"))) {
+                if (rows.map { it.id }.containsAll(
+                        listOf("live_sky", "live_sport", "live_iptv_dazn", "live_tv"),
+                    )
+                ) {
                     return@launch
                 }
                 delay(5_000)
@@ -169,30 +172,70 @@ class MainViewModel(
 
     fun setQuery(value: String) { state = state.copy(query = value) }
 
-    fun loadHome() = runTask {
-        val (rows, history) = withContext(Dispatchers.IO) {
-            val freshRows = repository.loadHome()
-            homeSnapshotStore.save(freshRows)
-            freshRows to repository.searchHistory()
-        }
+    /**
+     * Explicit user navigation to the root Home page.
+     *
+     * [loadHome] intentionally preserves the current page: it is also used by
+     * background refreshes, which must never throw the user out of Browse,
+     * Live, or a detail page. Using it directly from a Home button therefore
+     * refreshed the data but left a TV user stuck on the current screen.
+     */
+    fun showHome() {
+        homeRefreshJob?.cancel()
         state = state.copy(
             page = AppPage.HOME,
             returnPage = AppPage.HOME,
-            homeRows = withContinueWatching(rows),
+            browseItems = emptyList(),
+            browseStack = emptyList(),
             results = emptyList(),
             selectedItem = null,
             detailOverview = "",
             episodes = emptyList(),
             searchChannel = "__global__",
             searchFilter = "all",
-            searchHistory = history,
             pageTitle = "PrippiStream",
             returnTitle = "PrippiStream",
+            error = null,
         )
+        loadHome()
+    }
+
+    fun loadHome() = runTask {
+        val (rows, history) = withContext(Dispatchers.IO) {
+            val freshRows = repository.loadHome()
+            homeSnapshotStore.save(freshRows)
+            freshRows to repository.searchHistory()
+        }
+        // Il caricamento iniziale può terminare dopo che l'utente ha già
+        // aperto Live (o un'altra schermata). In quel caso aggiorniamo solo
+        // i dati Home: non dobbiamo riportare la pagina a HOME né cancellare
+        // il contesto della schermata attualmente visibile.
+        val keepCurrentPage = state.page != AppPage.HOME
+        state = if (keepCurrentPage) {
+            state.copy(
+                homeRows = withContinueWatching(rows),
+                searchHistory = history,
+            )
+        } else {
+            state.copy(
+                page = AppPage.HOME,
+                returnPage = AppPage.HOME,
+                homeRows = withContinueWatching(rows),
+                results = emptyList(),
+                selectedItem = null,
+                detailOverview = "",
+                episodes = emptyList(),
+                searchChannel = "__global__",
+                searchFilter = "all",
+                searchHistory = history,
+                pageTitle = "PrippiStream",
+                returnTitle = "PrippiStream",
+            )
+        }
         AppDiagnostics.event(
-            "home_loaded rows=${rows.size} items=${rows.sumOf { it.items.size }}",
+            "home_loaded rows=${rows.size} items=${rows.sumOf { it.items.size }} preserved_page=$keepCurrentPage current_page=${state.page}",
         )
-        scheduleProgressiveHomeRefresh()
+        if (!keepCurrentPage) scheduleProgressiveHomeRefresh()
     }
 
     private fun scheduleProgressiveHomeRefresh() {
@@ -672,7 +715,7 @@ class MainViewModel(
         item: ContentItem,
         onPlayback: (ContentItem, List<PlaybackRequest>, Long) -> Unit,
     ) = runTask {
-        val playbacks = withContext(Dispatchers.IO) { repository.playbackCandidates(item) }
+        val playbacks = withContext(Dispatchers.IO) { repository.livePlaybackCandidates(item) }
         if (playbacks.isEmpty()) error("Diretta non disponibile")
         val row = state.liveRows.firstOrNull { liveRow ->
             liveRow.items.any { it.rawJson == item.rawJson }

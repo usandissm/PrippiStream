@@ -19,3 +19,7 @@ build/
 /*.jks
 /*.keystore
 /release-output/
+
+# Seed privato del pool IPTV: incluso soltanto nelle build locali firmate.
+/app/src/main/assets/pydata/iptv_accounts.json
+/app/src/main/assets/pydata/iptv_catalog.json

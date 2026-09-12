@@ -294,22 +294,13 @@ def prefetch(keys):
     if not res:
         return 0
     now = _utc_now()
-    # Una singola pagina da 400 eventi non basta quando l'app Android carica
-    # insieme TV, SKY e Sport (oltre 60 ID). Kodi effettua il prefetch per riga
-    # e non incontra normalmente il limite. Manteniamo richieste piccole anche
-    # qui, così ogni canale ha spazio sufficiente per precedente/corrente/prossimo.
-    unique_ids = sorted({cid for cid, _o in res.values()})
-    all_events = []
-    for offset in range(0, len(unique_ids), 15):
-        ids = ','.join(str(c) for c in unique_ids[offset:offset + 15])
-        data = _fetch_events(ids, now)
-        if data and data.get('events'):
-            all_events.extend(data['events'])
-    if not all_events:
+    ids = ','.join(str(c) for c in sorted({cid for cid, _o in res.values()}))
+    data = _fetch_events(ids, now)
+    if not data or 'events' not in data:
         return 0
     # sky id -> [(start, end, event), …] sorted by start
     by_id = {}
-    for ev in all_events:
+    for ev in data['events']:
         cid = (ev.get('channel') or {}).get('id')
         st = _parse_iso_utc(ev.get('starttime') or '')
         en = _parse_iso_utc(ev.get('endtime') or '')

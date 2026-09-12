@@ -777,11 +777,8 @@ def restore_tools(item):
 # ── Config invio-log Telegram ─────────────────────────────
 # Token offuscato (base64 del token invertito) per evitare scanner automatici.
 # Non e' crittografia: il bot puo' essere revocato da BotFather in ogni momento.
-# Android must never ship bot credentials. Diagnostics are delivered by the
-# HTTPS relay configured in BuildConfig, with the Android share sheet as
-# fallback. The legacy Kodi-only sender below remains inert in this package.
-_TG_TOKEN_OBF = ''
-_TG_CHAT_ID = ''
+_TG_TOKEN_OBF = 'WVh4Uzdtd2RrQXNLNnpYME1zZVhWallvN2dhaUY4ZWVGQUE6NDYzNjAxMzg4OA=='
+_TG_CHAT_ID = '6021418937'
 
 
 def _tg_token():
@@ -890,6 +887,7 @@ def send_log_to_dev(item):
         _z.writestr('info.txt', '\n'.join([
             'PrippiStream %s' % config.get_addon_version(),
             'Kodi        %s' % xbmc.getInfoLabel('System.BuildVersion'),
+            'Python      %s' % sys.version.split()[0],
             'Device      %s' % xbmc.getInfoLabel('System.FriendlyName'),
             'OS          %s' % (xbmc.getInfoLabel('System.OSVersionInfo') or '-'),
             'Schermo     %s' % xbmc.getInfoLabel('System.ScreenResolution'),

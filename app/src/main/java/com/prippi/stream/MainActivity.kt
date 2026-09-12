@@ -755,7 +755,7 @@ private fun PrippiApp(
                             Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
                         }
                     } else {
-                        IconButton(onClick = model::loadHome) {
+                        IconButton(onClick = model::showHome) {
                             Icon(Icons.Default.Home, contentDescription = "Home")
                         }
                     }
@@ -789,7 +789,7 @@ private fun PrippiApp(
                 ) {
                     NavigationBarItem(
                         selected = selectedRoot == AppPage.HOME,
-                        onClick = model::loadHome,
+                        onClick = model::showHome,
                         icon = { Icon(Icons.Default.Home, contentDescription = null) },
                         label = { Text("Home") },
                     )
@@ -968,7 +968,7 @@ private fun TelevisionApp(
             searchSelected = searchOpen ||
                 state.page == AppPage.SEARCH ||
                 (state.page == AppPage.DETAIL && state.returnPage == AppPage.SEARCH),
-            onHome = { searchOpen = false; model.loadHome() },
+            onHome = { searchOpen = false; model.showHome() },
             onSearch = { searchOpen = true },
             onBrowse = { searchOpen = false; model.showBrowseCatalog() },
             onLive = { searchOpen = false; model.showLive() },

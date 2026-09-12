@@ -230,6 +230,12 @@ object PythonBridge {
     fun resolve(item: JSONObject): JSONObject =
         JSONObject(bridge.callAttr("resolve_json", item.toString()).toString())
 
+    /** Retry lazy del pool Group-E: ogni tentativo seleziona una lista diversa. */
+    fun resolveLiveAttempt(item: JSONObject, attempt: Int): JSONObject =
+        JSONObject(
+            bridge.callAttr("resolve_live_attempt_json", item.toString(), attempt).toString(),
+        )
+
     fun resolve4k(item: JSONObject): JSONObject =
         JSONObject(bridge.callAttr("resolve_4k_json", item.toString()).toString())
 

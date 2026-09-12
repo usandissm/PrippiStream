@@ -152,7 +152,11 @@ open class PlayerActivity : ComponentActivity() {
     private var liveRowItems = JSONArray()
     private var liveRowIndex = -1
     private var liveRetryCount = 0
+    private var livePoolAttempt = 0
     private val liveSwitching = AtomicBoolean(false)
+    // Direzione dell'ultimo zapping: serve per saltare automaticamente un
+    // canale che resta in buffering, mantenendo avanti/indietro.
+    private var liveSwitchDirection = 1
     private val playbackGeneration = AtomicLong(0L)
     private val asyncOperationGeneration = AtomicLong(0L)
     @Volatile private var activityStarted = true
@@ -1612,7 +1616,7 @@ open class PlayerActivity : ComponentActivity() {
         timeoutMs: Long,
     ): Result<List<PlaybackRequest>> {
         val task = FutureTask {
-            ContentRepository().playbackCandidates(candidate)
+            ContentRepository().livePlaybackCandidates(candidate)
         }
         Thread(task, "PrippiLiveResolver").apply {
             isDaemon = true
@@ -1640,6 +1644,7 @@ open class PlayerActivity : ComponentActivity() {
         if (liveRowItems.length() < 2 || liveRowIndex < 0 ||
             !liveSwitching.compareAndSet(false, true)
         ) return
+        liveSwitchDirection = if (delta < 0) -1 else 1
         val operationGeneration = nextAsyncOperationGeneration()
         statusView.text = "Ricerca del prossimo canale disponibile…"
         statusView.visibility = View.VISIBLE
@@ -1653,7 +1658,11 @@ open class PlayerActivity : ComponentActivity() {
                 liveRowIndex,
                 liveRowItems.length(),
                 delta,
-                LIVE_SWITCH_MAX_ATTEMPTS,
+                // Esamina tutta la riga: i canali offline possono essere
+                // consecutivi e il vecchio limite di quattro tentativi
+                // lasciava il player fermo prima di raggiungere il primo
+                // canale realmente disponibile.
+                liveRowItems.length(),
             )
             for (index in indices) {
                 if (!isAsyncOperationActive(operationGeneration) ||
@@ -1664,7 +1673,13 @@ open class PlayerActivity : ComponentActivity() {
                 val remainingMs =
                     deadline - android.os.SystemClock.elapsedRealtime()
                 if (remainingMs <= 0) break
-                val result = resolveLiveCandidate(candidate, remainingMs)
+                // Un resolver offline può restare appeso per molti secondi.
+                // Non deve consumare tutto il budget di zapping, altrimenti
+                // non si arriva mai al canale dopo quello guasto.
+                val result = resolveLiveCandidate(
+                    candidate,
+                    minOf(remainingMs, LIVE_SWITCH_CANDIDATE_TIMEOUT_MS),
+                )
                 lastError = result.exceptionOrNull() ?: lastError
                 val requests = result.getOrDefault(emptyList())
                 if (requests.isNotEmpty()) {
@@ -1705,6 +1720,7 @@ open class PlayerActivity : ComponentActivity() {
                     updateLiveGuideText(target.title, target.plot)
                     liveGuideView.text = liveGuideText
                     liveRetryCount = 0
+                    livePoolAttempt = 0
                     android.util.Log.i(
                         "Prippi",
                         "Zapping Live -> ${target.title} (${selectedIndex + 1}/${liveRowItems.length()})",
@@ -2150,7 +2166,8 @@ open class PlayerActivity : ComponentActivity() {
                     if (trackControlsView.visibility == View.VISIBLE && currentFocus !== playerView) {
                         return super.onKeyDown(keyCode, event)
                     }
-                    if (liveRowItems.length() == 0) seekBy(-10_000)
+                    if (liveRowItems.length() > 1) switchLiveChannel(-1)
+                    else seekBy(-10_000)
                     setTelevisionControlsVisible(true)
                     return true
                 }
@@ -2158,7 +2175,8 @@ open class PlayerActivity : ComponentActivity() {
                     if (trackControlsView.visibility == View.VISIBLE && currentFocus !== playerView) {
                         return super.onKeyDown(keyCode, event)
                     }
-                    if (liveRowItems.length() == 0) seekBy(10_000)
+                    if (liveRowItems.length() > 1) switchLiveChannel(1)
+                    else seekBy(10_000)
                     setTelevisionControlsVisible(true)
                     return true
                 }
@@ -2192,6 +2210,38 @@ open class PlayerActivity : ComponentActivity() {
                 array.optJSONObject(index)?.let(PlaybackRequest::fromJson)
             }.filter { it.url.isNotBlank() }
         }.getOrDefault(emptyList())
+    }
+
+    private fun retryIptvPool(generation: Long, current: ExoPlayer, detail: String): Boolean {
+        val source = liveRowItems.optJSONObject(liveRowIndex) ?: return false
+        if (source.optString("sport_kind") != "iptv" || livePoolAttempt >= 3) return false
+        val attempt = ++livePoolAttempt
+        current.release()
+        player = null
+        clearBootstrapCallbacks()
+        bootstrapWebView?.apply { stopLoading(); destroy() }
+        bootstrapWebView = null
+        statusView.text = "Cambio lista disponibile…"
+        statusView.visibility = View.VISIBLE
+        Thread {
+            val request = runCatching {
+                PlaybackRequest.fromJson(PythonBridge.resolveLiveAttempt(source, attempt))
+            }.onFailure {
+                android.util.Log.e("Prippi", "Fallback pool IPTV tentativo $attempt: $detail", it)
+            }.getOrNull()
+            runOnUiThread {
+                if (!isPlaybackGenerationActive(generation)) return@runOnUiThread
+                if (request == null || request.url.isBlank()) {
+                    liveSwitching.set(false)
+                    switchLiveChannel(liveSwitchDirection, userInitiated = false)
+                    return@runOnUiThread
+                }
+                playbackCandidates = listOf(request)
+                currentCandidateIndex = 0
+                startPlaybackCandidate(0)
+            }
+        }.start()
+        return true
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -2401,6 +2451,8 @@ open class PlayerActivity : ComponentActivity() {
                                     },
                                     1_200,
                                 )
+                            } else if (retryIptvPool(generation, current, detail)) {
+                                liveRetryCount = 0
                             } else {
                                 liveRetryCount = 0
                                 liveSwitching.set(false)
@@ -2410,7 +2462,7 @@ open class PlayerActivity : ComponentActivity() {
                                 status.visibility = View.VISIBLE
                                 progressHandler.postDelayed({
                                     if (isPlaybackGenerationActive(generation)) {
-                                        switchLiveChannel(1, userInitiated = false)
+                                        switchLiveChannel(liveSwitchDirection, userInitiated = false)
                                     }
                                 }, 500)
                             }
@@ -2530,8 +2582,11 @@ open class PlayerActivity : ComponentActivity() {
                             player === current &&
                             current.playbackState != Player.STATE_READY
                         ) {
+                            android.util.Log.w("Prippi", "Zapping Live non avviato entro il timeout: salto al canale successivo")
+                            current.release()
+                            player = null
                             liveSwitching.set(false)
-                            android.util.Log.w("Prippi", "Zapping Live sbloccato per timeout avvio")
+                            switchLiveChannel(liveSwitchDirection, userInitiated = false)
                         }
                     }, LIVE_SWITCH_START_TIMEOUT_MS)
                 }
@@ -3241,7 +3296,7 @@ open class PlayerActivity : ComponentActivity() {
         private const val UP_NEXT_MIN_WATCHED_MS = 60_000L
         private const val LIVE_SWITCH_DEBOUNCE_MS = 650L
         private const val LIVE_SWITCH_RESOLVE_BUDGET_MS = 12_000L
+        private const val LIVE_SWITCH_CANDIDATE_TIMEOUT_MS = 2_500L
         private const val LIVE_SWITCH_START_TIMEOUT_MS = 20_000L
-        private const val LIVE_SWITCH_MAX_ATTEMPTS = 4
     }
 }

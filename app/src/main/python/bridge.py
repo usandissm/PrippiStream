@@ -193,6 +193,16 @@ def _from_item(item):
                 import prippi_env
                 v = 'file://' + os.path.join(
                     prippi_env.RUNTIME_DIR, v[len(prefix):].replace('/', os.sep))
+            elif v.startswith('file://') and '/chaquopy/AssetFinder/app/engine/' in v:
+                # Some legacy live payloads have already translated the Kodi
+                # special URI, but to Chaquopy's code-only AssetFinder. Data
+                # assets live in files/pydata, so remap them before Coil sees
+                # an unreadable file path.
+                import prippi_env
+                marker = '/chaquopy/AssetFinder/app/engine/'
+                relative = v.split(marker, 1)[1]
+                v = 'file://' + os.path.join(
+                    prippi_env.RUNTIME_DIR, relative.replace('/', os.sep))
             elif current_sc_cdn and v.startswith(('http://', 'https://')):
                 try:
                     from urllib.parse import urlsplit, urlunsplit
@@ -473,6 +483,71 @@ def _playback_preferences():
     return payload
 
 
+def _live_listitem_payload(item, li):
+    """Convert the validated Kodi-style live ListItem into Media3 data."""
+    live_url = li.getPath() or ''
+    raw_headers = (li.getProperty('inputstream.adaptive.stream_headers') or
+                   li.getProperty('inputstream.adaptive.manifest_headers') or '')
+    headers = {}
+    for part in raw_headers.split('&'):
+        if '=' in part:
+            key, value = part.split('=', 1)
+            if key.lower() != 'verifypeer':
+                # Kodi uses ``!User-Agent`` to mark a URL option. Media3
+                # expects the literal HTTP header name; forwarding the bang
+                # makes several Xtream panels reject an otherwise free slot.
+                headers[unquote_plus(key).lstrip('!')] = unquote_plus(value)
+    if '|' in live_url:
+        live_url, pipe_headers = live_url.split('|', 1)
+        for part in pipe_headers.split('&'):
+            if '=' in part:
+                key, value = part.split('=', 1)
+                headers[unquote_plus(key).lstrip('!')] = unquote_plus(value)
+    drm_legacy = li.getProperty('inputstream.adaptive.drm_legacy') or ''
+    license_key = drm_legacy.split('|', 1)[1] if '|' in drm_legacy else ''
+    live_path = live_url.lower().split('?', 1)[0]
+    manifest_type = (
+        'mpd' if '.mpd' in live_path else
+        # Group-E/Xtream channels resolve to a raw MPEG-TS transport stream,
+        # not an HLS playlist. Giving it to the HLS parser makes Media3 reject
+        # it with "Input does not start with #EXTM3U".
+        'progressive' if live_path.endswith('.ts') else
+        'hls'
+    )
+    payload = {
+        'url': live_url,
+        'bootstrap_url': '',
+        'manifest_type': manifest_type,
+        'headers': _jsonable(headers),
+        'drm_type': 'clearkey' if license_key else '',
+        'license_key': license_key,
+        'subtitles': [],
+        'label': getattr(item, 'fulltitle', '') or getattr(item, 'title', '') or 'Diretta',
+        'server': 'live',
+    }
+    payload.update(_playback_preferences())
+    return payload
+
+
+def resolve_live_attempt(item_dict, attempt=0):
+    """Resolve one explicit Group-E attempt lazily.
+
+    The Android player calls this only after a transport failure, therefore a
+    click never probes several account lists up front. Native/ClearKey cards
+    retain their regular resolver and priority; this applies only to IPTV
+    fallback cards.
+    """
+    init()
+    item = _to_item(item_dict or {})
+    if getattr(item, 'sport_kind', '') != 'iptv':
+        return resolve(item_dict)
+    from platformcode import sportchannels
+    li = sportchannels.resolve_iptv_attempt(item, int(attempt or 0))
+    if li is None:
+        raise RuntimeError('Diretta IPTV non disponibile')
+    return _live_listitem_payload(item, li)
+
+
 def resolve(item_dict):
     """Da un Item riproducibile → dati per il player nativo.
     Se l'item è già una sorgente diretta (url+manifest), la impacchetta;
@@ -506,36 +581,7 @@ def resolve(item_dict):
             li = sportchannels.resolve_listitem(item)
         if li is None:
             raise RuntimeError('Diretta non disponibile')
-        live_url = li.getPath() or ''
-        raw_headers = (li.getProperty('inputstream.adaptive.stream_headers') or
-                       li.getProperty('inputstream.adaptive.manifest_headers') or '')
-        headers = {}
-        for part in raw_headers.split('&'):
-            if '=' in part:
-                key, value = part.split('=', 1)
-                if key.lower() != 'verifypeer':
-                    headers[unquote_plus(key)] = unquote_plus(value)
-        if '|' in live_url:
-            live_url, pipe_headers = live_url.split('|', 1)
-            for part in pipe_headers.split('&'):
-                if '=' in part:
-                    key, value = part.split('=', 1)
-                    headers[unquote_plus(key)] = unquote_plus(value)
-        drm_legacy = li.getProperty('inputstream.adaptive.drm_legacy') or ''
-        license_key = drm_legacy.split('|', 1)[1] if '|' in drm_legacy else ''
-        payload = {
-            'url': live_url,
-            'bootstrap_url': '',
-            'manifest_type': 'mpd' if '.mpd' in live_url.lower() else 'hls',
-            'headers': _jsonable(headers),
-            'drm_type': 'clearkey' if license_key else '',
-            'license_key': license_key,
-            'subtitles': [],
-            'label': getattr(item, 'fulltitle', '') or getattr(item, 'title', '') or 'Diretta',
-            'server': 'live',
-        }
-        payload.update(_playback_preferences())
-        return payload
+        return _live_listitem_payload(item, li)
     url = getattr(item, 'url', '') or ''
     source_url = url
     manifest = (getattr(item, 'manifest', '') or '').lower()
@@ -900,13 +946,19 @@ def _refresh_live_background():
                 sportchannels._mem_cache[row_key]['data'] = fresh
                 sportchannels._mem_cache[row_key]['ts'] = time.time()
                 sportchannels._save_disk_cache(row_key, fresh)
+                # build_items() hides SKY/SPORT until the current-session
+                # probes complete. Mark them ready after saving the result.
+                if row_key in ('sky', 'sport'):
+                    sportchannels.mark_row_ready(row_key)
                 logger.info('[bridge] live %s pronta: %d canali' % (row_key, len(fresh)))
         except Exception as exc:
             logger.error('[bridge] live refresh %s: %s' % (row_key, exc))
 
     try:
         sportchannels.reset_state()
-        row_keys = ('tv', 'sky', 'sport')
+        # Same fixed visual order as Kodi: the merged rows already honour
+        # ClearKey/Daddy before IPTV fallback while they are being built.
+        row_keys = ('sky', 'sport', 'iptv_dazn', 'tv')
         if _APP_LOW_POWER:
             # Sulle box economiche tre parser/probe contemporanei contendono
             # CPU, rete e memoria proprio mentre la Home deve restare fluida.
@@ -931,6 +983,13 @@ def _refresh_live_background():
             skyepg.prefetch([key for key in epg_keys if key])
         except Exception as exc:
             logger.error('[bridge] live EPG: %s' % exc)
+        try:
+            # Read-only warm-up: it never reserves a slot. Availability is
+            # checked again only at the moment a user selects a channel.
+            from platformcode import iptv_pool
+            iptv_pool.warmup(limit=12)
+        except Exception as exc:
+            logger.debug('[bridge] IPTV pool warmup: %s' % exc)
     finally:
         with _LIVE_LOCK:
             _LIVE_LOADING = False
@@ -944,7 +1003,7 @@ def live_rows():
     from platformcode import sportchannels
     from platformcode import skyepg
     rows = []
-    for index, key in enumerate(('tv', 'sky', 'sport')):
+    for index, key in enumerate(('sky', 'sport', 'iptv_dazn', 'tv')):
         items = sportchannels.build_items(key) or []
         for item in items:
             item._app_live = True
@@ -1744,6 +1803,13 @@ def channel_methods_json(channel_id):
 
 def resolve_json(item_json='{}'):
     return json.dumps(resolve(json.loads(item_json or '{}')), ensure_ascii=False)
+
+
+def resolve_live_attempt_json(item_json='{}', attempt=0):
+    return json.dumps(
+        resolve_live_attempt(json.loads(item_json or '{}'), attempt),
+        ensure_ascii=False,
+    )
 
 
 def resolve_4k_json(item_json='{}'):

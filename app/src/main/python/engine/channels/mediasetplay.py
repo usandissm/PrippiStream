@@ -273,6 +273,8 @@ def search(item, text):
         else:
             action, content_type = 'findvideos', 'movie'
             series_id, video_id, content_series = '', card.get('guid') or '', ''
+            # GraphQL also returns Infinity subscription titles. PrippiStream
+            # exposes only content playable by the anonymous official account.
             if not _free_media_selector(video_id):
                 continue
 
@@ -401,6 +403,9 @@ def episodios(item):
 
     itemlist = []
 
+    # The legacy ThePlatform sub-brand feeds are now empty. Search-created
+    # seasons carry an official page whose server-rendered cards contain all
+    # episodes, including their current ids and artwork.
     if not getattr(item, 'subbrand', '') and getattr(item, 'url', ''):
         try:
             page_response = requests.get(
@@ -439,6 +444,10 @@ def episodios(item):
             if itemlist:
                 return itemlist
 
+            # Programmes/reality (for example Temptation Island) point to
+            # WittyTV and render a different card layout. Keep only GUIDs whose
+            # embedded metadata marks them as complete episodes, excluding the
+            # many clips/extras on the same page.
             card_pattern = re.compile(
                 r'<a[^>]+href="(?P<url>[^"]*(?P<id>F[A-Z0-9]{14,}))"'
                 r'.{0,6000}?<h4[^>]*>(?P<title>.*?)</h4>',

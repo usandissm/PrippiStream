@@ -49,7 +49,9 @@
       "__pycache__"
     ],
     "file_names": [
-      ".DS_Store"
+      ".DS_Store",
+      "iptv_accounts.json",
+      "iptv_catalog.json"
     ],
     "suffixes": [
       ".pyc",

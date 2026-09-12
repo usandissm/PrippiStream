@@ -72,6 +72,32 @@ def _poster(par):
     return _POSTER_DIR + fname + ".png"
 
 
+def _poster_file(name):
+    """Physical poster path for existence checks.
+
+    Android keeps these in files/pydata; ``config.get_runtime_path`` can point
+    to Chaquopy's read-only AssetFinder instead and falsely report them absent.
+    """
+    try:
+        import prippi_env
+        root = getattr(prippi_env, 'RUNTIME_DIR', '')
+        if root:
+            candidate = os.path.join(root, 'resources', 'media',
+                                     'sport_posters', name + '.png')
+            if os.path.isfile(candidate):
+                return candidate
+    except Exception:
+        pass
+    try:
+        candidate = os.path.join(config.get_runtime_path(), 'resources', 'media',
+                                 'sport_posters', name + '.png')
+        if os.path.isfile(candidate):
+            return candidate
+    except Exception:
+        pass
+    return ''
+
+
 def _logo_for(par, backend_logo=''):
     """Prefer our bundled portrait poster; fall back to the backend's logo for
     channels we don't ship art for (e.g. ones added upstream after release)."""
@@ -153,6 +179,11 @@ _ROWS = {
     'sport': {'label': u'Sport Live', 'default': DEFAULT_SPORT},
     'sky':   {'label': u'SKY',        'default': DEFAULT_SKY},
     'tv':    {'label': u'TV',         'default': []},
+    'iptv_cinema': {'label': u'Cinema', 'default': []},
+    'iptv_intrattenimento': {'label': u'Intrattenimento', 'default': []},
+    'iptv_documentari': {'label': u'Documentari', 'default': []},
+    'iptv_calcio': {'label': u'Calcio', 'default': []},
+    'iptv_dazn': {'label': u'DAZN', 'default': []},
 }
 
 # Pars for which we ship a bundled poster.
@@ -160,10 +191,153 @@ _KNOWN_POSTERS = set(c["par"] for c in DEFAULT_SPORT + DEFAULT_SKY + CINEMA_CAND
     "skysport258",  # backend returns this par for Sky Sport Calcio (same logo as 257)
 }
 
+# Stable logical order for the merged SKY row.  Provider order is deliberately
+# ignored: native ClearKey/Daddy items are inserted first, then IPTV fallbacks;
+# this rank controls only their final visible position.
+_SKY_ORDER = [
+    'sky cinema uno', 'sky cinema uno +1', 'sky cinema uno +24',
+    'sky cinema stories', 'sky cinema collection', 'sky cinema family',
+    'sky cinema action', 'sky cinema suspense', 'sky cinema comedy',
+    'sky cinema romance', 'sky cinema drama', 'sky cinema due',
+    'sky cinema due +24',
+    'sky tg24', 'sky uno', 'sky uno +1', 'sky atlantic', 'sky atlantic +1',
+    'sky serie', 'sky collection', 'sky investigation', 'sky crime',
+    'sky adventure', 'sky documentaries', 'sky nature', 'history',
+    'comedy central', 'sky arte', 'mtv',
+    # IPTV additions: keep timeshift channels directly after their base.
+    'discovery', 'discovery giallo italia', 'sky comedy central',
+    'crime + inv',
+]
+_SKY_RANK = dict((name, pos) for pos, name in enumerate(_SKY_ORDER))
+_SKY_ALIASES = {
+    'tg 24': 'sky tg24', 'sky tg 24': 'sky tg24',
+    'uno': 'sky uno', 'sky uno hd': 'sky uno',
+    'sky uno +1 hd': 'sky uno +1',
+    'atlantic': 'sky atlantic', 'sky atlantic hd': 'sky atlantic',
+    'sky atlantic +1 hd': 'sky atlantic +1',
+    'serie': 'sky serie', 'collection': 'sky collection',
+    'investigation': 'sky investigation', 'crime': 'sky crime',
+    'adventure': 'sky adventure', 'documentaries': 'sky documentaries',
+    'nature': 'sky nature', 'history channel': 'history',
+    'comedy central': 'comedy central', 'arte': 'sky arte',
+    'mtv italia': 'mtv',
+}
+
+def _sky_canonical_title(title):
+    value = re.sub(r'\s+', ' ', str(title or '').lower()).strip()
+    value = re.sub(r'\s*\[(?:flh|fhd|hd)\]\s*', ' ', value)
+    value = re.sub(r'\s+(?:fhd|hd)$', '', value).strip()
+    # IPTV providers spell time-shift suffixes inconsistently ("+ 1",
+    # "+1", sometimes attached to the name).  Canonicalise them before
+    # ranking so the base channel is always immediately followed by +1/+24.
+    value = re.sub(r'\s*\+\s*24\b', ' +24', value)
+    value = re.sub(r'\s*\+\s*1\b', ' +1', value)
+    return _SKY_ALIASES.get(value, value)
+
+def _sky_sort_key(ch):
+    title = _sky_canonical_title(ch.get('title', ''))
+    suffix = 0
+    base = title
+    if title.endswith(' +24'):
+        base, suffix = title[:-4].rstrip(), 2
+    elif title.endswith(' +1'):
+        base, suffix = title[:-3].rstrip(), 1
+    return (_SKY_RANK.get(base, 10000), suffix, title)
+
+def _sport_canonical_title(title):
+    """Canonical key used to merge native Sport and IPTV aliases.
+
+    The backend calls the ClearKey channels ``SPORT UNO``/``SPORT 24`` while
+    IPTV lists use ``Sky Sport Uno``/``Sky Sport 24``.  They are the same
+    channel; native entries must win so an expired IPTV copy cannot shadow a
+    working ClearKey route.
+    """
+    value = re.sub(r'\s+', ' ', str(title or '').lower()).strip()
+    value = re.sub(r'\s*\[(?:flh|fhd|hd)\]\s*', ' ', value)
+    value = re.sub(r'\s+(?:fhd|full hd|hd)$', '', value).strip()
+    value = re.sub(r'^sky\s+', '', value)
+    # Sky Sport NBA è il feed alternativo dello stesso canale Basket: se il
+    # ClearKey nativo è online prevale; se è assente, l'IPTV resta disponibile
+    # come backup senza creare una seconda tessera duplicata.
+    if value in ('sport nba', 'nba'):
+        value = 'sport basket'
+    return value
+
+def _iptv_logo(title, remote=''):
+    """Reuse the same high-resolution bundled poster whenever an IPTV title
+    maps to a channel already branded by Prippi; otherwise keep its remote art."""
+    clean_title = re.sub(r'\s*\((?:buffering)\)\s*', ' ',
+                         str(title or ''), flags=re.I)
+    clean_title = re.sub(r'\b(?:exclusive|exclsuive)\b', ' ', clean_title,
+                         flags=re.I)
+    clean_title = re.sub(r'\s+', ' ', clean_title).strip()
+    raw_slug = re.sub(r'[^a-z0-9+]+', '', clean_title.lower())
+    slug = raw_slug
+    aliases = {
+        'nature': 'skynature', 'documentaries': 'skydocumentaries',
+        'atlantic': 'skyatlantic', 'arte': 'skyarte', 'mtvitalia': 'mtv',
+        'collection': 'skycollection', 'investigation': 'skyinvestigation',
+        'adventure': 'skyadventure', 'crime': 'skycrime', 'tg24': 'tg24',
+        'history': 'historychannel', 'historychannel': 'historychannel',
+        'skycomedycentral': 'comedycentral', 'crime+inv': 'crimeinv',
+        'crimeandinvestigation': 'crimeinv', 'discoverychannel': 'discovery',
+        'discoverygialloitalia': 'discoverygialloitalia',
+        'zonadazn': 'ZonaDAZN', 'zonadaznseriea': 'ZonaDAZN',
+        'zonaseriea': 'ZonaDAZN',
+        'dazndirettagoalseriea': 'ZonaDAZN',
+        'dazndirettagoalserieb': 'ZonaDAZN',
+        'zonagoalseriea': 'ZonaDAZN', 'zonagoalserieb': 'ZonaDAZN',
+        'eventicalcioamazonprime': 'primevideo',
+        'eventinapolicalcio': 'napoli',
+        'eurosport1': 'eurosport1', 'eurosport2': 'eurosport2',
+        'skyacisporttv': 'acisporttv', 'acisporttv': 'acisporttv',
+        'supertennis': 'supertennis', 'ufctv': 'ufctv',
+        'skysportnba': 'skysportbasket',
+    }
+    slug = aliases.get(slug, slug)
+    if raw_slug.startswith('championsleagueinfinity'):
+        slug = 'championsinfinity'
+    elif raw_slug.startswith('molatvcalcio'):
+        slug = 'molatv'
+    elif raw_slug.startswith('skysportbar'):
+        slug = 'skysport'
+    elif raw_slug.startswith('dazn'):
+        # I quattro lineari hanno marchi ufficiali numerati; gli eventi
+        # virtuali/NFL/Sport condividono invece il marchio DAZN neutro.
+        numbered = re.match(r'dazn([1-4])(?:$|[^0-9])', raw_slug)
+        slug = ('dazn' + numbered.group(1)) if numbered else 'ZonaDAZN'
+    # Prefer an explicitly generated +1/+24 asset when present.
+    exact = _poster(str(title).lower().replace(' ', '_'))
+    if '+' in raw_slug:
+        variant = _POSTER_DIR + raw_slug.replace('+', 'plus') + '.png'
+        if _poster_file(raw_slug.replace('+', 'plus')):
+            return variant
+    # New IPTV-only channels are bundled by slug too; don't require adding
+    # every asset to the static provider poster set.
+    # On Android the xbmc shim cannot always resolve ``special://`` in
+    # xbmcvfs.exists(), although the asset is present in the copied runtime.
+    # Check the real runtime path and return the canonical special URI used by
+    # _from_item() to expose it as a file:// URI to Coil.
+    if _poster_file(slug):
+        return _poster(slug)
+    return remote or ''
+
 # ── per-row cache (memory + disk) ────────────────────────────────────────────
 _CACHE_TTL = 6 * 3600
 _mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0},
-              'tv': {"data": None, "ts": 0}}
+              'tv': {"data": None, "ts": 0},
+              'iptv_cinema': {"data": None, "ts": 0},
+              'iptv_intrattenimento': {"data": None, "ts": 0},
+              'iptv_documentari': {"data": None, "ts": 0},
+              'iptv_calcio': {"data": None, "ts": 0},
+              'iptv_dazn': {"data": None, "ts": 0}}
+_ready_rows = set()
+
+def mark_row_ready(row):
+    _ready_rows.add(row)
+
+def row_ready(row):
+    return row in _ready_rows
 
 # Resolved-stream cache: par -> (manifest, kid, key, expiry_epoch).
 # Populated by the probe (_sky_channel_valid already fetches a fully valid
@@ -1020,8 +1194,48 @@ def _parse_tv_backend():
     return channels
 
 
+def _parse_iptv_row(row):
+    """Load private FHD IPTV entries for one logical row."""
+    try:
+        from platformcode import iptv_pool
+        category = row.replace('iptv_', '', 1)
+        out = []
+        seen = set()
+        for item in iptv_pool.channels(category):
+            title = item.get('title') or ''
+            if not title:
+                continue
+            if title.casefold().strip() == 'netflix live':
+                continue
+            # Peter Pan pubblica spesso la stessa voce due volte e una seconda
+            # variante "(Buffering)". Mostrare entrambe rallenta la riga e crea
+            # decine di tessere senza logo: conserviamo una sola voce canonica,
+            # preferendo naturalmente quella normale che arriva per prima.
+            canonical = re.sub(r'\s*\((?:buffering)\)\s*', ' ', title,
+                               flags=re.I)
+            canonical = re.sub(r'\s+', ' ', canonical).casefold().strip()
+            if canonical in seen:
+                continue
+            seen.add(canonical)
+            from platformcode import iptv_pool
+            local_logo = _iptv_logo(title, item.get('logo', ''))
+            if not local_logo:
+                local_logo = iptv_pool.logo_for(title, item.get('logo', ''))
+            out.append({'title': title, 'kind': 'iptv', 'par': title,
+                        'fs': None, 'logo': local_logo,
+                        'sources': item.get('sources', [])})
+        return out
+    except Exception as exc:
+        logger.error('[Sport] IPTV %s: %s' % (row, exc))
+        return []
+
 _PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend,
-            'tv': _parse_tv_backend}
+            'tv': _parse_tv_backend,
+            'iptv_cinema': lambda: _parse_iptv_row('iptv_cinema'),
+            'iptv_intrattenimento': lambda: _parse_iptv_row('iptv_intrattenimento'),
+            'iptv_documentari': lambda: _parse_iptv_row('iptv_documentari'),
+            'iptv_calcio': lambda: _parse_iptv_row('iptv_calcio'),
+            'iptv_dazn': lambda: _parse_iptv_row('iptv_dazn')}
 
 
 def _load_disk_cache(row):
@@ -1052,7 +1266,7 @@ def _save_disk_cache(row, data):
 def refresh_background():
     """Refresh rows whose cache is stale; skip rows that are still fresh."""
     now = time.time()
-    stale = [r for r in ('sport', 'sky', 'tv')
+    stale = [r for r in _PARSERS
              if (now - _mem_cache[r]['ts']) >= _CACHE_TTL]
     if not stale:
         return  # both caches fresh — nothing to do
@@ -1126,6 +1340,7 @@ def reset_state():
     _keepalive_running = False
     _cf_scraper = None   # a half-initialised scraper from a killed thread is unusable
     _abort_event.clear()
+    _ready_rows.clear()
     logger.info('[Sport] module state reset for new session')
 
 
@@ -1170,7 +1385,37 @@ def build_items(row):
     sport_* payload used by the home's click handler to play them directly.
     infoLabels['_enr']=1 makes the home's TMDB-enrichment loops skip them."""
     items = []
-    for ch in get_channels(row):
+    if row in ('sky', 'sport') and not row_ready(row):
+        return []
+    channel_rows = list(get_channels(row))
+    if row == 'sky':
+        for cat in ('cinema', 'intrattenimento', 'documentari'):
+            channel_rows += _parse_iptv_row('iptv_' + cat)
+    elif row == 'sport':
+        for cat in ('sport', 'calcio'):
+            channel_rows += _parse_iptv_row('iptv_' + cat)
+    elif row.startswith('iptv_'):
+        # Standalone IPTV rows (currently DAZN) must populate from the private
+        # catalog just like the merged SKY/SPORT rows.
+        channel_rows += _parse_iptv_row(row)
+    # Merge by visible title while preserving native ClearKey/Daddy priority.
+    seen = set()
+    def _dedupe_key(ch):
+        if row == 'sky':
+            return _sky_canonical_title(ch.get('title', ''))
+        if row == 'sport':
+            return _sport_canonical_title(ch.get('title', ''))
+        return str(ch.get('title', '')).casefold().strip()
+    channel_rows = [ch for ch in channel_rows
+                    if not (_dedupe_key(ch) in seen or seen.add(_dedupe_key(ch)))]
+    if row == 'sky':
+        channel_rows.sort(key=_sky_sort_key)
+    elif row == 'iptv_dazn':
+        # I feed Champions vengono pubblicati in testa da alcune liste Peter
+        # Pan; nella riga DAZN devono rimanere sempre in coda.
+        channel_rows.sort(key=lambda ch: (
+            1 if 'champions' in str(ch.get('title', '')).casefold() else 0,))
+    for ch in channel_rows:
         try:
             if ch.get('kind') == 'provider' and ch.get('provider_item'):
                 it = Item().fromjson(json.dumps(ch['provider_item']))
@@ -1188,7 +1433,10 @@ def build_items(row):
             it.sport_kind = ch['kind']
             it.sport_par = ch['par']
             it.sport_fs = ch.get('fs')
+            it.sport_sources = ch.get('sources', [])
             it.sport_validated_route = ch.get('_validated_route', '')
+            if ch.get('kind') == 'iptv':
+                it.sport_validated_route = 'primary'
             it.sport_validated_code = ch.get('_validated_code', '')
             items.append(it)
         except Exception as exc:
@@ -1595,6 +1843,40 @@ def _ffmpeg_listitem(url, title, art, referer=None):
         li.setArt(art)
     return li
 
+def _iptv_listitem(url, title, art):
+    """Xtream MPEG-TS item with the panel's required VLC user-agent.
+
+    ``!User-Agent`` is a Kodi-only URL-option convention. Android reads this
+    payload through the bridge and must receive the standard HTTP header name.
+    """
+    ua = 'VLC/3.0.21 LibVLC/3.0.21'
+    li = xbmcgui.ListItem(path=url + '|User-Agent=' + ua, offscreen=True)
+    li.setLabel(title)
+    li.setContentLookup(False)
+    li.setMimeType('video/mp2t')
+    if art:
+        li.setArt(art)
+    return li
+
+def resolve_iptv_attempt(item, attempt=0):
+    """Resolve one IPTV attempt from a different remotely-free Group-E list."""
+    try:
+        from platformcode import iptv_pool
+        title = item.fulltitle or item.title or getattr(item, 'sport_par', '')
+        art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+               'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+        lease_id = '%s#%d' % (title, int(attempt or 0))
+        url = iptv_pool.acquire(title, lease_id, attempt=int(attempt or 0))
+        if not url:
+            return None
+        if '.ts' in url.lower() and '|' not in url:
+            return _iptv_listitem(url, title, art)
+        return _hls_listitem(url, title, art)
+    except Exception as exc:
+        logger.error('[IPTV] resolve attempt %s/%s: %s' %
+                     (getattr(item, 'sport_par', ''), attempt, exc))
+        return None
+
 
 def resolve_listitem(item):
     """Resolve a live-channel Item to a playable xbmcgui.ListItem.
@@ -1645,6 +1927,9 @@ def resolve_listitem(item):
         if url:
             return _hls_listitem(url, title, art)
         return None
+
+    if kind == 'iptv':
+        return resolve_iptv_attempt(item, 0)
 
     return None
 

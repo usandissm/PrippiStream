@@ -156,6 +156,9 @@
         <setting id="network_info" type="action"
                  label="Mostra indirizzo IP e informazioni di rete"
                  action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJuZXR3b3JrX2luZm8ifQ==)"/>
+        <setting id="install_android_app" type="action"
+                 label="Installa app Android TV (test)"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJpbnN0YWxsX2FuZHJvaWRfYXBwIn0=)"/>
         <!-- Strumentazione prestazioni v2: righe [PERF] in kodi.log (LOGWARNING).
              Visibile nei build di test 1.9.9xx; da nascondere per la release 2.0. -->
         <setting id="perf_log" type="bool" label="Log prestazioni (build di test)" default="false"/>

@@ -9,19 +9,86 @@ import re
 import sys
 import time
 import threading
+
+_IMPORT_T0 = time.perf_counter()
+
 import xbmc
 import xbmcaddon
 import xbmcgui
 
+_IMPORT_KODI_MS = (time.perf_counter() - _IMPORT_T0) * 1000
+
 from core.item import Item
+
+_IMPORT_CORE_MS = (time.perf_counter() - _IMPORT_T0) * 1000 - _IMPORT_KODI_MS
+
 from platformcode import config, logger, watch_history, platformtools, deviceprofile
-from platformcode import _fourk
+
+_IMPORT_PLATFORM_MS = (
+    (time.perf_counter() - _IMPORT_T0) * 1000
+    - _IMPORT_KODI_MS - _IMPORT_CORE_MS
+)
+
+# Film 4K is optional and its eager cache load is comparatively expensive.
+# Keep it out of the default first-paint path.
+_fourk = None
+_fourk_import_lock = threading.Lock()
+_IMPORT_4K_MS = 0.0
+
+_IMPORT_PART_T0 = time.perf_counter()
 from platformcode import sportchannels
+_IMPORT_SPORT_MS = (time.perf_counter() - _IMPORT_PART_T0) * 1000
+
+_IMPORT_PART_T0 = time.perf_counter()
 from platformcode import skyepg
+_IMPORT_EPG_MS = (time.perf_counter() - _IMPORT_PART_T0) * 1000
+
+_IMPORT_LIVE_MS = (
+    (time.perf_counter() - _IMPORT_T0) * 1000
+    - _IMPORT_KODI_MS - _IMPORT_CORE_MS - _IMPORT_PLATFORM_MS
+)
+try:
+    if config.get_setting('perf_log', default=False):
+        logger.info(
+            '[PERF] home.import_sections: kodi=%.1fms core=%.1fms '
+            'platform=%.1fms live=%.1fms '
+            '(4k=%.1fms channels=%.1fms epg=%.1fms) total=%.1fms' % (
+                _IMPORT_KODI_MS,
+                _IMPORT_CORE_MS,
+                _IMPORT_PLATFORM_MS,
+                _IMPORT_LIVE_MS,
+                _IMPORT_4K_MS,
+                _IMPORT_SPORT_MS,
+                _IMPORT_EPG_MS,
+                (time.perf_counter() - _IMPORT_T0) * 1000,
+            )
+        )
+except Exception:
+    pass
 
 PY3 = sys.version_info[0] >= 3
 
 _cache = {'data': None, 'ts': 0}
+
+
+def _get_fourk():
+    global _fourk
+    if _fourk is None:
+        with _fourk_import_lock:
+            if _fourk is None:
+                from platformcode import _fourk as _fourk_module
+                _fourk = _fourk_module
+    return _fourk
+
+
+def _fourk_if_loaded():
+    """Return the optional module without importing it on the GUI path."""
+    return _fourk
+
+
+def _refresh_fourk_index():
+    """Import and refresh the optional 4K index from a post-paint worker."""
+    _get_fourk().build_4k_index()
 
 
 def _cache_put(d, key, val, cap=400):
@@ -319,9 +386,21 @@ class _AvReadyPlayer(xbmc.Player):
     def __init__(self):
         super(_AvReadyPlayer, self).__init__()
         self.av_started = threading.Event()
+        self.playback_failed = threading.Event()
+        self.playback_stopped = threading.Event()
+        self.playback_ended = threading.Event()
 
     def onAVStarted(self):
         self.av_started.set()
+
+    def onPlayBackError(self):
+        self.playback_failed.set()
+
+    def onPlayBackStopped(self):
+        self.playback_stopped.set()
+
+    def onPlayBackEnded(self):
+        self.playback_ended.set()
 
 
 class _LivePlayer(xbmc.Player):
@@ -573,7 +652,7 @@ _DL_ROW_LABEL = u'I miei download'
 # when empty — an empty live row means "no channel online right now", which we
 # show as a bare titled row rather than hiding it like the other empty rows.
 _LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'),
-                    sportchannels.row_label('tv'))
+                    sportchannels.row_label('iptv_dazn'), sportchannels.row_label('tv'))
 
 # Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
 # of the home. Sourced live from the animeunity channel (which already handles
@@ -613,12 +692,11 @@ ROW_OVERLAY_BASE   = 5000   # ex overlay bloccamouse (ora disattivato: _disable_
 HOVER_BOX_BASE     = 6000   # ex finta cornice-hover (ora disattivata: _disable_mouse_overlays)
 ROW_GROUP_BASE     = 7000   # outer group per row — hide to collapse space in grouplist
 ROW_STEP           = 10
-# SC_MAX_ROWS: include slider, curated rows and every individual genre. The
-# Android UI is lazy, so rows outside the viewport don't allocate poster views.
+# SC_MAX_ROWS: how many rows StreamingCommunity is allowed to fill
 # MAX_ROWS: total row slots STATICALLY defined in PrippiHome.xml (1080i):
 # wraplist/list id 2000-2390 step 10 = 40 slots. Must NEVER exceed the XML
 # count: row 40+ would getControl() non-existent ids and raise.
-SC_MAX_ROWS        = 64
+SC_MAX_ROWS        = 30
 MAX_ROWS           = 40
 ARROW_PAGE_SIZE    = 1
 UPNEXT_COUNTDOWN   = 60   # seconds before episode end: show Up Next overlay
@@ -680,7 +758,17 @@ ACTION_GESTURE_SWIPE_RIGHT = 521
 ACTION_GESTURE_SWIPE_UP    = 531
 ACTION_GESTURE_SWIPE_DOWN  = 541
 ACTION_GESTURE_END         = 599
-_TOUCH_ACTION_IDS = frozenset(range(400, 420)) | frozenset(range(500, 600))
+# Non usare interi intervalli: alcuni telecomandi/air-mouse Android emettono
+# action ID proprietari nelle stesse fasce e finivano per marchiare una TV box
+# come touchscreen. Sono ammessi soltanto gli ID osservati realmente su Kodi
+# mobile.
+_TOUCH_ACTION_IDS = frozenset((
+    ACTION_TOUCH_TAP, ACTION_TOUCH_LONGPRESS,
+    ACTION_GESTURE_BEGIN, ACTION_GESTURE_PAN,
+    ACTION_GESTURE_SWIPE_LEFT, ACTION_GESTURE_SWIPE_RIGHT,
+    ACTION_GESTURE_SWIPE_UP, ACTION_GESTURE_SWIPE_DOWN,
+    ACTION_GESTURE_END,
+))
 
 # Pan verticale: pixel di corsa del dito per uno scatto di riga. Le righe sono
 # alte 320/522 in spazio skin 1080: ~190px = segue il dito senza sembrare nervoso.
@@ -692,7 +780,15 @@ _touch_mode_cache = [None]   # None = non ancora letto dal setting
 def _is_touch_mode():
     if _touch_mode_cache[0] is None:
         try:
-            _touch_mode_cache[0] = bool(config.get_setting('touch_device', default=False))
+            saved = bool(config.get_setting('touch_device', default=False))
+            # Corregge automaticamente il flag storico eventualmente appreso
+            # per errore da un telecomando Android. Su una vera installazione
+            # touch Kodi espone System.HasTouchScreen.
+            has_touch = bool(xbmc.getCondVisibility('System.HasTouchScreen'))
+            _touch_mode_cache[0] = bool(saved and has_touch)
+            if saved and not has_touch:
+                config.set_setting('touch_device', False)
+                logger.info('[Touch] flag touch obsoleto rimosso: dispositivo senza touchscreen')
         except Exception:
             _touch_mode_cache[0] = False
     return _touch_mode_cache[0]
@@ -702,6 +798,11 @@ def _note_touch_action(aid):
     """Da chiamare a inizio onAction: al primo id touch attiva (e persiste)
     la modalità touch. Costo per azione: un lookup in frozenset."""
     if aid in _TOUCH_ACTION_IDS and not _is_touch_mode():
+        try:
+            if not xbmc.getCondVisibility('System.HasTouchScreen'):
+                return
+        except Exception:
+            return
         _touch_mode_cache[0] = True
         try:
             config.set_setting('touch_device', True)
@@ -758,10 +859,11 @@ def _sync_channels_json():
 def _build_4k_row():
     """Build a list of Items for the 4K carousel row.
     Enriches with TMDB metadata so fanart/poster are available for CW."""
-    if not _fourk._ready or not _fourk._index_by_tmdb:
+    fourk = _get_fourk()
+    if not fourk._ready or not fourk._index_by_tmdb:
         return []
     items = []
-    for tmdb_id, f4k in _fourk._index_by_tmdb.items():
+    for tmdb_id, f4k in fourk._index_by_tmdb.items():
         try:
             it = Item(
                 fulltitle=f4k.get('name', ''),
@@ -1174,10 +1276,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         t = threading.Thread(target=self._bg_load)
         t.daemon = True
         t.start()
-        # Background refresh of 4K index (non-blocking, cache-first)
-        _t4k = threading.Thread(target=_fourk.build_4k_index)
-        _t4k.daemon = True
-        _t4k.start()
         # Background daily refresh of the One Piece index (cache-first, TTL 24h):
         # discovers new episodes once a day at skin load so they appear by themselves.
         try:
@@ -1267,9 +1365,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # restano comunque probate in background (_refresh_live_rows), così
         # riattivarle le mostra all'istante con i canali già in cache.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
-        for _row_key in ('sky', 'sport', 'tv'):
+        for _row_key in ('sky', 'sport', 'iptv_dazn', 'tv'):
             _ch_items = []
-            if not _row_hidden(_row_toggle[_row_key]):
+            if _row_key.startswith('iptv_') or not _row_hidden(_row_toggle[_row_key]):
                 try:
                     _ch_items = sportchannels.build_items(_row_key) or []
                     # Prefetch "now on air" for any disk-cached online channels so
@@ -1286,25 +1384,36 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # splits Sport from TV (TV must stay right after Sport).
         _live_block_end = len(self.rows_data)
 
-        self.rows_data += list(sc_rows)
+        if self._low_power:
+            # Gli snapshot creati da build precedenti possono contenere righe
+            # ampliate a 55-70 card. Su ARM lento ogni ListItem ha un costo GUI
+            # reale: conserva il catalogo completo su disco, ma materializza
+            # nella Home soltanto le prime 20 card per riga.
+            _home_sc_rows = [(label, list(items or [])[:20])
+                             for label, items in (sc_rows or [])]
+        else:
+            _home_sc_rows = list(sc_rows)
+        self.rows_data += _home_sc_rows
 
         show_4k_row = not _row_hidden('show_4k_row')
         need_4k_fill = False
+        fourk = _get_fourk() if show_4k_row else None
         if show_4k_row:
             # Never hold the home behind the 4K provider. Use its disk-cached
             # index immediately; a cold index fills the reserved row later.
-            _4k_items = _build_4k_row() if _fourk._ready else []
+            _4k_items = _build_4k_row() if fourk._ready else []
             self.rows_data.insert(min(_live_block_end, len(self.rows_data)),
                                   (u'Film in 4K', _4k_items))
             need_4k_fill = not _4k_items
         logger.info('[4K] home row enabled=%s ready=%s items=%d'
-                    % (show_4k_row, _fourk._ready,
+                    % (show_4k_row, bool(fourk and fourk._ready),
                        len(_4k_items) if show_4k_row else 0))
 
         # Sync CW progress into every non-CW row (skip the live-channel rows —
         # live channels have no watch progress).
         _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
-                        sportchannels.row_label('sky'), sportchannels.row_label('tv'))
+                        sportchannels.row_label('sky'), sportchannels.row_label('tv'),
+                        sportchannels.row_label('iptv_dazn'))
         if cw_items:
             for row_label, row_items in self.rows_data:
                 if row_label in _live_labels:
@@ -1350,7 +1459,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self._first_paint.set()
         # Touch: riempi il resto delle righe nei momenti di quiete, altrimenti
         # scorrendo col dito (che NON sposta il focus) si trovano righe nere.
-        if self._alive and _is_touch_mode():
+        if self._alive and _is_touch_mode() and not self._low_power:
             _tpop = threading.Thread(target=self._bg_populate_all_rows)
             _tpop.daemon = True
             _tpop.start()
@@ -1489,7 +1598,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # cache, rinfresca in BACKGROUND per la PROSSIMA apertura: aggiorna
             # solo snapshot + _cache (dati), senza toccare la UI corrente → nessun
             # flicker né spostamento di focus.
-            if _snap_age is not None and _snap_age > _CACHE_TTL:
+            if (_snap_age is not None and _snap_age > _CACHE_TTL
+                    and not self._low_power):
                 _target = (self._run_heavy_bg if self._low_power
                            else self._revalidate_snapshot_silent)
                 _args = ((self._revalidate_snapshot_silent,)
@@ -1543,6 +1653,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Fetch archive rows after the first paint and append them live."""
         from platformcode import perf
         _pt = perf.mark('home.archive start')
+        if self._low_power and not self._wait_low_power_quiet(20):
+            return
         try:
             archive_rows = _fetch_archive_rows(host, homepage_data, len(main_rows))
         except Exception as exc:
@@ -1606,9 +1718,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         fast path, where there is no archive phase to piggy-back on)."""
         if self._anime_appended or not self._alive:
             return
-        t = threading.Thread(target=self._append_anime_row, args=(cw_items,))
+        target = self._append_anime_row
+        args = (cw_items,)
+        if self._low_power:
+            target = self._append_anime_row_when_quiet
+        t = threading.Thread(target=target, args=args)
         t.daemon = True
         t.start()
+
+    def _append_anime_row_when_quiet(self, cw_items=None):
+        if self._wait_low_power_quiet(20):
+            self._append_anime_row(cw_items)
 
     def _append_anime_row(self, cw_items=None):
         """Fetch popular AnimeUnity titles and append them as the last home row.
@@ -1643,6 +1763,12 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def _start_bg_tasks(self, need_4k_fill, enrich=True):
         """Launch the non-blocking post-render background jobs."""
+        # Import and refresh the optional 4K cache only after first paint.
+        if self._alive:
+            t4k_refresh = threading.Thread(target=_refresh_fourk_index)
+            t4k_refresh.daemon = True
+            t4k_refresh.start()
+
         # Nuke stale vixcloud bookmarks from prior sessions.
         _t_nuke = threading.Thread(target=_nuke_all_vixcloud_bookmarks)
         _t_nuke.daemon = True
@@ -1650,11 +1776,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         # Deferred TMDB enrichment of all currently-loaded rows (Plan B).
         if self._low_power and self._alive:
-            # Deterministic order: metadata first, then extra sources. One thread
-            # owns the heavy lane, so pools cannot multiply each other's workers.
-            t = threading.Thread(target=self._bg_low_power_pipeline,
-                                 args=(enrich,), daemon=True)
-            t.start()
+            # Sulla classe di box più lenta non eseguire manutenzione TMDB della
+            # Home durante la sessione: i metadati SC/snapshot sono sufficienti
+            # e il dettaglio continua ad arricchirsi quando viene aperto.
+            logger.info('[PrippiHome enrich] Home TMDB pipeline skipped on low-power')
         else:
             if enrich and self._alive:
                 te = threading.Thread(target=self._bg_enrich_inplace, args=(0,))
@@ -1682,6 +1807,19 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         with self._heavy_bg_lock:
             if self._alive and not _shutdown_event.is_set():
                 target(*args)
+
+    def _wait_low_power_quiet(self, seconds=15):
+        """Require continuous user/UI quiet before starting expensive work."""
+        if not self._low_power:
+            return self._alive and not _shutdown_event.is_set()
+        deadline = time.time() + float(seconds)
+        while self._alive and not _shutdown_event.is_set():
+            if (not self._nav_idle.is_set() or not self._bg_ui_pause.is_set()):
+                deadline = time.time() + float(seconds)
+            if time.time() >= deadline:
+                return True
+            xbmc.sleep(200)
+        return False
 
     def _bg_low_power_pipeline(self, enrich=True):
         with self._heavy_bg_lock:
@@ -1959,21 +2097,29 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Probe SKY and Sport live channels in parallel.  Each row rerenders as
         soon as its own probe completes — no waiting for the other row."""
 
-        # Cached rows are already painted by _assemble_initial. Sulle box ARM
-        # aspettiamo cinque secondi di quiete per non contendere CPU/rete alla
-        # home. Su PC basta un breve margine dopo il paint e la navigazione non
-        # deve rinviare continuamente il refresh delle righe live.
+        # Cached rows are already painted by _assemble_initial. Give the first
+        # paint a fixed grace period; requiring continuous idle made the probes
+        # never start when a remote was used regularly (1.9.972 box log).
         if not self._first_paint.wait(timeout=30):
             return
-        quiet_delay = 5.0 if self._low_power else 1.0
-        deadline = time.time() + quiet_delay
+        grace = 8.0 if self._low_power else 1.0
+        deadline = time.time() + grace
         while time.time() < deadline:
             if not self._alive or _shutdown_event.is_set():
                 return
-            if (self._low_power and
-                    (not self._nav_idle.is_set() or not self._bg_ui_pause.is_set())):
-                deadline = time.time() + quiet_delay
             xbmc.sleep(200)
+
+        # Prepara un piccolo gruppo di liste libere mentre l'utente consulta la
+        # Home. Il clic SPORT/DAZN dovrà così fare soltanto il controllo finale
+        # dello slot e non scaricare in quel momento l'intero palinsesto Xtream.
+        try:
+            from platformcode import iptv_pool
+            _pool_warm = threading.Thread(target=iptv_pool.warmup)
+            _pool_warm.daemon = True
+            _pool_warm.name = 'IPTVPoolWarmup'
+            _pool_warm.start()
+        except Exception as exc:
+            logger.debug('[IPTV] warmup start: %s' % exc)
 
         def _refresh_one(row_key):
             if (not self._alive or _shutdown_event.is_set()
@@ -2009,12 +2155,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 sportchannels._mem_cache[row_key]['ts'] = time.time()
                 sportchannels._save_disk_cache(row_key, fresh)
                 logger.info('[Sport] %s list refreshed: %d channels' % (row_key, len(fresh)))
+                sportchannels.mark_row_ready(row_key)
             # Riga spenta dall'utente: le cache sopra restano aggiornate (per la
             # riattivazione istantanea) ma la riga NON va rivelata a schermo.
             # Lettura FRESCA del setting (regola live-settings Kodi 21).
             try:
                 _tgl = {'sky': 'show_sky_row', 'sport': 'show_sport_row',
-                        'tv': 'show_tv_row'}[row_key]
+                        'tv': 'show_tv_row'}.get(row_key)
+                if not _tgl:
+                    _tgl = None
+                if not _tgl:
+                    raise KeyError(row_key)
                 if xbmcaddon.Addon('plugin.video.prippistream').getSettingBool(_tgl) is False:
                     return
             except Exception:
@@ -2042,14 +2193,19 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         if self._low_power:
             # Each parser already owns a bounded probe pool. Running the three
-            # pools together multiplied network threads on the 2 GB box.
-            for key in ('sport', 'sky', 'tv'):
+            # pools together multiplied network threads on the 2 GB box. TV is
+            # cheap/official and must appear first; SKY is normally much quicker
+            # than the broad Sport probe.
+            for key in ('sky', 'sport', 'iptv_dazn', 'tv'):
                 if not self._alive or _shutdown_event.is_set():
                     return
+                while (not self._bg_ui_pause.is_set() and self._alive
+                       and not _shutdown_event.is_set()):
+                    xbmc.sleep(250)
                 _refresh_one(key)
         else:
             threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
-                       for k in ('sport', 'sky', 'tv')]
+                       for k in ('sport', 'sky', 'iptv_dazn', 'tv')]
             for t in threads:
                 if _shutdown_event.is_set() or _app_monitor.abortRequested():
                     return
@@ -2117,14 +2273,15 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 return
         except Exception:
             return
+        fourk = _get_fourk()
         mon = xbmc.Monitor()
         deadline = time.time() + 90
-        while not _fourk._ready and time.time() < deadline:
+        while not fourk._ready and time.time() < deadline:
             if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
                 return
             if mon.waitForAbort(0.5):
                 return
-        if not _fourk._ready or not self._alive:
+        if not fourk._ready or not self._alive:
             return
         items = _build_4k_row()
         if not items:
@@ -2155,6 +2312,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         If not yet visible, items are queued in rows_data for lazy population.
         """
         try:
+            # Su box ARM lente le righe SC e archivio contengono già 20 titoli
+            # ciascuna. L'espansione da provider extra le portava a 60-70 card,
+            # duplicando texture e trattenendo il thread Python/GUI per minuti.
+            # Conserviamo l'enrich TMDB in-place, ma non allarghiamo le righe:
+            # provider e ricerca globale restano normalmente disponibili.
+            if self._low_power:
+                logger.info('[PrippiHome enrich] extra row expansion skipped on low-power')
+                return
             _monitor_bg = xbmc.Monitor()
 
             # Yield to active downloads before doing GIL-heavy enrichment fetches.
@@ -2288,10 +2453,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         with self._populate_lock:
             if i in self._populated or i >= len(self.rows_data):
                 return
+            # Congela il contenuto prima di dichiarare la riga popolata. Se un
+            # enrich arriva prima, entra nello snapshot; se arriva dopo, vede
+            # _populated e usa _live_append_row. Evita duplicati e liste che
+            # crescono mentre _item_to_li le sta iterando.
+            with self._rows_lock:
+                cat_name, row_items = self.rows_data[i]
+                items = list(row_items)
             self._populated.add(i)
         wl_id    = ROW_WRAPLIST_BASE + i * ROW_STEP
         lbl_id   = ROW_LABEL_BASE   + i * ROW_STEP
-        cat_name, items = self.rows_data[i]
         # Hide any empty row entirely (collapses the space in the grouplist).
         # Revealed by _rerender_live_row() / _live_append_row() once items arrive.
         if not items:
@@ -2334,6 +2505,19 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             lbl.setLabel('[B]%s[/B]' % cat_name.upper())
         except Exception as exc:
             logger.error('[PrippiHome] populate row %d label: %s' % (i, str(exc)))
+
+    def _populate_navigation_window(self, i):
+        """Populate what navigation needs without blocking weak TV boxes.
+
+        The focused target is sufficient on low-power devices; faster devices
+        may still pre-fill neighbours for perfectly seamless scrolling.
+        """
+        if self._low_power:
+            targets = (i,)
+        else:
+            targets = range(max(0, i - 1), min(self._num_rows, i + 4))
+        for j in targets:
+            self._populate_single_row(j)
 
     def _bg_populate_all_rows(self):
         """Riempie TUTTE le righe in background dopo il primo paint.
@@ -2468,7 +2652,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 it.infoLabels['plot'] = cached_plot
 
         # 4K badge for hero
-        if getattr(it, 'contentType', '') == 'movie' and tmdb_id_hero and _fourk.is_4k_available(tmdb_id_hero):
+        fourk = _fourk_if_loaded()
+        if (getattr(it, 'contentType', '') == 'movie' and tmdb_id_hero
+                and fourk is not None and fourk.is_4k_available(tmdb_id_hero)):
             ctype_lbl += '  [COLOR FFE50914]4K[/COLOR]'
 
         # Live channel "In onda adesso": override meta/plot with the currently
@@ -2665,8 +2851,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         i = self._row_from_fid(control_id)
         if i >= 0:
             self._last_focused_row = i
-            for j in range(max(0, i-1), min(self._num_rows, i+4)):
-                self._populate_single_row(j)
+            self._populate_navigation_window(i)
             self._schedule_hero(i)
 
     def onAction(self, action):
@@ -2761,8 +2946,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if aid in (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT) and not self.getFocusId():
             cw_empty = not (self.rows_data and self.rows_data[0][1])
             new_row = 1 if (cw_empty and self._num_rows > 1) else 0
-            for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                self._populate_single_row(j)
+            self._populate_navigation_window(new_row)
             self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
             self._last_focused_row = new_row
             self._schedule_hero(new_row)
@@ -2818,8 +3002,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 # last real row → loop back to first real row via background thread bounce
                 cw_empty = not (self.rows_data and self.rows_data[0][1])
                 new_row = 1 if (cw_empty and self._num_rows > 1) else 0
-                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                    self._populate_single_row(j)
+                self._populate_navigation_window(new_row)
                 self._last_focused_row = new_row
                 self._schedule_hero(new_row)
                 wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
@@ -2854,8 +3037,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if new_row == 0 and cw_empty:
                         self.setFocusId(CLOSE_BTN)
                         return
-                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                        self._populate_single_row(j)
+                    self._populate_navigation_window(new_row)
                     self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
                     self._last_focused_row = new_row
                     self._schedule_hero(new_row)
@@ -2884,8 +3066,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     except Exception:
                         pass
                 if next_xml_exists:
-                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                        self._populate_single_row(j)
+                    self._populate_navigation_window(new_row)
                     self.setFocusId(next_wl_id)
                     self._last_focused_row = new_row
                     self._schedule_hero(new_row)
@@ -2900,8 +3081,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     # loop back to first real row via background thread bounce
                     cw_empty = not (self.rows_data and self.rows_data[0][1])
                     new_row = 1 if (cw_empty and self._num_rows > 1) else 0
-                    for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                        self._populate_single_row(j)
+                    self._populate_navigation_window(new_row)
                     self._last_focused_row = new_row
                     self._schedule_hero(new_row)
                     wl_id = ROW_WRAPLIST_BASE + new_row * ROW_STEP
@@ -2922,8 +3102,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             if fid == CLOSE_BTN:
                 cw_empty = not (self.rows_data and self.rows_data[0][1])
                 new_row = 1 if (cw_empty and self._num_rows > 1) else 0
-                for j in range(max(0, new_row - 1), min(self._num_rows, new_row + 3)):
-                    self._populate_single_row(j)
+                self._populate_navigation_window(new_row)
                 self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
                 self._last_focused_row = new_row
                 self._schedule_hero(new_row)
@@ -3266,7 +3445,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if ct == 'movie' and not getattr(item, '_no_4k', 0):
             _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
             if _tmdb:
-                _f4k = _fourk.lookup_4k(_tmdb)
+                _f4k = _get_fourk().lookup_4k(_tmdb)
                 if _f4k:
                     _choice = '4k'
                     if _ask_quality_enabled():
@@ -3500,16 +3679,19 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         except Exception as exc:
             logger.error('[PrippiHome] _restore_search_window: %s' % str(exc))
 
-    def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+    def _wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None,
+                          startup_retry=0):
         """Wrapper: garantisce che _bg_ui_pause venga ri-settato su OGNI uscita
         (v2 FASE 6 — _launch lo cleara prima del dispatch play così l'enrich in
         background non compete col GIL mentre il video parte/riproduce)."""
         try:
-            self._do_wait_and_restore(item, next_ep_ctx, source_window)
+            self._do_wait_and_restore(item, next_ep_ctx, source_window,
+                                      startup_retry=startup_retry)
         finally:
             self._bg_ui_pause.set()
 
-    def _do_wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None):
+    def _do_wait_and_restore(self, item=None, next_ep_ctx=None, source_window=None,
+                             startup_retry=0):
         """Wait for playback to start/end, track progress for CW, then restore the
         home rows — or, when source_window is a search overlay, restore focus to
         the search results (last-clicked card). CW logic is identical either way."""
@@ -3528,15 +3710,58 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         t_audio.daemon = True
         t_audio.start()
 
-        # ── Wait up to 20 s for playback to actually start ──
-        for _ in range(40):
+        # Kodi reports isPlaying() as soon as it starts opening the manifest.
+        # That is not a successful start: VixCloud can close that first request
+        # a few seconds later. Require onAVStarted or eight continuous seconds
+        # of playback before accepting the stream.
+        seen_playing = False
+        playing_since = None
+        stopped_ticks = 0
+        started = False
+        for _ in range(60):
             if not self._alive or monitor.abortRequested():
                 return
-            if player.isPlaying():
+            is_playing = player.isPlaying()
+            if is_playing:
+                seen_playing = True
+                if playing_since is None:
+                    playing_since = time.time()
+            else:
+                playing_since = None
+                if seen_playing:
+                    stopped_ticks += 1
+            if (player.av_started.is_set()
+                    or (is_playing and time.time() - playing_since >= 8.0)):
+                started = True
+                break
+            if (seen_playing and not is_playing
+                    and (player.playback_failed.is_set()
+                         or player.playback_stopped.is_set()
+                         or player.playback_ended.is_set()
+                         or stopped_ticks >= 4)):
                 break
             xbmc.sleep(500)
-        else:
-            return  # playback never started
+        if not started:
+            is_sc = (item is not None
+                     and getattr(item, 'channel', '') == 'streamingcommunity'
+                     and getattr(item, 'action', '') == 'findvideos')
+            if is_sc and startup_retry < 1 and self._alive:
+                logger.info('[SC playback] avvio fallito prima dell’A/V; '
+                            'nuovo tentativo con token fresco')
+                try:
+                    for _w in ('okdialog', 'yesnodialog'):
+                        xbmc.executebuiltin('Dialog.Close(%s, true)' % _w)
+                except Exception:
+                    pass
+                xbmc.sleep(500)
+                _pre_play_set_lang(item)
+                xbmc.executebuiltin(
+                    'RunPlugin(plugin://plugin.video.prippistream/?%s)'
+                    % item.tourl())
+                return self._do_wait_and_restore(
+                    item, next_ep_ctx, source_window,
+                    startup_retry=startup_retry + 1)
+            return
 
         # ── Capture the actual played URL (vixcloud/CDN) for clean CW removal later ──
         _played_url = ''
@@ -4347,7 +4572,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         try:
             _pre_play_set_lang(item)
             # Resolve final CDN URL (follow redirect to get token, avoid Kodi pipe-header issues)
-            _stream_url = _fourk.get_resolved_url(f4k)
+            _stream_url = _get_fourk().get_resolved_url(f4k)
             li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url)
             li.setArt({'thumb': item.thumbnail or f4k.get('poster', ''),
                         'fanart': item.fanart or ''})
@@ -4432,7 +4657,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             with self._rows_lock:
                 label, items = self.rows_data[row_idx]
                 snapshot = list(items)
-            row_key = next((rk for rk in ('sky', 'sport', 'tv')
+            row_key = next((rk for rk in ('sky', 'sport', 'tv', 'iptv_dazn')
                             if label == sportchannels.row_label(rk)), None)
             if not row_key or not snapshot:
                 return
@@ -4489,7 +4714,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             row_idx = self._live_remote_row
             with self._rows_lock:
                 items = list(self.rows_data[row_idx][1])
-            if len(items) < 2 or attempt >= len(items):
+            # ``items`` si restringe quando un canale morto viene rimosso:
+            # confrontare attempt con len(items) interrompeva prematuramente
+            # la scansione lasciando non provati i canali successivi.
+            if len(items) < 2 or attempt >= max(64, len(items) * 2):
                 self._live_zap_busy = False
                 xbmcgui.Dialog().notification('PrippiStream', 'Nessun altro canale disponibile',
                                               xbmcgui.NOTIFICATION_WARNING, 2500)
@@ -4770,7 +4998,18 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 _dad  = ('daddy',    lambda: sportchannels.daddy_listitem(item))
                 _dadf = ('daddy_ff', lambda: sportchannels.daddy_ff_listitem(item))
                 _route = getattr(item, 'sport_validated_route', '')
-                if _route == 'daddy':
+                if getattr(item, 'sport_kind', '') == 'iptv':
+                    # Ogni tentativo interroga nuovamente il pool Group-E ed
+                    # esclude l'account appena fallito.  In questo modo una
+                    # collisione sul singolo slot o una lista instabile non
+                    # costringe l'utente a tornare alla Home e riprovare.
+                    candidates = [
+                        ('iptv_pool_1', lambda: sportchannels.resolve_iptv_attempt(item, 0)),
+                        ('iptv_pool_2', lambda: sportchannels.resolve_iptv_attempt(item, 1)),
+                        ('iptv_pool_3', lambda: sportchannels.resolve_iptv_attempt(item, 2)),
+                        ('iptv_pool_4', lambda: sportchannels.resolve_iptv_attempt(item, 3)),
+                    ]
+                elif _route == 'daddy':
                     # Stessa sorgente validata, con due decoder possibili.
                     candidates = [_dadf, _prim] if sportchannels.is_prefer_ff(par) else [_prim, _dadf]
                 else:
@@ -4823,6 +5062,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     _dismiss_error_dialog()                   # hide Kodi's own 'playback failed' modal; we show our toast instead
                     if my_gen == self._play_gen:
                         if _from_zap:
+                            # Dopo la rimozione il canale successivo occupa
+                            # l'indice appena liberato. Riallineiamo il
+                            # cursore per non tornare al precedente e non
+                            # saltare il successivo.
+                            with self._rows_lock:
+                                remaining = len(self.rows_data[row_idx][1]) if row_idx < len(self.rows_data) else 0
+                            if remaining:
+                                if _zap_direction == 'next':
+                                    self._live_remote_pos = max(-1, pos - 1)
+                                else:
+                                    self._live_remote_pos = min(pos, remaining)
                             self._live_zap_busy = False
                             self._zap_live_channel(_zap_direction, _zap_attempt + 1)
                         else:
@@ -6645,48 +6895,6 @@ def _dl_active():
         return False
 
 
-def _tmdb_get_trailer_candidates(tmdb_id, ctype='movie'):
-    """Return ordered, de-duplicated YouTube IDs from TMDB (IT then EN)."""
-    if not tmdb_id or _shutdown_event.is_set() or _dl_active():
-        return []
-    try:
-        from core import httptools
-        import json as _json
-
-        _TMDB_HOST = 'https://api.themoviedb.org/3'
-        _TMDB_API = 'a1ab8b8669da03637a4b98fa39c39228'
-        media_type = 'tv' if str(ctype) == 'tv' else 'movie'
-        found = []
-        for lang in ('it', 'en'):
-            if _shutdown_event.is_set():
-                break
-            url = '{}/{}/{}/videos?api_key={}&language={}'.format(
-                _TMDB_HOST, media_type, tmdb_id, _TMDB_API, lang)
-            resp = httptools.downloadpage(url, timeout=3, ignore_response_code=True)
-            if not resp.success:
-                continue
-            videos = _json.loads(resp.data or '{}').get('results', [])
-            # Official trailers first, then other trailers, then clips/teasers.
-            videos.sort(key=lambda v: (
-                0 if v.get('type') == 'Trailer' and v.get('official') else
-                1 if v.get('type') == 'Trailer' else 2,
-                -(v.get('size') or 0),
-            ))
-            hint = 'it' if lang == 'it' else ''
-            for video in videos:
-                key = video.get('key')
-                if video.get('site') != 'YouTube' or not key or key in found:
-                    continue
-                found.append(key)
-                _cache_put(_trailer_lang_hint, key, hint)
-                if len(found) >= 8:
-                    return found
-        return found
-    except Exception as exc:
-        logger.error('[TMDBTrailers] %s' % str(exc)[:100])
-        return []
-
-
 def _tmdb_get_trailer(tmdb_id, ctype='movie'):
     """
     Fetch the official YouTube trailer ID from the TMDB /videos endpoint.
@@ -6694,8 +6902,44 @@ def _tmdb_get_trailer(tmdb_id, ctype='movie'):
     Returns YouTube video_id string, or None.
     Prefers Italian; falls back to English.
     """
-    candidates = _tmdb_get_trailer_candidates(tmdb_id, ctype)
-    return candidates[0] if candidates else None
+    if not tmdb_id or _shutdown_event.is_set() or _dl_active():
+        return None
+    try:
+        from core import httptools
+        import json as _json
+
+        _TMDB_HOST = 'https://api.themoviedb.org/3'
+        _TMDB_API  = 'a1ab8b8669da03637a4b98fa39c39228'
+        media_type = 'tv' if str(ctype) == 'tv' else 'movie'
+
+        def _fetch(lang):
+            if _shutdown_event.is_set():
+                return []
+            url = '{}/{}/{}/videos?api_key={}&language={}'.format(
+                _TMDB_HOST, media_type, tmdb_id, _TMDB_API, lang)
+            resp = httptools.downloadpage(url, timeout=3, ignore_response_code=True)
+            if not resp.success:
+                return []
+            return _json.loads(resp.data or '{}').get('results', [])
+
+        for lang in ('it', 'en'):
+            videos = _fetch(lang)
+            hint = 'it' if lang == 'it' else ''
+            # Prefer Trailer type on YouTube
+            for v in videos:
+                if v.get('site') == 'YouTube' and v.get('type') == 'Trailer':
+                    _cache_put(_trailer_lang_hint, v['key'], hint)
+                    return v['key']
+            # Accept any YouTube video from this language
+            for v in videos:
+                if v.get('site') == 'YouTube':
+                    _cache_put(_trailer_lang_hint, v['key'], hint)
+                    return v['key']
+
+        return None
+    except Exception as exc:
+        logger.error('[TMDBTrailer] %s' % str(exc)[:100])
+        return None
 
 
 # Public Invidious instances used as YouTube search API (tried in order, first success wins)
@@ -7367,8 +7611,7 @@ def _fetch_main_rows(progress_cb=None):
 
 
 def _fetch_archive_rows(host, homepage_data, existing_count,
-                        max_workers=None, max_new_rows=None,
-                        existing_labels=None):
+                        max_workers=None, max_new_rows=None):
     """Fetch curated + genre archive rows (the slower second phase).
 
     Runs after the main rows are already on-screen so it never delays the
@@ -7396,22 +7639,10 @@ def _fetch_archive_rows(host, homepage_data, existing_count,
         ]
         all_entries = _CURATED + _genre_entries  # curated first
 
-        # Uno snapshot Android può contenere soltanto il primo lotto caricato.
-        # Non rifare le stesse richieste: completa le righe mancanti usando il
-        # titolo come identità stabile, mantenendo l'ordine ufficiale.
-        existing_keys = {
-            str(label or '').strip().lower()
-            for label in (existing_labels or []) if str(label or '').strip()
-        }
-        pending_entries = [
-            entry for entry in all_entries
-            if str(entry[0] or '').strip().lower() not in existing_keys
-        ]
-
         remaining = SC_MAX_ROWS - existing_count
         if max_new_rows is not None:
             remaining = min(remaining, max(0, int(max_new_rows)))
-        entries_to_fetch = pending_entries[:remaining]
+        entries_to_fetch = all_entries[:remaining]
 
         # results_map preserves insertion order (curated before genres)
         results_map = {}
@@ -7459,30 +7690,6 @@ def _fetch_archive_rows(host, homepage_data, existing_count,
                 if _shutdown_event.is_set():
                     break
                 _fetch_archive_row(idx, label, url, results_map, alock)
-        elif max_workers is not None:
-            # Pool piccolo per telefoni/box con poca RAM: nessun burst di una
-            # ventina di thread, ma soprattutto nessun taglio al catalogo.
-            cursor = [0]
-            cursor_lock = _threading.Lock()
-
-            def _bounded_worker():
-                while not _shutdown_event.is_set():
-                    with cursor_lock:
-                        if cursor[0] >= len(entries_to_fetch):
-                            return
-                        idx = cursor[0]
-                        cursor[0] += 1
-                    label, url = entries_to_fetch[idx]
-                    _fetch_archive_row(idx, label, url, results_map, alock)
-
-            workers = []
-            for _ in range(max(1, int(max_workers))):
-                worker = _threading.Thread(target=_bounded_worker)
-                worker.daemon = True
-                workers.append(worker)
-                worker.start()
-            for worker in workers:
-                worker.join()
         else:
             threads = []
             for idx, (label, url) in enumerate(entries_to_fetch):
@@ -7684,7 +7891,9 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             p for p in [year, ctype_lbl, lang, rating_display] if p)
         # ── 4K badge ─────────────────────────────────────────────────────
         _tmdb_4k = str(item.infoLabels.get('tmdb_id') or '').strip()
-        if getattr(item, 'contentType', '') == 'movie' and _tmdb_4k and _fourk.is_4k_available(_tmdb_4k):
+        fourk = _fourk_if_loaded()
+        if (getattr(item, 'contentType', '') == 'movie' and _tmdb_4k
+                and fourk is not None and fourk.is_4k_available(_tmdb_4k)):
             meta1 += '  •  [COLOR FFE50914][B]4K[/B][/COLOR]'
         try:
             self.getControl(DW_META1).setLabel(meta1)
@@ -9607,7 +9816,9 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             # 4K badge (movies only)
             extra = ''
             _tmdb_h = str((item.infoLabels or {}).get('tmdb_id') or '').strip()
-            if getattr(item, 'contentType', '') == 'movie' and _tmdb_h and _fourk.is_4k_available(_tmdb_h):
+            fourk = _fourk_if_loaded()
+            if (getattr(item, 'contentType', '') == 'movie' and _tmdb_h
+                    and fourk is not None and fourk.is_4k_available(_tmdb_h)):
                 extra = '[COLOR FFE50914]4K[/COLOR]'
             parts = [p for p in [tlabel, year, rating, extra] if p]
             self.getControl(SEARCH_CTX_META).setLabel('   ·   '.join(parts))
@@ -9779,7 +9990,7 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
             if ct == 'movie' and not getattr(item, '_no_4k', 0):
                 _tmdb = str(item.infoLabels.get('tmdb_id') or '').strip()
                 if _tmdb:
-                    _f4k = _fourk.lookup_4k(_tmdb)
+                    _f4k = _get_fourk().lookup_4k(_tmdb)
                     if _f4k:
                         _choice = '4k'
                         if _ask_quality_enabled():
@@ -9802,7 +10013,7 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                             else:
                                 # No parent window: resolve URL and play directly
                                 _pre_play_set_lang(item)
-                                _stream_url4k = _fourk.get_resolved_url(_f4k)
+                                _stream_url4k = _get_fourk().get_resolved_url(_f4k)
                                 li = xbmcgui.ListItem(item.fulltitle or item.title or '', path=_stream_url4k)
                                 li.setArt({'thumb': item.thumbnail or _f4k.get('poster', ''),
                                             'fanart': item.fanart or ''})
@@ -10138,6 +10349,10 @@ class PrippiSearchWindow(xbmcgui.WindowXML):
                     _ok = _title_match_query(_r_norm)
                     if (not _ok and _q_norm_raw
                             and ch_name in ('raiplay', 'mediasetplay', 'la7')):
+                        # Official catalogues often prepend the programme/author
+                        # name ("Fabrizio De André - Principe libero",
+                        # "R.I.S. - Delitti Imperfetti"). Accept the searched
+                        # title as a complete phrase anywhere in the card title.
                         _ok = bool(_re.search(
                             r'(?:^|\s)' + _re.escape(_q_norm_raw) + r'(?:\s|$)',
                             _r_norm))
