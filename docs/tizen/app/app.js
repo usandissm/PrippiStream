@@ -749,7 +749,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   var TMDB_KEY = 'a1ab8b8669da03637a4b98fa39c39228';
   var TMDB = 'https://api.themoviedb.org/3';
   var SC_FALLBACKS = [
-    'https://streamingcommunityz.tools',
     'https://streamingcommunityz.support',
     'https://streamingcommunityz.pizza',
     'https://streamingcommunityz.run'
@@ -757,8 +756,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   var HOST_KEY = 'prippi.tizen.sc.host';
   var HOME_KEY = 'prippi.tizen.standalone.home.v3';
   var SEARCH_CACHE_PREFIX = 'prippi.tizen.search.v3.';
-  var ARTWORK_CACHE_PREFIX = 'prippi.tizen.artwork.v1.';
-  var ARTWORK_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
   var MEDIASET_GRAPH_URL = 'https://mediasetplay.api-graph.mediaset.it';
   var MEDIASET_GRAPH_HASH = '0cbec614877306e7f2814d2c16163d510c8fc87f1677bc34f95f4f55dc027dce';
   var LIVE_BACKEND = 'https://test34344.herokuapp.com/filter.php';
@@ -843,40 +840,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function absoluteUrl(value, base) {
-    value = String(value || '').trim();
-    base = String(base || '').trim();
-    if (/^https?:\/\//i.test(value)) return value;
-    if (/^\/\//.test(value)) return (base.match(/^https?:/i) || ['https:'])[0] + value;
-    var origin = originOf(base);
-    if (value.charAt(0) === '/') return origin + value;
-    var cleanBase = base.split(/[?#]/)[0];
-    return cleanBase.slice(0, cleanBase.lastIndexOf('/') + 1) + value;
-  }
-
-  function originOf(value) {
-    var match = String(value || '').match(/^https?:\/\/[^\/?#]+/i);
-    return match ? match[0] : '';
-  }
-
-  function hostOf(value) {
-    return originOf(value).replace(/^https?:\/\//i, '');
-  }
-
-  function pathOf(value) {
-    return String(value || '').replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0] || '/';
-  }
-
-  function queryValue(value, key) {
-    var match = String(value || '').match(new RegExp('[?&]' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^&#]*)'));
-    return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
-  }
-
-  function setQueryValue(value, key, content) {
-    var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    var result = String(value || '').replace(new RegExp('([?&])' + escaped + '=[^&#]*&?'), function (_, prefix) {
-      return prefix === '?' ? '?' : '';
-    }).replace(/[?&]$/, '');
-    return result + (result.indexOf('?') >= 0 ? '&' : '?') + encodeURIComponent(key) + '=' + encodeURIComponent(content);
+    try { return new URL(value || '', base).href; } catch (error) { return value || ''; }
   }
 
   function queryString(values) {
@@ -890,23 +854,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return parts.join('&');
   }
 
-  function parseHtml(html) {
-    var parsed = null;
-    try { parsed = new DOMParser().parseFromString(html, 'text/html'); } catch (error) {}
-    if (parsed && parsed.querySelector) return parsed;
-    var container = document.createElement('div');
-    container.innerHTML = String(html || '');
-    return container;
-  }
-
   function parsePage(html) {
-    var source = String(html || ''), match = source.match(/\sdata-page=(['"])([\s\S]*?)\1/i);
-    if (match) {
-      var decoder = document.createElement('textarea');
-      decoder.innerHTML = match[2];
-      return JSON.parse(decoder.value || decoder.textContent || '{}');
-    }
-    var doc = parseHtml(source), node = doc.querySelector('[data-page]');
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var node = doc.querySelector('[data-page]');
     if (!node) throw new Error('Pagina provider non riconosciuta');
     return JSON.parse(node.getAttribute('data-page') || '{}');
   }
@@ -943,7 +893,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return text(candidate + '/it/movies', {cache: 'no-store', credentials: 'include'}, 7000)
       .then(function (response) {
         parsePage(response.body);
-        var resolved = originOf(response.url || candidate) || candidate;
+        var parsed = new URL(response.url);
+        var resolved = parsed.protocol + '//' + parsed.host;
         localStorage.setItem(HOST_KEY, resolved);
         return resolved;
       }).catch(function () { return probe(candidates, index + 1); });
@@ -953,17 +904,17 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (force) hostPromise = null;
     if (hostPromise) return hostPromise;
     hostPromise = registryHost().then(function (remote) {
-      return probe(unique([SC_FALLBACKS[0], localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS.slice(1))), 0);
+      return probe(unique([localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS)), 0);
     }).catch(function (error) { hostPromise = null; throw error; });
     return hostPromise;
   }
 
   function rewriteHost(url, host) {
-    url = String(url || '');
-    host = String(host || '').replace(/\/$/, '');
-    if (/^https?:\/\/[^/]*streamingcommunity/i.test(url)) return host + pathOf(url) + (url.match(/\?[^#]*/) || [''])[0];
-    if (url.charAt(0) === '/') return host + url;
-    return absoluteUrl(url, host + '/');
+    try {
+      var parsed = new URL(url, host);
+      if (/streamingcommunity/i.test(parsed.host)) return host + parsed.pathname + parsed.search;
+      return parsed.href;
+    } catch (error) { return url; }
   }
 
   function dataPage(url, retry) {
@@ -1062,7 +1013,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function rowsFromPage(page, suffix) {
     var props = page.props || {}, host = props.app_url || localStorage.getItem(HOST_KEY) || SC_FALLBACKS[0];
-    var cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
+    var cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
     return (props.sliders || []).map(function (slider, index) {
       var name = slider.name || slider.label || ('Riga ' + (index + 1));
       return {
@@ -1116,13 +1067,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       }
       function pump() {
         if (completeIfReady()) return;
-        if (window.__PRIPPI_PLAYBACK_ACTIVE__) { setTimeout(pump, 600); return; }
-        var concurrency = document.documentElement.className.indexOf('legacy-tizen') >= 0 ? 1 : 4;
-        while (!finished && active < concurrency && next < entries.length && collected.length < target) {
+        while (!finished && active < 4 && next < entries.length && collected.length < target) {
           (function (entry, index) {
             active += 1;
             deadline(dataPage(host + entry[1]), 8500, 'Riga lenta').then(function (page) {
-              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
+              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
               if (!Array.isArray(titles)) titles = titles.data || [];
               var items = flatten(titles).slice(0, 20).map(function (raw) { return itemFromRaw(raw, host, cdn); });
               var key = String(entry[0] || '').toLowerCase();
@@ -1255,7 +1204,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function searchAnimeUnity(query, registry, homeMode) {
     var host = (registry.direct || {}).animeunity || 'https://www.animeunity.so';
     return text(host.replace(/\/$/, '') + '/archivio', {cache: 'no-store', credentials: 'include'}, 8500).then(function (response) {
-      var doc = parseHtml(response.body);
+      var doc = new DOMParser().parseFromString(response.body, 'text/html');
       var tokenNode = doc.querySelector('meta[name="csrf-token"]');
       var token = tokenNode && tokenNode.getAttribute('content');
       if (!token) throw new Error('AnimeUnity CSRF non disponibile');
@@ -1286,12 +1235,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var finder = (registry.findhost || {})[name];
     if (!finder) return Promise.reject(new Error('Host ' + name + ' non configurato'));
     return text(finder, {cache: 'no-store'}, 6500).then(function (response) {
-      return originOf(response.url || finder);
+      return new URL(response.url || finder).origin;
     });
   }
 
   function parseHtmlSearch(source, host, html, query) {
-    var doc = parseHtml(html), output = [];
+    var doc = new DOMParser().parseFromString(html, 'text/html'), output = [];
     if (source === 'streamingita') {
       Array.prototype.forEach.call(doc.querySelectorAll('.result-item'), function (node) {
         var link = node.querySelector('a[href]'), image = node.querySelector('img'), year = node.querySelector('.year');
@@ -1537,7 +1486,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function mediasetHtmlPage(url, type) {
     return text(url, {cache: 'no-store', headers: {'Accept': 'text/html'}}, 12000).then(function (response) {
-      var doc = parseHtml(response.body), output = [], seen = {};
+      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[data-testid="poster-card-link"][href]'), function (link) {
         var item = mediasetHtmlItem(link, type);
         var key = item && (item.seriesid || item.video_id || item.url);
@@ -1597,13 +1546,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function la7Search(query) {
     return text('https://www.la7.it/ricerca?query=' + encodeURIComponent(query) + '&page=0', {cache: 'no-store'}, 9000)
       .then(function (response) {
-        var doc = parseHtml(response.body), output = [], seen = {}, grouped = {};
+        var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {}, grouped = {};
         Array.prototype.forEach.call(doc.querySelectorAll('.view-content a[href]'), function (link) {
           var holder = link.querySelector('.holder-bg'), titleNode = link.querySelector('.title');
           if (!holder || !titleNode) return;
           var href = absoluteUrl(link.getAttribute('href'), 'https://www.la7.it'), style = holder.getAttribute('data-background-image') || holder.style.backgroundImage || '';
           var thumb = style.replace(/^.*url\(['"]?/, '').replace(/['"]?\).*$/, '');
-          var path = pathOf(href).replace(/^\/+|\/+$/g, '').split('/');
+          var path = new URL(href).pathname.split('?')[0].replace(/^\/+|\/+$/g, '').split('/');
           var isProgramVideo = path.length >= 3 && ['video', 'rivedila7', 'articolo'].indexOf(path[1]) >= 0 &&
             ['la7-cinema-tutti-i-film', 'film'].indexOf(path[0]) < 0;
           var itemTitle = titleNode.textContent.trim(), type = 'movie';
@@ -1739,15 +1688,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       expandedHomeRows = uniqueRows(mainRows.concat(archive, anime ? [anime] : [], official));
       if (expandedHomeRows.length) saveStandaloneHome(expandedHomeRows, false);
     }
-    var legacy = document.documentElement.className.indexOf('legacy-tizen') >= 0;
     var archiveTask = archiveRows(host, homepage, mainRows.length, function (partial) {
       archive = partial;
       publish();
     }).then(function (rows) { archive = rows || []; publish(); return rows; });
-    var animeTask = (legacy ? archiveTask : Promise.resolve()).then(function () { return animeHomeRow(); })
-      .then(function (row) { anime = row; publish(); return row; });
-    var officialTask = (legacy ? animeTask : Promise.resolve()).then(function () { return officialHomeRows(); })
-      .then(function (rows) { official = rows || []; publish(); return rows; });
+    var animeTask = animeHomeRow().then(function (row) { anime = row; publish(); return row; });
+    var officialTask = officialHomeRows().then(function (rows) { official = rows || []; publish(); return rows; });
     return Promise.all([archiveTask, animeTask, officialTask]).then(function () {
       publish();
       if (generation === expandedHomeGeneration) expandedHomeDone = true;
@@ -1806,7 +1752,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (cached) return Promise.resolve({items: cached, aggregated: true, cached: true});
     var scSearch = ensureHost(false).then(function (host) {
       return dataPage(host + '/it/search?q=' + encodeURIComponent(query)).then(function (page) {
-        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + hostOf(resolvedHost));
+        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + new URL(resolvedHost).host);
         return flatten(props.titles || []).slice(0, 100).map(function (raw) {
           var item = itemFromRaw(raw, resolvedHost, cdn);
           item.source = 'streamingcommunity';
@@ -1847,15 +1793,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function tmdbDetails(item) {
     var info = item.infoLabels || {}, type = tmdbType(item), id = info.tmdb_id || item.tmdb_id;
-    var cacheKey = ARTWORK_CACHE_PREFIX + type + '.' + encodeURIComponent(String(id || item.fulltitle || item.title || '').toLowerCase());
-    try {
-      var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (cached && cached.saved_at && Date.now() - cached.saved_at < ARTWORK_CACHE_MAX_AGE && cached.item) {
-        return Promise.resolve(Object.assign({}, item, cached.item, {
-          infoLabels: Object.assign({}, info, cached.item.infoLabels || {})
-        }));
-      }
-    } catch (error) {}
     var locate = id ? Promise.resolve(id) : json(TMDB + '/search/' + type + '?api_key=' + TMDB_KEY + '&language=it-IT&include_adult=false&query=' + encodeURIComponent(item.fulltitle || item.title || ''))
       .then(function (data) { return data.results && data.results[0] && data.results[0].id; });
     return locate.then(function (tmdbId) {
@@ -1870,13 +1807,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         labels.genre = (data.genres || []).map(function (genre) { return genre.name; }).join(', ');
         result.infoLabels = labels;
         result.plot = labels.plot;
-        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w780' + data.poster_path;
+        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w500' + data.poster_path;
         if (data.backdrop_path) result.fanart = 'https://image.tmdb.org/t/p/w1280' + data.backdrop_path;
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify({saved_at: Date.now(), item: {
-            thumbnail: result.thumbnail || '', fanart: result.fanart || '', plot: result.plot || '', infoLabels: result.infoLabels || {}
-          }}));
-        } catch (error) {}
         return result;
       }).catch(function () { return item; });
     });
@@ -1886,7 +1818,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (item.channel === 'raiplay' || item.channel === 'mediasetplay' || item.channel === 'la7') return tmdbDetails(item);
     if (item.tmdbOnly) return tmdbDetails(item);
     return dataPage(item.url).then(function (page) {
-      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
+      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
       var merged = Object.assign({}, item, itemFromRaw(raw, host, cdn));
       if (item.url) merged.url = rewriteHost(item.url, host);
       return tmdbDetails(merged);
@@ -1972,7 +1904,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function mediasetSeasonPageEpisodes(seasonUrl, seasonNumber, parent) {
     if (!seasonUrl) return Promise.resolve([]);
     return text(seasonUrl, {cache: 'no-store', credentials: 'include'}, 12000).then(function (response) {
-      var doc = parseHtml(response.body), fullIds = {}, fullOrder = [], output = [], seen = {};
+      var doc = new DOMParser().parseFromString(response.body, 'text/html'), fullIds = {}, fullOrder = [], output = [], seen = {};
       var patterns = [
         /editorialType\\?"\s*:\\?"Full Episode\\?"\s*,\\?"guid\\?"\s*:\\?"(F[A-Z0-9]+)/ig,
         /"editorialType"\s*:\s*"Full Episode"\s*,\s*"guid"\s*:\s*"(F[A-Z0-9]+)/ig
@@ -2068,7 +2000,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       });
     }
     return text(item.url, {cache: 'no-store', credentials: 'include'}, 11000).then(function (response) {
-      var doc = parseHtml(response.body), output = [], seen = {};
+      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[href]'), function (link) {
         var art = link.querySelector('[data-background-image]'), titleNode = link.querySelector('.title, .occhiello, h3, h4');
         if (!art || !titleNode) return;
@@ -2106,7 +2038,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     }
     return dataPage(item.url).then(function (page) {
       var props = page.props || {}, titleData = props.title || {}, seasons = titleData.seasons || [];
-      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host)), output = [];
+      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host), output = [];
       var chain = Promise.resolve();
       seasons.forEach(function (season) {
         chain = chain.then(function () {
@@ -2144,7 +2076,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       });
     return iframePromise.then(function (iframeUrl) {
       return text(iframeUrl, {cache: 'no-store', credentials: 'include'}, 10000).then(function (response) {
-        var doc = parseHtml(response.body), frame = doc.querySelector('iframe');
+        var doc = new DOMParser().parseFromString(response.body, 'text/html'), frame = doc.querySelector('iframe');
         var embedUrl = frame && frame.getAttribute('src');
         if (!embedUrl) throw new Error('Player VixCloud non disponibile');
         return text(embedUrl, {cache: 'no-store', credentials: 'include', referrer: iframeUrl, referrerPolicy: 'unsafe-url'}, 10000)
@@ -2159,13 +2091,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var token = (data.body.match(/['"]token['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       var expires = (data.body.match(/['"]expires['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       if (!base || !token || !expires) throw new Error('Token VixCloud non disponibile');
-      var playlist = setQueryValue(setQueryValue(base, 'token', token), 'expires', expires);
-      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist = setQueryValue(playlist, 'h', '1');
-      ['b', 'scz'].forEach(function (key) { var value = queryValue(data.embedUrl, key); if (value) playlist = setQueryValue(playlist, key, value); });
-      return text(playlist, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
+      var playlist = new URL(base), embed = new URL(data.embedUrl);
+      playlist.searchParams.set('token', token);
+      playlist.searchParams.set('expires', expires);
+      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist.searchParams.set('h', '1');
+      ['b', 'scz'].forEach(function (key) { if (embed.searchParams.get(key)) playlist.searchParams.set(key, embed.searchParams.get(key)); });
+      return text(playlist.href, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
         .then(function (response) {
           if (response.body.indexOf('#EXTM3U') !== 0) throw new Error('Playlist HLS non valida');
-          return {url: playlist, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
+          return {url: playlist.href, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
         });
     });
   }
@@ -2323,7 +2257,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (index >= seeds.length) throw new Error('Dominio Daddy non raggiungibile');
       var seed = seeds[index++];
       return text(seed.replace(/\/$/, '') + '/', {cache: 'no-store'}, 8000).then(function (response) {
-        var base = originOf(response.url || seed);
+        var base = new URL(response.url || seed).origin;
         try { localStorage.setItem('prippi.tizen.daddy.domain', base); } catch (error) {}
         return base;
       }).catch(next);
@@ -2336,34 +2270,26 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var code = String(item.daddy_code || (item.sport_kind === 'daddy' ? item.sport_par : '') || '');
     if (!code) return Promise.reject(new Error('Fallback Daddy non disponibile'));
     return daddyDomain().then(function (base) {
-      var pageUrl = base + '/stream/stream-' + encodeURIComponent(code) + '.php';
-      return text(pageUrl, {
+      return text(base + '/stream/stream-' + encodeURIComponent(code) + '.php', {
         cache: 'no-store', headers: {'Referer': base + '/'}
-      }, 10000).then(function (response) {
-        return {base: base, pageUrl: pageUrl, body: response.body};
-      });
+      }, 10000).then(function (response) { return {base: base, body: response.body}; });
     }).then(function (page) {
       var iframe = (page.body.match(/<iframe[^>]+src=["']([^"']+)/i) || [])[1];
       if (!iframe) throw new Error('Player Daddy non disponibile');
       iframe = absoluteUrl(iframe, page.base + '/');
       return text(iframe, {cache: 'no-store', headers: {'Referer': page.base + '/'}}, 10000)
-        .then(function (response) {
-          return {iframe: iframe, pageUrl: page.pageUrl, body: response.body};
-        });
+        .then(function (response) { return {iframe: iframe, body: response.body}; });
     }).then(function (player) {
       var encoded = (player.body.match(/atob\(['"]([^'"]+)/i) || [])[1];
       var url = encoded ? cleanUrl(atob(encoded)) : '';
       if (!/^https?:/i.test(url)) throw new Error('Stream Daddy non disponibile');
-      var origin = originOf(player.iframe);
+      var origin = new URL(player.iframe).origin;
       return {
         url: url,
         manifest_type: 'hls',
         drm_type: '',
         headers: {'User-Agent': NOWTV_UA, 'Referer': origin + '/', 'Origin': origin},
-        live_source: 'daddy',
-        // The outer stream page must create the inner iframe itself: opening the
-        // inner player directly loses Daddy's expected referrer and is denied.
-        embed_url: player.pageUrl
+        live_source: 'daddy'
       };
     });
   }
@@ -2387,8 +2313,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (!token) throw new Error('Token live non disponibile');
       return {
         url: 'https://lovely.lovetier.bz/' + encodeURIComponent(code) + '/tracks-v1a1/mono.m3u8?token=' + encodeURIComponent(token),
-        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')},
-        live_source: 'freeshot', embed_url: 'https://popcdn.day/player/' + encodeURIComponent(code)
+        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')}
       };
     });
   }
@@ -2418,20 +2343,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return Promise.reject(new Error('Resolver live non supportato: ' + (kind || 'sconosciuto')));
   }
 
-  function resolveLiveFallback(item) {
-    var fallback = item.sport_fs ? resolveFreeshotLive(item) :
-      Promise.reject(new Error('Fallback Freeshot non disponibile'));
-    if (item.daddy_code) {
-      fallback = fallback.catch(function () { return resolveDaddyLive(item); });
-    }
-    return fallback;
-  }
-
   function resolveRai(item) {
     if (!item.video_url) return Promise.reject(new Error('Endpoint Rai non disponibile'));
     return json(item.video_url, {cache: 'no-store', credentials: 'include'}, 10000).then(function (data) {
       if (data.first_item_path) {
-        var nested = absoluteUrl(data.first_item_path, 'https://www.raiplay.it/').replace(/\.html\?json/i, '.json');
+        var nested = new URL(data.first_item_path, 'https://www.raiplay.it').href.replace(/\.html\?json/i, '.json');
         return json(nested, {cache: 'no-store', credentials: 'include'}, 10000);
       }
       return data;
@@ -2592,10 +2508,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (route === '/home-expanded') return expandedHome();
     if (route === '/search') return search(decodeURIComponent((String(path).split('q=')[1] || '').replace(/\+/g, ' ')));
     if (route === '/detail') return detail((body || {}).item || {});
-    if (route === '/artwork') return tmdbDetails((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});
-    if (route === '/resolve-live-fallback') return resolveLiveFallback((body || {}).item || {});
     if (route === '/live') return live();
     if (route === '/live-epg') return skyEpg((body || {}).rows || []);
     if (route === '/browse-macros') return Promise.resolve({items: []});
@@ -2622,11 +2536,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   var CW_COMPLETE_PERCENT = 92;
   var CW_MAX_ITEMS = 30;
   var UP_NEXT_PROMPT_MS = 60000;
-  var PLAY_RESOLVE_TIMEOUT_MS = 18000;
-  var DIAGNOSTIC_KEY = 'prippi.tizen.diagnostics.v1';
-  var DIAGNOSTIC_MAX_ITEMS = 24;
-  var cwFlow = window.PrippiCwFlow;
-  var mediaPrefs = window.PrippiMediaPrefs;
+  var UP_NEXT_MIN_WATCHED_MS = 60000;
   var avplay = window.webapis && window.webapis.avplay;
   var state = {
     page: 'home',
@@ -2652,13 +2562,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     playerLive: false,
     playerEngine: '',
     playerUiTimer: null,
-    playerUiVisible: true,
-    playerFocusId: 'player-toggle',
     playerTick: null,
-    artworkTimer: null,
-    artworkQueue: [],
-    artworkJobs: {},
-    artworkWorkerBusy: false,
     toastTimer: null,
     htmlFallback: false,
     hlsInstance: null,
@@ -2666,12 +2570,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     hlsFatalRetries: 0,
     playerItem: null,
     pendingResumeMs: 0,
-    avResumeAttempts: 0,
-    avResumeInFlight: false,
     lastProgressSave: 0,
     episodeQueue: [],
     episodeIndex: -1,
-    episodeQueueComplete: false,
     episodeParent: null,
     upNextVisible: false,
     upNextCancelled: false,
@@ -2683,58 +2584,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     liveRowTitle: '',
     liveSwitchBusy: false,
     liveSwitchAt: 0,
-    trackCycleIndex: -1,
-    trackPreferenceTimer: null,
     playRequestId: 0
   };
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
       return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
-    });
-  }
-
-  function diagnostic(label, detail) {
-    var entry = {
-      at: new Date().toISOString().slice(11, 19),
-      label: String(label || 'Evento'),
-      detail: String(detail || '').replace(/[\r\n]+/g, ' ').slice(0, 180)
-    };
-    var entries = [];
-    try { entries = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '[]'); } catch (error) {}
-    if (!Array.isArray(entries)) entries = [];
-    entries.push(entry);
-    entries = entries.slice(-DIAGNOSTIC_MAX_ITEMS);
-    try { localStorage.setItem(DIAGNOSTIC_KEY, JSON.stringify(entries)); } catch (error) {}
-    try { if (window.console && console.log) console.log('[PrippiTV] ' + entry.label + ': ' + entry.detail); } catch (error) {}
-  }
-
-  function diagnosticEntries() {
-    try {
-      var entries = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '[]');
-      return Array.isArray(entries) ? entries : [];
-    } catch (error) { return []; }
-  }
-
-  function withTimeout(promise, milliseconds, message) {
-    return new Promise(function (resolve, reject) {
-      var settled = false;
-      var timer = setTimeout(function () {
-        if (settled) return;
-        settled = true;
-        reject(new Error(message || 'Operazione troppo lenta'));
-      }, milliseconds);
-      promise.then(function (value) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(value);
-      }).catch(function (error) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(error);
-      });
     });
   }
 
@@ -2745,14 +2600,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function image(item) {
     return item && (item.thumbnail || item.poster || item.fanart) || '';
-  }
-
-  function isLiveMedia(item) {
-    if (!item) return false;
-    var explicit = item.isLive;
-    if (explicit === true || explicit === 1 || String(explicit).toLowerCase() === 'true') return true;
-    var kind = String(item.contentType || item.mediaType || info(item).mediatype || '').toLowerCase();
-    return kind === 'live' || kind === 'channel';
   }
 
   function info(item) {
@@ -2770,7 +2617,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (item && String(item.contentType || '').toLowerCase() === 'episode') return 'episode';
     if (/episode/.test(value)) return 'episode';
     if (/tv|serie|season/.test(value)) return 'series';
-    if (isLiveMedia(item)) return 'live';
+    if (item && item.isLive) return 'live';
     return 'movie';
   }
 
@@ -2784,7 +2631,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (!parts.length) {
       if (isSeries(item)) parts.push('Serie TV');
       else if (isEpisode(item)) parts.push('Episodio');
-      else if (isLiveMedia(item)) parts.push('In diretta');
+      else if (item.isLive) parts.push('In diretta');
       else parts.push('Film');
     }
     return parts.join('  -  ');
@@ -2795,11 +2642,28 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function continueKey(item, parent) {
-    return cwFlow.continueKey(item, parent);
+    var labels = info(item), parentLabels = info(parent || {}), episode = isEpisode(item), series = episode || isSeries(item);
+    var tmdb = series ? (parentLabels.tmdb_id || labels.tmdb_id) : labels.tmdb_id;
+    var name = episode ? ((parent && title(parent)) || item.contentSerieName || item.show || title(item)) : title(item);
+    var fallback = normalizedKey(name) || normalizedKey(item.url) || normalizedKey(item.video_id);
+    return (series ? 'tv_' : 'movie_') + (tmdb || fallback);
   }
 
   function sameMedia(left, right) {
-    return cwFlow.sameMedia(left, right);
+    if (!left || !right) return false;
+    if (isEpisode(left) || isEpisode(right)) {
+      if (left.video_id && right.video_id) return String(left.video_id) === String(right.video_id);
+      var leftSeason = Number(left.season || left.contentSeason || 0), rightSeason = Number(right.season || right.contentSeason || 0);
+      var leftEpisode = Number(left.episode || left.contentEpisodeNumber || 0), rightEpisode = Number(right.episode || right.contentEpisodeNumber || 0);
+      var leftSeries = normalizedKey(left.contentSerieName || left.show || ''), rightSeries = normalizedKey(right.contentSerieName || right.show || '');
+      if (leftSeason && leftEpisode && leftSeason === rightSeason && leftEpisode === rightEpisode &&
+          (!leftSeries || !rightSeries || leftSeries === rightSeries)) return true;
+    }
+    if (left.video_id && right.video_id) return String(left.video_id) === String(right.video_id);
+    if (left.url && right.url) return String(left.url) === String(right.url);
+    return Number(left.season || left.contentSeason || 0) === Number(right.season || right.contentSeason || 0) &&
+      Number(left.episode || left.contentEpisodeNumber || 0) === Number(right.episode || right.contentEpisodeNumber || 0) &&
+      normalizedKey(left.contentSerieName || left.show || left.fulltitle) === normalizedKey(right.contentSerieName || right.show || right.fulltitle);
   }
 
   function cleanStoredItem(item) {
@@ -2815,11 +2679,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     try {
       var entries = JSON.parse(localStorage.getItem(CW_KEY) || '[]');
       if (!Array.isArray(entries)) return [];
-      var migrated = cwFlow.migrateEntries(entries, CW_MAX_ITEMS);
-      if (JSON.stringify(entries) !== JSON.stringify(migrated)) {
-        try { localStorage.setItem(CW_KEY, JSON.stringify(migrated)); } catch (writeError) {}
-      }
-      return migrated;
+      return entries.filter(function (entry) {
+        return entry && entry.key && entry.item && !entry.item.isLive;
+      }).sort(function (a, b) { return Number(b.updatedAt || 0) - Number(a.updatedAt || 0); }).slice(0, CW_MAX_ITEMS);
     } catch (error) { return []; }
   }
 
@@ -2852,7 +2714,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function saveContinueWatching(item, position, duration, force) {
-    if (!item || isLiveMedia(item) || state.playerLive) return;
+    if (!item || item.isLive || state.playerLive) return;
     position = Math.max(0, Number(position || 0));
     duration = Math.max(0, Number(duration || 0));
     var parent = state.episodeParent, key = continueKey(item, parent), entries = readContinueWatching();
@@ -2862,26 +2724,22 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       refreshContinueWatchingRow();
       return;
     }
-    var queue = [], queueIndex = -1, queueComplete = false;
+    var queue = [], queueIndex = -1;
     if (isEpisode(item)) {
       var sourceQueue = state.episodeQueue.length ? state.episodeQueue : [item];
-      var normalizedQueue = cwFlow.normalizeEpisodeQueue(sourceQueue, item);
-      sourceQueue = normalizedQueue.items;
-      var sourceIndex = normalizedQueue.index;
+      var sourceIndex = state.episodeIndex >= 0 ? state.episodeIndex : sourceQueue.findIndex(function (value) { return sameMedia(value, item); });
       sourceIndex = Math.max(0, sourceIndex);
-      queue = sourceQueue.slice(sourceIndex, sourceIndex + cwFlow.MAX_QUEUE_ITEMS).map(compactQueueItem);
+      queue = sourceQueue.slice(sourceIndex, sourceIndex + 24).map(compactQueueItem);
       if (!queue.length || !sameMedia(queue[0], item)) queue.unshift(compactQueueItem(item));
       queueIndex = 0;
-      queueComplete = state.episodeQueueComplete && sourceIndex + queue.length >= sourceQueue.length;
     }
     var entry = {
-      schema: cwFlow.SCHEMA,
+      schema: 1,
       key: key,
       item: cleanStoredItem(item),
       parent: parent ? cleanStoredItem(parent) : null,
       queue: queue,
       index: queueIndex,
-      queueComplete: queueComplete,
       position: position,
       duration: duration,
       updatedAt: Date.now()
@@ -2974,7 +2832,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function cardMarkup(item, options) {
     options = options || {};
-    var id = saveItem(item), live = isLiveMedia(item) || options.live === true, episode = isEpisode(item), classes = 'card';
+    var id = saveItem(item), live = !!options.live, episode = isEpisode(item), classes = 'card';
     if (live) classes += ' live';
     if (episode) classes += ' episode';
     var meta = live ? (item.epg || item.program || 'In diretta') : itemNote(item);
@@ -2996,7 +2854,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       esc(row.title || 'PrippiStream') + '</h2><span class="row-count">' + items.length + '</span></div>' +
       '<div class="cards">' + items.map(function (item, column) {
         return cardMarkup(item, {
-          live: live === true || isLiveMedia(item),
+          live: live || item.isLive,
           zone: 'row',
           row: rowIndex,
           col: column,
@@ -3146,18 +3004,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var subtitles = localStorage.getItem('prippi.tizen.subtitles') === 'on';
     var reduced = localStorage.getItem('prippi.tizen.reduced-motion') === 'on';
     var version = document.documentElement.getAttribute('data-prippi-version') || 'bundle locale';
-    var entries = diagnosticEntries().slice(-6).reverse();
-    var diagnostics = entries.length ? entries.map(function (entry) {
-      return '<li><b>' + esc(entry.at + '  ' + entry.label) + '</b><span>' + esc(entry.detail) + '</span></li>';
-    }).join('') : '<li><span>Nessun evento di riproduzione registrato.</span></li>';
     return '<div class="page-scroll"><div class="section-intro"><div><h2>Preferenze TV</h2>' +
       '<p>Impostazioni semplici, pensate per telecomando e schermi condivisi.</p></div></div><div class="settings-grid">' +
       settingCard('runtime', 'Motore', 'L\'app funziona direttamente sulla TV, senza PC.', 'Standalone', null) +
       settingCard('version', 'Aggiornamenti', 'Bundle verificato tramite SHA-256.', version, null) +
       settingCard('subtitles', 'Sottotitoli automatici', 'Restano disattivati finché non li selezioni nel player.', subtitles ? 'ON' : 'OFF', {index: 0}) +
       settingCard('reduced-motion', 'Animazioni ridotte', 'Riduce transizioni e lavoro grafico sui dispositivi lenti.', reduced ? 'ON' : 'OFF', {index: 1}) +
-      '</div><section class="diagnostic-panel"><div><h3>Diagnostica riproduzione</h3><p>Ultimi eventi della TV: utile anche se Samsung non espone i log al PC.</p></div>' +
-      '<ul>' + diagnostics + '</ul><button data-diagnostic-clear data-focusable data-zone="settings" data-focus-key="diagnostic:clear">Cancella diagnostica</button></section></div>';
+      '</div></div>';
   }
 
   function renderPage(preserveFocus) {
@@ -3298,7 +3151,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function runSearch() {
     var input = document.getElementById('query'), query = input ? input.value.replace(/^\s+|\s+$/g, '') : '';
     var statusElement = document.getElementById('search-status'), results = document.getElementById('search-results');
-    if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) focusElement(input); return; }
+    if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) input.focus(); return; }
     statusElement.textContent = 'Ricerca in corso...';
     results.innerHTML = '';
     request('/search?q=' + encodeURIComponent(query)).then(function (response) {
@@ -3384,12 +3237,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       };
       element.setAttribute('data-focus-key', 'setting:' + element.getAttribute('data-setting'));
     });
-    var clear = document.querySelector('[data-diagnostic-clear]');
-    if (clear) clear.onclick = function () {
-      try { localStorage.removeItem(DIAGNOSTIC_KEY); } catch (error) {}
-      renderPage(true);
-      toast('Diagnostica cancellata');
-    };
   }
 
   function bindContent(root) {
@@ -3414,69 +3261,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       };
       element.onfocus = function () {
         rememberFocus(element);
-        var focused = state.items[element.getAttribute('data-item')];
-        if (state.page === 'home') updateHero(focused);
-        queueArtworkUpgrade(focused, element, true);
+        if (state.page === 'home') updateHero(state.items[element.getAttribute('data-item')]);
       };
-      queueArtworkUpgrade(state.items[element.getAttribute('data-item')], element, false);
     });
-  }
-
-  function applyArtworkUpgrade(item, updated, element) {
-    if (!item || !updated) return;
-    if (updated.thumbnail) item.thumbnail = updated.thumbnail;
-    if (updated.poster) item.poster = updated.poster;
-    if (updated.fanart) item.fanart = updated.fanart;
-    if (updated.infoLabels) item.infoLabels = Object.assign({}, item.infoLabels || {}, updated.infoLabels);
-    if (element) {
-      var poster = element.querySelector && element.querySelector('.poster');
-      if (poster && image(item)) poster.style.backgroundImage = 'url("' + image(item).replace(/["\\]/g, '\\$&') + '")';
-    }
-    if (state.page === 'home' && document.activeElement === element) updateHero(item);
-  }
-
-  function artworkKey(item) {
-    return mediaType(item) + ':' + title(item).toLowerCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
-  }
-
-  function scheduleArtworkWorker(delay) {
-    clearTimeout(state.artworkTimer);
-    state.artworkTimer = setTimeout(runArtworkWorker, delay == null ? 500 : delay);
-  }
-
-  function runArtworkWorker() {
-    if (state.artworkWorkerBusy || !state.artworkQueue.length) return;
-    if (window.__PRIPPI_PLAYBACK_ACTIVE__ || document.hidden) { scheduleArtworkWorker(1200); return; }
-    var job = state.artworkQueue.shift();
-    if (!job || !state.artworkJobs[job.key]) { scheduleArtworkWorker(0); return; }
-    state.artworkWorkerBusy = true;
-    request('/artwork', {item: job.refs[0].item}).then(function (updated) {
-      job.refs.forEach(function (ref) {
-        ref.item._artworkHd = true;
-        applyArtworkUpgrade(ref.item, updated, ref.element);
-      });
-    }).catch(function () {}).then(function () {
-      delete state.artworkJobs[job.key];
-      state.artworkWorkerBusy = false;
-      if (state.artworkQueue.length) scheduleArtworkWorker(550);
-    });
-  }
-
-  function queueArtworkUpgrade(item, element, priority) {
-    if (!item || isLiveMedia(item) || item._artworkHd) return;
-    var key = artworkKey(item), job = state.artworkJobs[key], index;
-    if (job) {
-      job.refs.push({item: item, element: element});
-      if (priority) {
-        index = state.artworkQueue.indexOf(job);
-        if (index > 0) { state.artworkQueue.splice(index, 1); state.artworkQueue.unshift(job); }
-      }
-    } else {
-      job = {key: key, refs: [{item: item, element: element}]};
-      state.artworkJobs[key] = job;
-      if (priority) state.artworkQueue.unshift(job); else state.artworkQueue.push(job);
-    }
-    scheduleArtworkWorker(priority ? 80 : 650);
   }
 
   function updateHero(item) {
@@ -3500,7 +3287,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (labels.rating) values.push('Valutazione ' + Number(labels.rating).toFixed(1));
     if (labels.runtime) values.push(labels.runtime + ' min');
     if (labels.genre) values.push(labels.genre);
-    if (!values.length) values.push(isSeries(item) ? 'Serie TV' : isEpisode(item) ? 'Episodio' : isLiveMedia(item) ? 'Live' : 'Film');
+    if (!values.length) values.push(isSeries(item) ? 'Serie TV' : isEpisode(item) ? 'Episodio' : item.isLive ? 'Live' : 'Film');
     return values.map(function (value) { return '<span class="detail-chip">' + esc(value) + '</span>'; }).join('');
   }
 
@@ -3511,18 +3298,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     renderDetail(item);
     request('/detail', {item: item}).then(function (updated) {
       state.detail = updated;
-      applyArtworkUpgrade(item, updated, null);
       var paragraph = document.querySelector('#detail .detail-body p');
       if (paragraph) paragraph.textContent = updated.plot || item.plot || 'Nessuna trama disponibile.';
       var art = document.getElementById('detail');
       if (updated.fanart) art.style.backgroundImage = 'url("' + updated.fanart.replace(/["\\]/g, '\\$&') + '")';
-      var poster = document.querySelector('#detail .detail-poster');
-      if (poster && image(updated)) poster.style.backgroundImage = 'url("' + image(updated).replace(/["\\]/g, '\\$&') + '")';
     }).catch(function () {});
   }
 
   function renderDetail(item) {
-    var series = isSeries(item), live = isLiveMedia(item), cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
+    var series = isSeries(item), live = !!item.isLive, cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
     var hasResume = !!(cw && cw.position >= CW_MIN_PROGRESS_MS);
     var resumeItem = series && cw ? Object.assign({}, item, {_cwEntry: cw, _cwResumeItem: cw.item}) :
       cw ? Object.assign({}, item, {_cwEntry: cw}) : item;
@@ -3537,7 +3321,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     overlay.className = 'overlay';
     overlay.style.backgroundImage = item.fanart ? 'url("' + item.fanart.replace(/["\\]/g, '\\$&') + '")' : '';
     overlay.innerHTML = '<div class="detail-layout"><div class="detail-poster" style="background-image:url(\'' + esc(image(item)) + '\')"></div>' +
-      '<div class="detail-body"><span class="eyebrow">' + esc(series ? 'Serie TV' : live ? 'Canale Live' : 'PrippiStream') + '</span>' +
+      '<div class="detail-body"><span class="eyebrow">' + esc(series ? 'Serie TV' : item.isLive ? 'Canale Live' : 'PrippiStream') + '</span>' +
       '<h2>' + esc(title(item)) + '</h2><div class="detail-meta">' + detailMeta(item) + '</div>' +
       '<p>' + esc(item.plot || 'Caricamento informazioni...') + '</p><div class="actions">' +
       actions.join('') + '</div></div></div>';
@@ -3578,11 +3362,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         return a._displaySeason - b._displaySeason || Number(a.episode || a.contentEpisodeNumber || 0) - Number(b.episode || b.contentEpisodeNumber || 0);
       });
       state.episodeParent = item;
-      state.episodeQueue = cwFlow.normalizeEpisodeQueue(episodes).items;
+      state.episodeQueue = episodes.slice();
       state.episodeIndex = -1;
-      state.episodeQueueComplete = true;
       seasons.sort(function (a, b) { return a - b; });
-      renderEpisodeSeason(item, state.episodeQueue, seasons, seasons[0]);
+      renderEpisodeSeason(item, episodes, seasons, seasons[0]);
     }).catch(function (error) {
       var content = document.getElementById('episode-content');
       if (content) content.innerHTML = errorMarkup(error.message);
@@ -3687,87 +3470,33 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.liveRowTitle = found ? found.row.title : 'Live TV';
   }
 
-  function ensureEpisodeQueue(item) {
-    if (!isEpisode(item) || !state.episodeParent || state.episodeQueueComplete) return;
-    var parent = state.episodeParent, expected = item, requestId = state.playRequestId;
-    request('/episodes', {item: parent}).then(function (response) {
-      if (requestId !== state.playRequestId || !state.playerItem || !sameMedia(state.playerItem, expected)) return;
-      var episodes = response.items || response.episodes || [];
-      if (!episodes.length) return;
-      var normalized = cwFlow.normalizeEpisodeQueue(episodes, expected);
-      state.episodeQueue = normalized.items;
-      state.episodeIndex = normalized.index;
-      state.episodeQueueComplete = true;
-      refreshPlayerActions();
-      var times = currentPlayerTimes();
-      updateUpNext(times.current, times.duration);
-    }).catch(function () {});
-  }
-
   function play(item, options) {
     options = options || {};
     var entry = item._cwEntry || null, target = item._cwResumeItem || item, requestId = ++state.playRequestId;
-    window.__PRIPPI_PLAYBACK_ACTIVE__ = true;
-    if (isLiveMedia(target) && !options.switchingLive) prepareLiveSession(target);
+    if (target.isLive && !options.switchingLive) prepareLiveSession(target);
     if (entry && item._cwResumeItem) {
       state.episodeParent = entry.parent || item;
-      var restoredQueue = cwFlow.normalizeEpisodeQueue(entry.queue || [], target);
-      state.episodeQueue = restoredQueue.items;
-      state.episodeIndex = restoredQueue.index;
-      state.episodeQueueComplete = entry.queueComplete === true;
+      state.episodeQueue = entry.queue || [];
+      state.episodeIndex = Number(entry.index == null ? -1 : entry.index);
     } else if (isEpisode(target)) {
-      var activeQueue = cwFlow.normalizeEpisodeQueue(state.episodeQueue, target);
-      state.episodeQueue = activeQueue.items;
-      state.episodeIndex = activeQueue.index;
+      state.episodeIndex = state.episodeQueue.findIndex(function (candidate) { return sameMedia(candidate, target); });
     } else {
       state.episodeQueue = [];
       state.episodeIndex = -1;
-      state.episodeQueueComplete = false;
       state.episodeParent = null;
     }
     var saved = entry || findContinueWatching(target, state.episodeParent);
     state.pendingResumeMs = !options.fromStart && saved && sameMedia(saved.item, target) ? Number(saved.position || 0) : 0;
-    state.avResumeAttempts = 0;
-    state.avResumeInFlight = false;
     state.playerItem = target;
-    diagnostic('Risoluzione avviata', (isLiveMedia(target) ? 'Live' : 'VOD') + ' · ' + playbackTitle(target));
     state.switchingEpisode = !!options.switching;
-    ensureEpisodeQueue(target);
     if (!options.switching && !options.switchingLive) toast('Ricerca della sorgente migliore...');
     else setPlayerText(playbackTitle(target), 'Preparazione episodio successivo...');
     if (options.switchingLive) setPlayerText(playbackTitle(target), 'Cambio canale...');
-    return withTimeout(request('/resolve', {item: target}), PLAY_RESOLVE_TIMEOUT_MS, 'Risoluzione sorgente scaduta dopo 18 secondi').then(function (response) {
+    return request('/resolve', {item: target}).then(function (response) {
       if (requestId !== state.playRequestId) throw {stale: true};
       var url = findUrl(response);
       if (!url) throw new Error('Nessuno stream compatibile restituito');
-      diagnostic('Sorgente risolta', (response.manifest_type || 'sconosciuto') + ' · DRM ' + (response.drm_type || 'nessuno'));
-      if (response.embed_url && !isNativeMedia(url, response.manifest_type) && isLiveMedia(target) &&
-          document.documentElement.className.indexOf('legacy-tizen') >= 0) {
-        openEmbed(response.embed_url, target);
-        return null;
-      }
-      if (String(response.drm_type || '').toLowerCase() === 'clearkey') {
-        return openClearKeyPlayer(url, target, response).catch(function (drmError) {
-          if (!isLiveMedia(target)) throw drmError;
-          return request('/resolve-live-fallback', {item: target}).then(function (fallback) {
-            if (requestId !== state.playRequestId) throw {stale: true};
-            var fallbackUrl = findUrl(fallback);
-            if (!fallbackUrl) throw new Error('Sorgente alternativa non disponibile');
-            toast('DRM non compatibile: avvio la sorgente alternativa...');
-            if (fallback.embed_url && !isNativeMedia(fallbackUrl, fallback.manifest_type) &&
-                document.documentElement.className.indexOf('legacy-tizen') >= 0) {
-              openEmbed(fallback.embed_url, target);
-            } else if (isNativeMedia(fallbackUrl, fallback.manifest_type)) {
-              openPlayer(fallbackUrl, target, fallback.headers || {}, fallback.manifest_type || '');
-            } else openEmbed(fallbackUrl, target);
-            return null;
-          }).catch(function (fallbackError) {
-            if (fallbackError && fallbackError.stale) throw fallbackError;
-            throw new Error((drmError.message || 'DASH/DRM non riproducibile') + '; ' +
-              (fallbackError.message || 'sorgente alternativa non disponibile'));
-          });
-        });
-      }
+      if (String(response.drm_type || '').toLowerCase() === 'clearkey') return openClearKeyPlayer(url, target, response);
       if (isNativeMedia(url, response.manifest_type)) openPlayer(url, target, response.headers || {}, response.manifest_type || '');
       else openEmbed(url, target);
       return null;
@@ -3777,13 +3506,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (requestId !== state.playRequestId || (error && error.stale)) return;
       state.switchingEpisode = false;
       state.liveSwitchBusy = false;
-      diagnostic('Riproduzione fallita', error && error.message || String(error));
       if (options.switchingLive && state.liveQueue.length > 1 && Number(options.liveAttempts || 0) < state.liveQueue.length - 1) {
         switchLive(Number(options.liveDirection || 1), Number(options.liveAttempts || 0) + 1, true);
         return;
       }
       toast('Riproduzione non disponibile: ' + error.message, true);
-      if (state.playerOpen) { setPlayerText(playbackTitle(target), isLiveMedia(target) ? 'Canale non disponibile' : 'Contenuto non disponibile'); showPlayerUi(true); }
+      if (state.playerOpen) { setPlayerText(playbackTitle(target), target.isLive ? 'Canale non disponibile' : 'Episodio non disponibile'); showPlayerUi(true); }
     });
   }
 
@@ -3796,20 +3524,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function openPlayerShell(item) {
     clearTimeout(state.episodeTransitionTimer);
     state.episodeTransitionTimer = null;
-    clearTimeout(state.trackPreferenceTimer);
-    state.trackPreferenceTimer = null;
     stopPlayerMedia();
     var detail = document.getElementById('detail');
     if (detail && detail.className.indexOf('hidden') < 0) closeDetail();
     state.playerOpen = true;
-    state.playerLive = isLiveMedia(item);
+    state.playerLive = !!item.isLive;
     state.playing = false;
     var player = document.getElementById('player');
-    player.className = state.playerLive ? 'player live' : 'player ondemand';
-    var status = document.getElementById('player-status');
-    var castStatus = item.castStatus || item.cast_status || item.castDevice || item.cast_device || '';
-    status.textContent = state.playerLive ? 'LIVE' : (castStatus ? String(castStatus) : '');
-    status.className = state.playerLive ? 'player-status live' : 'player-status';
+    player.className = state.playerLive ? 'player live' : 'player';
+    document.getElementById('player-kind').textContent = state.playerLive ? 'IN DIRETTA' : 'PRIPPISTREAM';
     document.getElementById('player-rewind').disabled = state.playerLive;
     document.getElementById('player-forward').disabled = state.playerLive;
     state.playerItem = item;
@@ -3817,12 +3540,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.upNextVisible = false;
     state.upNextCancelled = false;
     state.episodeTransitionScheduled = false;
-    state.trackCycleIndex = -1;
     hideUpNext(false);
     setPlayerText(playbackTitle(item), 'Connessione...');
     setPlayerProgress(0, 0, 0);
-    refreshPlayerActions();
-    updatePlayButton();
     showPlayerUi(true);
   }
 
@@ -3833,11 +3553,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (old) old.parentNode.removeChild(old);
     var frame = document.createElement('iframe');
     frame.id = 'embed-player';
-    frame.style.cssText = 'position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;border:0;background:#000;z-index:1';
+    frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;z-index:1';
     frame.src = url;
     frame.setAttribute('allowfullscreen', '');
-    frame.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-    frame.onload = function () { state.playing = true; updatePlayButton(); setPlayerText(playbackTitle(item), 'Player del provider'); showPlayerUi(true); };
+    frame.onload = function () { state.playing = true; setPlayerText(playbackTitle(item), 'Player del provider'); showPlayerUi(true); };
     player.insertBefore(frame, document.getElementById('avplay'));
   }
 
@@ -3847,18 +3566,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var htmlPreferred = /^(hls|progressive)$/i.test(manifest || '') || /\.m3u8(\?|$)/i.test(url || '');
     var hls = /^hls$/i.test(manifest || '') || /\.m3u8(\?|$)/i.test(url || '');
     var hasHeaders = headers && Object.keys(headers).length > 0;
-    var directHlsAvplay = hls && !hasHeaders && !!avplay;
-    var nativeHlsWithoutAvplay = hls && !hasHeaders && !avplay;
     state.htmlFallback = false;
-    // Sui TV Samsung reali AVPlay è più affidabile di MSE/Hls.js per HLS
-    // diretto: evita blocchi del resolver SC e la sola traccia audio Live.
-    if (directHlsAvplay) {
-      diagnostic('Player selezionato', 'AVPlay HLS diretto');
-      openAvPlayer(url, item, headers || {});
-      return;
-    }
-    if (hls && !nativeHlsWithoutAvplay && window.Hls && Hls.isSupported()) {
-      diagnostic('Player selezionato', 'HLS.js');
+    if (hls && (isEmulatorRuntime() || hasHeaders) && window.Hls && Hls.isSupported()) {
       openHlsJs(url, item, headers || {});
       return;
     }
@@ -3868,27 +3577,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       video.style.display = 'block';
       video.src = url;
       video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
-      video.onplaying = function () { state.playing = true; updatePlayButton(); state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); queueApplyTrackPreferences(100); showPlayerUi(false); };
-      video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
-      video.oncanplay = function () {
-        applyHtmlResume(video); queueApplyTrackPreferences(0);
-        var started = video.play();
-        state.playing = true;
-        updatePlayButton();
-        setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
-        startTimeline();
-        showPlayerUi(false);
-        if (started && started.catch) started.catch(function () {});
-      };
+      video.onplaying = function () { state.playing = true; state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); showPlayerUi(false); };
+      video.oncanplay = function () { applyHtmlResume(video); video.play(); };
       video.onended = handlePlaybackCompleted;
       video.onerror = function () {
         if (state.htmlFallback) return;
         state.htmlFallback = true;
         video.pause(); video.removeAttribute('src'); video.load();
-        if (hls && nativeHlsWithoutAvplay && window.Hls && Hls.isSupported()) {
-          openHlsJs(url, item, headers || {});
-          return;
-        }
         if (hls && isEmulatorRuntime()) {
           setPlayerText(playbackTitle(item), 'HLS non supportato dal player HTML dell\'emulatore');
           showPlayerUi(true);
@@ -3911,11 +3606,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (isEmulatorRuntime()) {
       return Promise.reject(new Error('ClearKey va verificato sulla TV Samsung reale; la sessione DRM chiude l\'emulatore'));
     }
-    var modernEme = typeof navigator.requestMediaKeySystemAccess === 'function' &&
-      window.HTMLMediaElement && typeof HTMLMediaElement.prototype.setMediaKeys === 'function';
-    if (document.documentElement.className.indexOf('legacy-tizen') >= 0 && !modernEme) {
-      return Promise.reject(new Error('ClearKey EME moderno non disponibile su Tizen 2.4'));
-    }
     if (!window.shaka || !window.shaka.Player) return Promise.reject(new Error('Runtime DASH/ClearKey non disponibile'));
     var pair = clearKeyPair(response);
     if (!pair) return Promise.reject(new Error('Chiave ClearKey non valida'));
@@ -3929,12 +3619,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
     video.onplaying = function () {
       state.playing = true;
-      updatePlayButton();
       setPlayerText(playbackTitle(item), 'In diretta');
       startTimeline();
-      queueApplyTrackPreferences(100);
       showPlayerUi(false);
     };
+    video.onerror = function () { setPlayerText(playbackTitle(item), 'Errore decoder ClearKey'); showPlayerUi(true); };
     var player = new window.shaka.Player(video), clearKeys = {};
     clearKeys[pair.kid] = pair.key;
     state.shakaInstance = player;
@@ -3951,51 +3640,18 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         });
       });
     }
-    player.addEventListener('trackschanged', function () { queueApplyTrackPreferences(0); });
-    player.addEventListener('adaptation', function () { queueApplyTrackPreferences(100); });
+    player.addEventListener('error', function (event) {
+      var detail = event && event.detail;
+      setPlayerText(playbackTitle(item), 'Errore DASH/DRM' + (detail && detail.code ? ' (' + detail.code + ')' : ''));
+      showPlayerUi(true);
+    });
     setPlayerText(playbackTitle(item), 'Preparazione DASH/ClearKey...');
-    return new Promise(function (resolve, reject) {
-      var settled = false, startTimer = null;
-      function normalizedError(error) {
-        var detail = error && error.detail, code = detail && detail.code || error && error.code;
-        return new Error(code ? 'DASH/DRM ' + code : error && error.message || 'DASH/DRM non riproducibile');
-      }
-      function fail(error) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(startTimer);
-        video.removeEventListener('playing', started);
-        reject(normalizedError(error));
-      }
-      function started() {
-        if (settled) return;
-        settled = true;
-        clearTimeout(startTimer);
-        video.removeEventListener('playing', started);
-        resolve();
-      }
-      video.addEventListener('playing', started);
-      video.onerror = function () {
-        setPlayerText(playbackTitle(item), 'Errore decoder ClearKey');
-        showPlayerUi(true);
-        fail(new Error('Errore decoder ClearKey'));
-      };
-      player.addEventListener('error', function (event) {
-        var error = normalizedError(event && event.detail || event);
-        setPlayerText(playbackTitle(item), error.message);
-        showPlayerUi(true);
-        fail(error);
-      });
-      try {
-        player.load(url).then(function () {
-          applyStoredTrackPreferences();
-          var playResult;
-          try { playResult = video.play(); } catch (error) { fail(error); return; }
-          if (playResult && playResult.catch) playResult.catch(fail);
-          startTimer = setTimeout(function () { fail(new Error('Timeout avvio DASH/DRM')); }, 10000);
-          if (!video.paused && video.readyState >= 2) started();
-        }).catch(fail);
-      } catch (error) { fail(error); }
+    return player.load(url).then(function () {
+      var started = video.play();
+      return started && started.then ? started : Promise.resolve();
+    }).catch(function (error) {
+      var detail = error && error.detail;
+      throw new Error(detail && detail.code ? 'DASH/DRM ' + detail.code : error.message || 'DASH/DRM non riproducibile');
     });
   }
 
@@ -4005,19 +3661,16 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.hlsFatalRetries = 0;
     surface.style.display = 'none';
     video.style.display = 'block';
-    video.autoplay = true;
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
     video.onplaying = function () {
       state.playing = true;
-      updatePlayButton();
       state.switchingEpisode = false;
       setPlayerText(playbackTitle(item), 'Riproduzione');
       startTimeline();
-      queueApplyTrackPreferences(100);
       showPlayerUi(false);
     };
     video.onended = handlePlaybackCompleted;
-    video.onerror = function () { failHlsJs(item, 'Errore del decoder video'); };
+    video.onerror = function () { failHlsJs(item, 'Errore del decoder video dell\'emulatore'); };
     var hls = new Hls({
       enableWorker: false,
       enableWebVTT: false,
@@ -4033,20 +3686,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       }
     });
     state.hlsInstance = hls;
-    video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
-    if (Hls.Events.AUDIO_TRACKS_UPDATED) hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function () { queueApplyTrackPreferences(0); });
-    if (Hls.Events.SUBTITLE_TRACKS_UPDATED) hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function () { queueApplyTrackPreferences(0); });
     hls.on(Hls.Events.MANIFEST_PARSED, function () {
       applyHtmlResume(video);
-      applyStoredTrackPreferences();
       var started;
       try { started = video.play(); } catch (error) { failHlsJs(item, error.message); return; }
-      state.playing = true;
-      updatePlayButton();
-      state.switchingEpisode = false;
-      setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
-      startTimeline();
-      showPlayerUi(false);
       if (started && started.catch) started.catch(function (error) { failHlsJs(item, error.message); });
     });
     hls.on(Hls.Events.ERROR, function (event, data) {
@@ -4069,7 +3712,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function failHlsJs(item, reason) {
     state.playing = false;
-    updatePlayButton();
     clearInterval(state.playerTick);
     setPlayerText(playbackTitle(item), 'Riproduzione non disponibile: ' + reason);
     showPlayerUi(true);
@@ -4085,9 +3727,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     video.style.display = 'block';
     video.src = url;
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
-    video.onplaying = function () { state.playing = true; updatePlayButton(); state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); queueApplyTrackPreferences(100); showPlayerUi(false); };
-    video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
-    video.oncanplay = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); video.play(); };
+    video.onplaying = function () { state.playing = true; state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); showPlayerUi(false); };
+    video.oncanplay = function () { applyHtmlResume(video); video.play(); };
     video.onended = handlePlaybackCompleted;
     video.onerror = function () { setPlayerText(playbackTitle(item), 'Formato video non supportato dal dispositivo'); showPlayerUi(true); };
     video.load();
@@ -4099,20 +3740,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (!avplay) { setPlayerText(playbackTitle(item), 'AVPlay non disponibile in questo ambiente'); showPlayerUi(true); return; }
     var video = document.getElementById('html-player'), surface = document.getElementById('avplay');
     state.playerEngine = 'avplay';
-    diagnostic('Player selezionato', 'AVPlay nativo');
     video.style.display = 'none';
     surface.style.display = 'block';
     try {
       avplay.setListener({
         onbufferingstart: function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); },
         onbufferingcomplete: function () { setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); },
-        oncurrentplaytime: function () {
-          if (state.pendingResumeMs >= CW_MIN_PROGRESS_MS) applyAvResume();
-        },
         onstreamcompleted: handlePlaybackCompleted,
         onerror: function (error) {
           state.playing = false;
-          updatePlayButton();
           if (fallbackToHtml(url, item)) return;
           setPlayerText(playbackTitle(item), 'Errore player: ' + error);
           showPlayerUi(true);
@@ -4125,10 +3761,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (headers && headers.Cookie) {
         try { avplay.setStreamingProperty('COOKIE', headers.Cookie); } catch (error) {}
       }
-      setAvplayFullscreen();
+      avplay.setDisplayRect(0, 0, 1920, 1080);
+      avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
       avplay.prepareAsync(function () {
-        setAvplayFullscreen();
-        applyStoredTrackPreferences();
         startAvPlayback(item);
       }, function (error) {
         if (fallbackToHtml(url, item)) return;
@@ -4136,93 +3771,38 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         showPlayerUi(true);
       });
     } catch (error) {
-      diagnostic('Errore AVPlay', error.message || String(error));
       setPlayerText(playbackTitle(item), 'Errore AVPlay: ' + error.message);
       showPlayerUi(true);
     }
   }
 
-  function setAvplayFullscreen() {
-    var physicalWidth = Number(window.screen && (window.screen.availWidth || window.screen.width)) || 0;
-    var physicalHeight = Number(window.screen && (window.screen.availHeight || window.screen.height)) || 0;
-    var viewportWidth = Math.max(1, physicalWidth || window.innerWidth || document.documentElement.clientWidth || 1920);
-    var viewportHeight = Math.max(1, physicalHeight || window.innerHeight || document.documentElement.clientHeight || 1080);
-    avplay.setDisplayRect(0, 0, viewportWidth, viewportHeight);
-    // Letterbox conserva il rapporto originale: niente zoom o immagine stirata.
-    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
-    diagnostic('Superficie AVPlay', viewportWidth + '×' + viewportHeight + ' letterbox');
-  }
-
   function applyHtmlResume(video) {
     var resume = Number(state.pendingResumeMs || 0);
-    if (resume < CW_MIN_PROGRESS_MS) { state.pendingResumeMs = 0; return false; }
-    if (!isFinite(video.duration) || video.duration <= 0) return false;
-    try {
-      video.currentTime = Math.max(0, Math.min(video.duration - 1, resume / 1000));
-      state.pendingResumeMs = 0;
-      return true;
-    } catch (error) { return false; }
+    state.pendingResumeMs = 0;
+    if (resume >= CW_MIN_PROGRESS_MS && isFinite(video.duration)) {
+      try { video.currentTime = Math.min(video.duration - 1, resume / 1000); } catch (error) {}
+    }
   }
 
   function startAvPlayback(item) {
     var resume = Number(state.pendingResumeMs || 0);
+    state.pendingResumeMs = 0;
     function started() {
       try { avplay.play(); } catch (error) {}
       state.playing = true;
-      updatePlayButton();
       state.switchingEpisode = false;
       setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
       startTimeline();
       showPlayerUi(false);
-      if (resume >= CW_MIN_PROGRESS_MS) setTimeout(applyAvResume, 200);
     }
-    if (resume < CW_MIN_PROGRESS_MS) state.pendingResumeMs = 0;
-    started();
-  }
-
-  function applyAvResume() {
-    var resume = Number(state.pendingResumeMs || 0);
-    if (resume < CW_MIN_PROGRESS_MS || state.playerEngine !== 'avplay' || !avplay) return false;
-    if (state.avResumeInFlight || state.avResumeAttempts >= 6) return false;
-    var target = resume, duration = 0, current = 0;
-    try {
-      duration = Number(avplay.getDuration() || 0);
-      current = Number(avplay.getCurrentTime() || 0);
-    } catch (error) {}
-    if (duration > 1000) target = Math.min(target, duration - 1000);
-    if (current >= Math.max(0, target - 12000)) {
-      state.pendingResumeMs = 0;
-      state.avResumeAttempts = 0;
-      return true;
-    }
-    state.avResumeInFlight = true;
-    state.avResumeAttempts += 1;
-    function retry() {
-      state.avResumeInFlight = false;
-      setTimeout(applyAvResume, 350);
-    }
-    function verify() {
-      state.avResumeInFlight = false;
-      var reached = 0;
-      try { reached = Number(avplay.getCurrentTime() || 0); } catch (error) {}
-      if (reached >= Math.max(0, target - 12000)) {
-        state.pendingResumeMs = 0;
-        state.avResumeAttempts = 0;
-        updateTimeline();
-      } else setTimeout(applyAvResume, 350);
-    }
-    try { avplay.seekTo(target, function () { setTimeout(verify, 250); }, retry); }
-    catch (error) { retry(); }
-    return true;
+    if (resume >= CW_MIN_PROGRESS_MS) {
+      try { avplay.seekTo(resume, started, started); } catch (error) { started(); }
+    } else started();
   }
 
   function setPlayerText(name, subtitle) {
     document.getElementById('player-title').textContent = name || '';
     document.getElementById('player-subtitle').textContent = subtitle || '';
-    if (state.playerLive) {
-      var program = state.playerItem && (state.playerItem.epg || state.playerItem.program || state.playerItem.nowPlaying || state.playerItem.now_playing);
-      document.getElementById('player-live-program').textContent = program || subtitle || '';
-    }
   }
 
   function timeLabel(milliseconds) {
@@ -4233,164 +3813,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function setPlayerProgress(current, duration, percent) {
-    percent = Math.max(0, Math.min(100, Number(percent) || 0));
-    document.getElementById('player-progress').style.width = percent + '%';
-    document.getElementById('player-thumb').style.left = percent + '%';
+    document.getElementById('player-progress').style.width = (percent || 0) + '%';
     document.getElementById('player-current').textContent = state.playerLive ? '' : timeLabel(current);
     document.getElementById('player-duration').textContent = state.playerLive ? 'LIVE' : timeLabel(duration);
-    document.getElementById('player-scrubber').setAttribute('aria-valuenow', String(Math.round(percent)));
-  }
-
-  function setActionVisible(id, visible) {
-    var element = document.getElementById(id);
-    if (!element) return;
-    element.className = visible ? '' : 'hidden';
-  }
-
-  function playerTrackInfo() {
-    var result = {audio: [], text: []}, video = document.getElementById('html-player');
-    try {
-      if (state.playerEngine === 'hlsjs' && state.hlsInstance) {
-        result.audio = state.hlsInstance.audioTracks || [];
-        result.text = state.hlsInstance.subtitleTracks || [];
-      } else if (state.playerEngine === 'shaka' && state.shakaInstance) {
-        if (state.shakaInstance.getAudioLanguagesAndRoles) result.audio = state.shakaInstance.getAudioLanguagesAndRoles() || [];
-        else if (state.shakaInstance.getVariantTracks) {
-          var seenAudio = {};
-          result.audio = (state.shakaInstance.getVariantTracks() || []).filter(function (track) {
-            var key = String(track.language || '') + ':' + String((track.audioRoles || [])[0] || '');
-            if (seenAudio[key]) return false;
-            seenAudio[key] = true;
-            return true;
-          });
-        }
-        result.text = state.shakaInstance.getTextTracks ? state.shakaInstance.getTextTracks() : [];
-      } else if (state.playerEngine === 'avplay' && avplay && avplay.getTotalTrackInfo) {
-        (avplay.getTotalTrackInfo() || []).forEach(function (track) {
-          if (String(track.type).toUpperCase() === 'AUDIO') result.audio.push(track);
-          if (String(track.type).toUpperCase() === 'TEXT') result.text.push(track);
-        });
-      } else {
-        if (video.audioTracks) result.audio = Array.prototype.slice.call(video.audioTracks);
-        if (video.textTracks) result.text = Array.prototype.slice.call(video.textTracks);
-      }
-    } catch (error) {}
-    return result;
-  }
-
-  function refreshPlayerActions() {
-    var episode = isEpisode(state.playerItem);
-    setActionVisible('player-episodes', !!(episode && state.episodeParent));
-    // Il pannello tracce resta raggiungibile anche nelle dirette: diversi
-    // manifest live espongono audio alternativi o sottotitoli soltanto dopo
-    // l'avvio, e nascondere il comando in anticipo li rendeva inaccessibili.
-    setActionVisible('player-tracks', true);
-    setActionVisible('player-next', !!(episode && nextEpisodeItem()));
-  }
-
-  function trackLabel(track, fallback) {
-    if (!track) return fallback;
-    var raw = track.label || track.language || track.lang || track.name || track.extra_info || fallback;
-    if (typeof raw === 'string' && raw.charAt(0) === '{') {
-      try {
-        var extra = JSON.parse(raw);
-        raw = extra.track_name || extra.label || extra.track_lang || extra.language || fallback;
-      } catch (error) {}
-    }
-    return String(raw || fallback);
-  }
-
-  function selectSubtitleTrack(tracks, index) {
-    var video = document.getElementById('html-player');
-    if (state.playerEngine === 'hlsjs' && state.hlsInstance) {
-      state.hlsInstance.subtitleTrack = index;
-      if (typeof state.hlsInstance.subtitleDisplay !== 'undefined') state.hlsInstance.subtitleDisplay = index >= 0;
-    } else if (state.playerEngine === 'shaka' && state.shakaInstance) {
-      state.shakaInstance.setTextTrackVisibility(index >= 0);
-      if (index >= 0 && state.shakaInstance.selectTextTrack) state.shakaInstance.selectTextTrack(tracks.text[index]);
-    } else if (state.playerEngine === 'avplay' && avplay) {
-      if (index >= 0) {
-        if (avplay.setSilentSubtitle) avplay.setSilentSubtitle(false);
-        avplay.selectTrack('TEXT', Number(tracks.text[index].index));
-      } else if (avplay.setSilentSubtitle) avplay.setSilentSubtitle(true);
-    } else if (video.textTracks) {
-      Array.prototype.slice.call(video.textTracks).forEach(function (track, trackIndex) {
-        track.mode = trackIndex === index ? 'showing' : 'disabled';
-      });
-    }
-  }
-
-  function selectAudioTrack(tracks, index) {
-    var video = document.getElementById('html-player'), track = tracks.audio[index];
-    if (!track) return;
-    if (state.playerEngine === 'hlsjs' && state.hlsInstance) state.hlsInstance.audioTrack = index;
-    else if (state.playerEngine === 'shaka' && state.shakaInstance && state.shakaInstance.selectAudioLanguage) {
-      state.shakaInstance.selectAudioLanguage(track.language || '', track.role || (track.audioRoles || [])[0] || '');
-    } else if (state.playerEngine === 'avplay' && avplay) avplay.selectTrack('AUDIO', Number(track.index));
-    else if (video.audioTracks) {
-      Array.prototype.slice.call(video.audioTracks).forEach(function (audio, trackIndex) { audio.enabled = trackIndex === index; });
-    }
-  }
-
-  function persistTrackPreference(patch) {
-    if (!mediaPrefs || state.playerLive || !state.playerItem) return false;
-    return mediaPrefs.set(localStorage, state.playerItem, state.episodeParent, patch, continueKey);
-  }
-
-  function applyStoredTrackPreferences() {
-    if (!mediaPrefs || !state.playerOpen || state.playerLive || !state.playerItem) return false;
-    var preferred = mediaPrefs.get(localStorage, state.playerItem, state.episodeParent, continueKey);
-    if (!preferred) return false;
-    var tracks = playerTrackInfo(), plan = mediaPrefs.selectionPlan(tracks.audio, tracks.text, preferred), changed = false;
-    try {
-      if (plan.audioIndex !== null) {
-        selectAudioTrack(tracks, plan.audioIndex);
-        changed = true;
-      }
-      if (plan.subtitleIndex !== null) {
-        selectSubtitleTrack(tracks, plan.subtitleIndex);
-        changed = true;
-      }
-    } catch (error) {}
-    return changed;
-  }
-
-  function queueApplyTrackPreferences(delay) {
-    clearTimeout(state.trackPreferenceTimer);
-    state.trackPreferenceTimer = setTimeout(function () {
-      state.trackPreferenceTimer = null;
-      applyStoredTrackPreferences();
-    }, Math.max(0, Number(delay || 0)));
-  }
-
-  function cyclePlayerTracks() {
-    var tracks = playerTrackInfo(), index, selected;
-    var subtitleChoices = tracks.text.length ? tracks.text.length + 1 : 0;
-    // Anche una sola traccia può essere scelta esplicitamente: così la lingua
-    // diventa la preferenza globale della serie quando episodi successivi ne
-    // espongono più di una.
-    var audioChoices = tracks.audio.length ? tracks.audio.length : 0;
-    var totalChoices = subtitleChoices + audioChoices;
-    try {
-      if (!totalChoices) {
-        toast('Nessuna traccia alternativa disponibile');
-      } else {
-        state.trackCycleIndex = (state.trackCycleIndex + 1) % totalChoices;
-      }
-      if (subtitleChoices && state.trackCycleIndex < subtitleChoices) {
-        index = state.trackCycleIndex - 1;
-        selectSubtitleTrack(tracks, index);
-        persistTrackPreference({sub_lang: index >= 0 ? mediaPrefs.trackPreference(tracks.text[index]) : mediaPrefs.SUBTITLES_OFF});
-        selected = index >= 0 ? trackLabel(tracks.text[index], 'Traccia ' + (index + 1)) : 'disattivati';
-        toast('Sottotitoli: ' + selected);
-      } else if (audioChoices) {
-        index = state.trackCycleIndex - subtitleChoices;
-        selectAudioTrack(tracks, index);
-        persistTrackPreference({audio_lang: mediaPrefs.trackPreference(tracks.audio[index])});
-        toast('Audio: ' + trackLabel(tracks.audio[index], 'Traccia ' + (index + 1)));
-      }
-    } catch (error) { toast('Cambio traccia non disponibile', true); }
-    showPlayerUi(true, 'player-tracks');
   }
 
   function updateTimeline() {
@@ -4401,8 +3826,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var current = isHtmlPlayerEngine() ? video.currentTime * 1000 : avplay.getCurrentTime();
       var percent = duration > 0 && isFinite(duration) ? Math.min(100, current / duration * 100) : 0;
       setPlayerProgress(current, duration, percent);
-      if (!state.playerLive && state.playerItem && state.pendingResumeMs < CW_MIN_PROGRESS_MS &&
-          Date.now() - state.lastProgressSave >= 5000) {
+      if (!state.playerLive && state.playerItem && Date.now() - state.lastProgressSave >= 5000) {
         state.lastProgressSave = Date.now();
         saveContinueWatching(state.playerItem, current, duration, false);
       }
@@ -4413,8 +3837,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function startTimeline() {
     clearInterval(state.playerTick);
     updateTimeline();
-    refreshPlayerActions();
-    setTimeout(refreshPlayerActions, 700);
     state.playerTick = setInterval(updateTimeline, 700);
   }
 
@@ -4426,7 +3848,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function updateUpNext(current, duration) {
     if (!isEpisode(state.playerItem) || state.upNextCancelled || !nextEpisodeItem() || !duration) return;
     var remaining = Math.max(0, duration - current);
-    if (!state.upNextVisible && cwFlow.shouldShowUpNext(current, duration, true, state.upNextCancelled, UP_NEXT_PROMPT_MS)) showUpNext();
+    if (!state.upNextVisible && current >= UP_NEXT_MIN_WATCHED_MS && remaining > 0 && remaining <= UP_NEXT_PROMPT_MS) showUpNext();
     if (!state.upNextVisible) return;
     var seconds = Math.max(0, Math.ceil(remaining / 1000));
     var timer = document.getElementById('up-next-timer'), progress = document.getElementById('up-next-progress');
@@ -4468,7 +3890,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function handlePlaybackCompleted() {
     if (!state.playerOpen || state.switchingEpisode || state.episodeTransitionScheduled) return;
     state.playing = false;
-    updatePlayButton();
     clearInterval(state.playerTick);
     if (isEpisode(state.playerItem) && nextEpisodeItem() && !state.upNextCancelled) {
       state.episodeTransitionScheduled = true;
@@ -4483,30 +3904,18 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     showPlayerUi(true);
   }
 
-  function isPlayerUiVisible() {
-    return document.getElementById('player-ui').className.indexOf('hidden') < 0;
-  }
-
-  function hidePlayerUi() {
-    if (!state.playerOpen || state.upNextVisible) return;
-    clearTimeout(state.playerUiTimer);
-    state.playerUiVisible = false;
-    document.getElementById('player-ui').className = 'player-ui hidden';
-    focusElement(document.getElementById('player'));
-  }
-
-  function showPlayerUi(focusControls, preferredId) {
+  function showPlayerUi(focusControls) {
     var ui = document.getElementById('player-ui');
     ui.className = 'player-ui';
-    state.playerUiVisible = true;
     clearTimeout(state.playerUiTimer);
     if (focusControls) {
-      var targetId = preferredId || state.playerFocusId || 'player-toggle';
-      var target = document.getElementById(targetId);
-      if (!target || !isVisible(target) || target.disabled) target = document.getElementById('player-toggle');
-      focusElement(target);
+      var active = document.activeElement;
+      if (!active || active.getAttribute('data-zone') !== 'player') focusElement(document.getElementById('player-toggle'));
     }
-    if (state.playing) state.playerUiTimer = setTimeout(hidePlayerUi, PLAYER_HIDE_MS);
+    if (state.playing) state.playerUiTimer = setTimeout(function () {
+      if (document.activeElement && document.activeElement.getAttribute('data-zone') === 'player') return;
+      ui.className = 'player-ui hidden';
+    }, PLAYER_HIDE_MS);
   }
 
   function currentPlayerTimes() {
@@ -4519,8 +3928,6 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function stopPlayerMedia() {
     var frame = document.getElementById('embed-player'), video = document.getElementById('html-player');
-    clearTimeout(state.trackPreferenceTimer);
-    state.trackPreferenceTimer = null;
     if (frame) frame.parentNode.removeChild(frame);
     if (state.hlsInstance) {
       try { state.hlsInstance.destroy(); } catch (error) {}
@@ -4531,29 +3938,24 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.shakaInstance = null;
     }
     try { video.pause(); video.removeAttribute('src'); video.load(); } catch (error) {}
-    video.onwaiting = video.onplaying = video.onloadedmetadata = video.oncanplay = video.onended = video.onerror = null;
+    video.onwaiting = video.onplaying = video.oncanplay = video.onended = video.onerror = null;
     video.style.display = 'none';
     try { avplay.stop(); avplay.close(); } catch (error) {}
     clearInterval(state.playerTick);
     document.getElementById('avplay').style.display = 'none';
   }
 
-  function closePlayer(skipRestore) {
+  function closePlayer() {
     if (!state.playerOpen && document.getElementById('player').className.indexOf('hidden') >= 0) return;
     var times = currentPlayerTimes();
-    if (state.playerItem && !state.playerLive && state.pendingResumeMs < CW_MIN_PROGRESS_MS) {
-      saveContinueWatching(state.playerItem, times.current, times.duration, false);
-    }
+    if (state.playerItem && !state.playerLive) saveContinueWatching(state.playerItem, times.current, times.duration, false);
     stopPlayerMedia();
     state.playerOpen = false;
-    window.__PRIPPI_PLAYBACK_ACTIVE__ = false;
     state.playing = false;
     state.playerLive = false;
     state.playerEngine = '';
     state.playerItem = null;
     state.pendingResumeMs = 0;
-    state.avResumeAttempts = 0;
-    state.avResumeInFlight = false;
     state.switchingEpisode = false;
     state.episodeTransitionScheduled = false;
     clearTimeout(state.episodeTransitionTimer);
@@ -4562,21 +3964,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.liveIndex = -1;
     state.liveRowTitle = '';
     state.liveSwitchBusy = false;
-    state.trackCycleIndex = -1;
     state.playRequestId += 1;
     hideUpNext(false);
     clearTimeout(state.playerUiTimer);
-    state.playerUiVisible = true;
     document.getElementById('player').className = 'player hidden';
     document.getElementById('player-ui').className = 'player-ui';
-    if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
-  }
-
-  function updatePlayButton() {
-    var button = document.getElementById('player-toggle');
-    if (!button) return;
-    button.className = state.playing ? 'player-toggle' : 'player-toggle paused';
-    button.setAttribute('aria-label', state.playing ? 'Pausa' : 'Riprendi');
+    setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
   }
 
   function togglePlayback() {
@@ -4585,12 +3978,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (state.playing) {
         if (isHtmlPlayerEngine()) video.pause(); else if (state.playerEngine === 'avplay') avplay.pause();
         state.playing = false;
+        document.getElementById('player-toggle').textContent = 'Riprendi';
         setPlayerText(document.getElementById('player-title').textContent, 'In pausa');
       } else {
         if (isHtmlPlayerEngine()) video.play(); else if (state.playerEngine === 'avplay') avplay.play();
         state.playing = true;
+        document.getElementById('player-toggle').textContent = 'Pausa';
       }
-      updatePlayButton();
       showPlayerUi(true);
     } catch (error) { toast('Comando player non disponibile', true); }
   }
@@ -4605,22 +3999,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         else avplay.jumpBackward(Math.abs(seconds) * 1000, function () {}, function () {});
       }
       updateTimeline();
-      showPlayerUi(false);
+      showPlayerUi(true);
     } catch (error) { toast('Seek non disponibile', true); }
-  }
-
-  function scrubTimeline(direction) {
-    var times = currentPlayerTimes();
-    var step = times.duration > 0 ? Math.max(10000, Math.min(60000, times.duration * .015)) : 10000;
-    seek(direction * step / 1000);
-    showPlayerUi(true, 'player-scrubber');
-  }
-
-  function openPlayerEpisodes() {
-    var parent = state.episodeParent;
-    if (!parent) { toast('Elenco episodi non disponibile'); return; }
-    closePlayer(true);
-    showEpisodes(parent);
   }
 
   function switchLive(direction, attempts, bypassDebounce) {
@@ -4643,28 +4023,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function isVisible(element) { return !!(element && element.offsetParent !== null); }
 
-  function resetNonScrollableRoots() {
-    try { window.scrollTo(0, 0); } catch (error) {}
-    [document.documentElement, document.body, document.querySelector('.main'), document.getElementById('content')]
-      .forEach(function (root) {
-        if (!root) return;
-        root.scrollLeft = 0;
-        root.scrollTop = 0;
-      });
-  }
-
-  function focusWithoutRootScroll(element) {
-    resetNonScrollableRoots();
-    try { element.focus({preventScroll: true}); }
-    catch (error) { element.focus(); }
-    resetNonScrollableRoots();
-    /* Alcuni WebKit Tizen applicano lo scroll nativo nel frame successivo. */
-    setTimeout(resetNonScrollableRoots, 0);
-  }
-
   function focusElement(element) {
     if (!isVisible(element)) return false;
-    focusWithoutRootScroll(element);
+    element.focus();
     rememberFocus(element);
     ensureVisible(element);
     return true;
@@ -4801,44 +4162,19 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return moveByGeometry(active, key, document.getElementById('content'));
   }
 
-  function visiblePlayerControls(ids) {
-    return ids.map(function (id) { return document.getElementById(id); }).filter(function (element) {
-      return isVisible(element) && !element.disabled;
+  function playerButtons() {
+    return ['player-rewind', 'player-toggle', 'player-forward'].map(function (id) { return document.getElementById(id); }).filter(function (button) {
+      return isVisible(button) && !button.disabled;
     });
-  }
-
-  function playerRows() {
-    var rows = [visiblePlayerControls(['player-exit']), visiblePlayerControls(['player-rewind', 'player-toggle', 'player-forward'])];
-    if (!state.playerLive) rows.push(visiblePlayerControls(['player-scrubber']));
-    rows.push(visiblePlayerControls(['player-episodes', 'player-tracks', 'player-next']));
-    return rows.filter(function (row) { return row.length; });
   }
 
   function movePlayerFocus(key) {
-    var active = document.activeElement, rows = playerRows(), rowIndex = -1, columnIndex = -1;
-    if (active === document.getElementById('player-scrubber') && (key === 37 || key === 39)) {
-      scrubTimeline(key === 37 ? -1 : 1);
-      return true;
-    }
-    rows.some(function (row, index) {
-      var found = row.indexOf(active);
-      if (found < 0) return false;
-      rowIndex = index;
-      columnIndex = found;
-      return true;
-    });
-    if (rowIndex < 0) return focusElement(document.getElementById('player-toggle'));
-    if (key === 37 && columnIndex > 0) return focusElement(rows[rowIndex][columnIndex - 1]);
-    if (key === 39 && columnIndex < rows[rowIndex].length - 1) return focusElement(rows[rowIndex][columnIndex + 1]);
-    if (key === 38 && rowIndex > 0) {
-      var upper = rows[rowIndex - 1], upperIndex = Math.round(columnIndex * Math.max(0, upper.length - 1) / Math.max(1, rows[rowIndex].length - 1));
-      return focusElement(upper[upperIndex]);
-    }
-    if (key === 40 && rowIndex < rows.length - 1) {
-      var lower = rows[rowIndex + 1], lowerIndex = Math.round(columnIndex * Math.max(0, lower.length - 1) / Math.max(1, rows[rowIndex].length - 1));
-      return focusElement(lower[lowerIndex]);
-    }
-    return true;
+    var buttons = playerButtons(), active = document.activeElement, index = buttons.indexOf(active);
+    if (key === 37 && index > 0) return focusElement(buttons[index - 1]);
+    if (key === 39 && index >= 0 && index < buttons.length - 1) return focusElement(buttons[index + 1]);
+    if (key === 38) return focusElement(document.getElementById('player-exit'));
+    if (key === 40 && active === document.getElementById('player-exit')) return focusElement(document.getElementById('player-toggle'));
+    return false;
   }
 
   function registerKeys() {
@@ -4849,10 +4185,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     } catch (error) {}
   }
 
-  document.addEventListener('focusin', function (event) {
-    rememberFocus(event.target);
-    if (event.target && /^player-/.test(event.target.id || '') && event.target.hasAttribute('data-focusable')) state.playerFocusId = event.target.id;
-  });
+  document.addEventListener('focusin', function (event) { rememberFocus(event.target); });
 
   document.addEventListener('keydown', function (event) {
     var key = event.keyCode, active;
@@ -4867,32 +4200,26 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         }
         if (key === 13 && active && active.getAttribute('data-zone') === 'upnext') { event.preventDefault(); active.click(); return; }
       }
-      if (isPlayerUiVisible()) showPlayerUi(false);
+      showPlayerUi(false);
       if (state.playerLive && (key === 427 || key === 428)) {
         event.preventDefault();
         switchLive(key === 427 ? 1 : -1, 0, false);
         return;
       }
-      if (key === 413) { event.preventDefault(); closePlayer(); return; }
-      if (key === 10009 || key === 27 || key === 8) {
-        event.preventDefault();
-        if (isPlayerUiVisible()) hidePlayerUi(); else closePlayer();
-        return;
-      }
+      if (key === 10009 || key === 27 || key === 8 || key === 413) { event.preventDefault(); closePlayer(); return; }
       if (key === 412) { event.preventDefault(); seek(-10); return; }
       if (key === 417) { event.preventDefault(); seek(10); return; }
       if (key === 415 || key === 19 || key === 10252) { event.preventDefault(); togglePlayback(); return; }
       if (key === 37 || key === 38 || key === 39 || key === 40) {
         event.preventDefault();
-        if (!isPlayerUiVisible()) showPlayerUi(true);
+        if (document.getElementById('player-ui').className.indexOf('hidden') >= 0) showPlayerUi(true);
         else movePlayerFocus(key);
         return;
       }
       if (key === 13) {
         event.preventDefault();
-        if (!isPlayerUiVisible()) { showPlayerUi(true); return; }
         active = document.activeElement;
-        if (active && /^player-/.test(active.getAttribute('data-zone') || '')) active.click(); else togglePlayback();
+        if (active && active.getAttribute('data-zone') === 'player') active.click(); else togglePlayback();
       }
       return;
     }
@@ -4925,11 +4252,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     document.getElementById('player-rewind').onclick = function () { seek(-10); };
     document.getElementById('player-toggle').onclick = togglePlayback;
     document.getElementById('player-forward').onclick = function () { seek(10); };
-    document.getElementById('player-exit').onclick = function () { closePlayer(false); };
-    document.getElementById('player-scrubber').onclick = function () { showPlayerUi(true, 'player-scrubber'); };
-    document.getElementById('player-episodes').onclick = openPlayerEpisodes;
-    document.getElementById('player-tracks').onclick = cyclePlayerTracks;
-    document.getElementById('player-next').onclick = switchToNextEpisode;
+    document.getElementById('player-exit').onclick = closePlayer;
     document.getElementById('up-next-play').onclick = switchToNextEpisode;
     document.getElementById('up-next-cancel').onclick = function () { hideUpNext(true); showPlayerUi(true); };
     openPage('home');
