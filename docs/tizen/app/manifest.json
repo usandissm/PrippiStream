@@ -1,21 +1,25 @@
 {
   "schema": 1,
   "channel": "stable",
-  "version": "0.7.0",
-  "revision": 12,
-  "published_at": "2026-08-03T15:20:12.818850Z",
+  "version": "0.9.7",
+  "revision": 25,
+  "published_at": "2026-09-13T11:07:59.770293Z",
   "files": {
     "html": {
       "url": "app.html",
-      "sha256": "f00859ef9c68532b790f0c017af89d89f29030a6a381bdd4906466774c2b51a1"
+      "sha256": "d62c2586191092420eb2aee0ace72598c2bf158cd6e30feb016390cc7ebf7fc7"
     },
     "css": {
       "url": "app.css",
-      "sha256": "03e9439e0da415a121e69d84b1bf328e642e1dc363f7e8fa198dea19de358604"
+      "sha256": "d9fb0f28a4a3cb6868c2582a788407ca104e19f8bcba164dcfff59c567a8ef59"
+    },
+    "legacy_css": {
+      "url": "app-legacy.css",
+      "sha256": "787c7cdd109a173280b09d975dd4258796ec3aef36973304950781030e0262df"
     },
     "js": {
       "url": "app.js",
-      "sha256": "2dea7224967da1c1bb50cfd7f511bd6259025ba85985cd9bcff902ac9fe2c049"
+      "sha256": "a5446a32b5035a6e9261c6ef82ce98dbaebba58c6f1b26ca1276de21a95952f8"
     }
   }
 }
