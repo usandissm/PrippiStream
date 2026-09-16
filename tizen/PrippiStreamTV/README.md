@@ -2,6 +2,14 @@
 
 Applicazione Samsung Tizen per la TV `QE55Q60AAUXZT`.
 
+## Compatibilità del pacchetto
+
+Ogni prossimo rilascio sarà un unico `.wgt` Web TV, con requisito minimo
+**Tizen 2.0** (`required_version="2.0"`). Il pacchetto Web non incorpora
+codice nativo ARM/x86: lo stesso WGT è quindi già multi-arch e installabile su
+entrambe le architetture supportate da Tizen Studio. Non creare pacchetti
+separati per architettura.
+
 La UI Web TV usa focus D-pad, firma Samsung, pacchetto `.wgt` e player nativo
 AVPlay. Il pacchetto `0.7.0` contiene inoltre il bootstrap OTA: all'avvio
 controlla il canale GitHub, verifica gli SHA-256, conserva l'ultima versione
