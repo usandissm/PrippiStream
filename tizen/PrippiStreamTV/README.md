@@ -10,6 +10,12 @@ codice nativo ARM/x86: lo stesso WGT è quindi già multi-arch e installabile su
 entrambe le architetture supportate da Tizen Studio. Non creare pacchetti
 separati per architettura.
 
+Per la futura variante nativa `.tpk`, il piano versionato
+[`tpk-build-targets.json`](tpk-build-targets.json) richiede già Tizen 2.0 e i
+target `armv7l` e `i586`. Quando verrà aggiunto il progetto nativo, la pipeline
+dovrà compilare entrambi prima del packaging multi-arch; il relativo
+`tizen-manifest.xml` sarà creato insieme al progetto nativo, non nella Web app.
+
 La UI Web TV usa focus D-pad, firma Samsung, pacchetto `.wgt` e player nativo
 AVPlay. Il pacchetto `0.7.0` contiene inoltre il bootstrap OTA: all'avvio
 controlla il canale GitHub, verifica gli SHA-256, conserva l'ultima versione

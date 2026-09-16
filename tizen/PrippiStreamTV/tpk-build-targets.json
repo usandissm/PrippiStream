@@ -1,0 +1,16 @@
+{
+  "schema": "prippistream.tizen.tpk-build-targets/v1",
+  "status": "planned",
+  "packageType": "tpk",
+  "minimumTizenVersion": "2.0",
+  "architectures": [
+    "armv7l",
+    "i586"
+  ],
+  "distribution": "multi-architecture",
+  "notes": [
+    "Quando verrà creato il progetto nativo, la pipeline dovrà compilare entrambi i target prima del packaging.",
+    "Il manifest nativo tizen-manifest.xml dovrà dichiarare compatibilità minima Tizen 2.0 e gli stessi privilegi del WGT quando applicabili.",
+    "Non generare un TPK finché non esisterà un progetto nativo TV completo e firmabile."
+  ]
+}
