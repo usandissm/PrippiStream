@@ -3883,6 +3883,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # ── Track progress while playing ──
         actual_time            = 0.0
         total_time             = 0.0
+        # getTotalTime() is supplied by the active Kodi player, not by the
+        # catalogue.  Adaptive streams can nevertheless report a short buffered
+        # duration while their timeline is still settling.  Do not let one such
+        # sample mark an episode as completed or show Up Next early.
+        _stable_total_time     = 0.0
+        _total_candidate       = 0.0
+        _total_candidate_hits  = 0
         last_save              = -30.0
         _upnext_triggered      = False
         _upnext_user_cancelled = False
@@ -3895,7 +3902,22 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         while player.isPlaying() and self._alive and not monitor.abortRequested():
             try:
                 actual_time = player.getTime()
-                total_time  = player.getTotalTime()
+                _reported_total = player.getTotalTime()
+                # A usable duration must leave enough room after the current
+                # position.  Require three near-identical reports before it is
+                # trusted, then keep the greatest stable value for this playback.
+                if _reported_total > actual_time + 30:
+                    if abs(_reported_total - _total_candidate) <= 3:
+                        _total_candidate_hits += 1
+                    else:
+                        _total_candidate = _reported_total
+                        _total_candidate_hits = 1
+                    if _total_candidate_hits >= 3:
+                        if _total_candidate > _stable_total_time:
+                            _stable_total_time = _total_candidate
+                            logger.info('[UpNext] stable player duration: %.0fs' %
+                                        _stable_total_time)
+                total_time = _stable_total_time
             except Exception:
                 pass
 

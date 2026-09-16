@@ -1143,6 +1143,20 @@ def play_video(item, strm=False, force_direct=False, autoplay=False):
         xlistitem.setArt({"thumb": item.contentThumbnail if item.contentThumbnail else item.thumbnail})
         set_infolabels(xlistitem, item, True)
 
+        # Some on-demand catalogues advertise every non-DRM asset as HLS.  In
+        # practice an unavailable item can resolve to a plain MP4 (for example
+        # ``video_no_available.mp4``).  Sending that file to inputstream.adaptive
+        # as HLS produces the misleading "#EXTM3U tag not found" error instead of
+        # letting Kodi handle it as a normal direct video.  Detect only explicit
+        # video-file URLs here: genuine .m3u8 streams keep the adaptive path.
+        _plain_url = mediaurl.split('|', 1)[0].split('?', 1)[0].lower()
+        _direct_video_ext = ('.mp4', '.m4v', '.mov', '.avi', '.mkv', '.webm')
+        if (hls or item.manifest == 'hls') and _plain_url.endswith(_direct_video_ext):
+            logger.info('[Playback] direct video misclassified as HLS: %s' % _plain_url)
+            hls = False
+            if item.manifest == 'hls':
+                item.manifest = ''
+
         # if it is a video in mpd format, the listitem is configured to play it ith the inpustreamaddon addon implemented in Kodi 17
 
         # ── Determine preferred audio language for inputstream.adaptive ──

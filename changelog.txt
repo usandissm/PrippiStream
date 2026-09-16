@@ -1,3 +1,7 @@
+## Prossima
+- Riproduzione Rai più robusta: i file video diretti non vengono più interpretati come playlist HLS.
+- Episodio successivo più affidabile: la durata viene confermata dal player prima di aggiornare la cronologia o mostrare l'avviso finale.
+
 ## 2.0.1
 
 PrippiStream 2.0
