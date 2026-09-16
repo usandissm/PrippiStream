@@ -5250,18 +5250,36 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     xbmcgui.NOTIFICATION_WARNING, 3000)
                 return
 
-            # Find requested episode
+            # Find the requested episode.  TMDB gives us a per-season episode
+            # number, while some upstream catalogues serialise ``number`` as a
+            # string (or repeat it after a block).  Normalise the explicit
+            # number first, then use its 1-based position only when the source
+            # really contains that many episodes.  Never fall back to E01: that
+            # turned a request for Gumball E11+ into a silent playback of E01.
             ep     = None
             ep_idx = 0
             for _ei, _ep in enumerate(episodes):
-                if _ep.get('number') == ep_num:
+                try:
+                    _source_num = int(_ep.get('number', 0) or 0)
+                except (TypeError, ValueError):
+                    _source_num = 0
+                if _source_num == ep_num:
                     ep     = _ep
                     ep_idx = _ei
                     break
-            if not ep:
-                # Fall back to first episode
-                ep     = episodes[0]
-                ep_idx = 0
+            if ep is None and 0 < ep_num <= len(episodes):
+                ep_idx = ep_num - 1
+                ep     = episodes[ep_idx]
+                logger.info('[EpisodeMap] S%02dE%02d matched by source position %d'
+                            % (season_num, ep_num, ep_idx + 1))
+            if ep is None:
+                logger.error('[EpisodeMap] missing S%02dE%02d: source has %d episodes'
+                             % (season_num, ep_num, len(episodes)))
+                xbmcgui.Dialog().notification(
+                    u'PrippiStream',
+                    u'Episodio non disponibile nella fonte selezionata',
+                    xbmcgui.NOTIFICATION_WARNING, 3500)
+                return
 
             title_id   = str(chosen.get('title_id', ''))
             next_ep_ctx = {
