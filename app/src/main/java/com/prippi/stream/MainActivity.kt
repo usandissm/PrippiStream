@@ -18,7 +18,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.Image
@@ -2696,6 +2698,7 @@ private fun BrowseMacroCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloadsPage(
     entries: List<DownloadEntry>,
@@ -2757,7 +2760,24 @@ private fun DownloadsPage(
                 previousSampleAt = now
             }
             ListItem(
-                headlineContent = { Text(entry.displayTitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                headlineContent = {
+                    Text(
+                        entry.displayTitle,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                        // The running title is equally useful with touch and a TV remote:
+                        // it starts only when its container is too narrow to show it all.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .basicMarquee(
+                                iterations = Int.MAX_VALUE,
+                                animationMode = androidx.compose.foundation.MarqueeAnimationMode.Immediately,
+                                initialDelayMillis = 1200,
+                                delayMillis = 900,
+                            ),
+                    )
+                },
                 supportingContent = {
                     Column {
                         val status = when (entry.status) {

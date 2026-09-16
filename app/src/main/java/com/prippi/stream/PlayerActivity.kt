@@ -63,7 +63,6 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.TrackSelectionDialogBuilder
 import com.prippi.stream.playback.LiveChannelSwitchPolicy
 import org.json.JSONArray
 import org.json.JSONObject
@@ -1476,22 +1475,71 @@ open class PlayerActivity : ComponentActivity() {
         runCatching {
             val initialParameters = current.trackSelectionParameters
             val initialOverrides = initialParameters.overrides.filterKeys { it.type == trackType }
-            TrackSelectionDialogBuilder(this, title, groups) { disabled, overrides ->
-                val parameters = current.trackSelectionParameters.buildUpon()
-                    .setTrackTypeDisabled(trackType, disabled)
-                    .clearOverridesOfType(trackType)
-                    .apply { overrides.values.forEach(::addOverride) }
-                    .build()
-                persistTrackPreference(trackType, disabled, overrides, groups)
-                current.trackSelectionParameters = parameters
-                setTelevisionControlsVisible(true)
+            data class TrackChoice(
+                val label: String,
+                val disabled: Boolean = false,
+                val group: androidx.media3.common.TrackGroup? = null,
+                val trackIndex: Int? = null,
+            )
+
+            val choices = buildList {
+                if (trackType == C.TRACK_TYPE_TEXT) {
+                    add(TrackChoice("Sottotitoli disattivati", disabled = true))
+                }
+                add(TrackChoice("Automatico"))
+                groups.forEachIndexed { groupIndex, group ->
+                    (0 until group.length)
+                        .filter(group::isTrackSupported)
+                        .forEach { trackIndex ->
+                            val format = group.getTrackFormat(trackIndex)
+                            val trackLabel = format.label
+                                ?.takeIf(String::isNotBlank)
+                                ?: format.language
+                                    ?.takeIf(String::isNotBlank)
+                                ?: "Traccia ${groupIndex + 1}.${trackIndex + 1}"
+                            add(
+                                TrackChoice(
+                                    label = trackLabel,
+                                    group = group.mediaTrackGroup,
+                                    trackIndex = trackIndex,
+                                ),
+                            )
+                        }
+                }
             }
-                .setIsDisabled(trackType in initialParameters.disabledTrackTypes)
-                .setOverrides(initialOverrides)
-                .setAllowAdaptiveSelections(true)
-                .setAllowMultipleOverrides(false)
-                .setShowDisableOption(trackType == C.TRACK_TYPE_TEXT)
-                .build()
+            val selectedIndex = choices.indexOfFirst { choice ->
+                when {
+                    choice.disabled -> trackType in initialParameters.disabledTrackTypes
+                    choice.group == null ->
+                        trackType !in initialParameters.disabledTrackTypes && initialOverrides.isEmpty()
+                    else -> initialOverrides[choice.group]
+                        ?.trackIndices
+                        ?.contains(choice.trackIndex) == true
+                }
+            }.takeIf { it >= 0 } ?: if (trackType == C.TRACK_TYPE_TEXT &&
+                trackType in initialParameters.disabledTrackTypes
+            ) 0 else choices.indexOfFirst { it.group == null }
+
+            // A single-choice dialog applies on the first press/tap and closes
+            // immediately. This is the same interaction for touch and D-pad.
+            android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setSingleChoiceItems(choices.map(TrackChoice::label).toTypedArray(), selectedIndex) { dialog, index ->
+                    val choice = choices[index]
+                    val override = choice.group?.let { group ->
+                        TrackSelectionOverride(group, listOfNotNull(choice.trackIndex))
+                    }
+                    val overrides = override?.let { mapOf(it.mediaTrackGroup to it) }.orEmpty()
+                val parameters = current.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(trackType, choice.disabled)
+                    .clearOverridesOfType(trackType)
+                    .apply { override?.let(::addOverride) }
+                    .build()
+                    persistTrackPreference(trackType, choice.disabled, overrides, groups)
+                    current.trackSelectionParameters = parameters
+                    dialog.dismiss()
+                    setTelevisionControlsVisible(true)
+                }
                 .apply {
                     setOnDismissListener { setTelevisionControlsVisible(true) }
                 }

@@ -7611,7 +7611,7 @@ def _fetch_main_rows(progress_cb=None):
 
 
 def _fetch_archive_rows(host, homepage_data, existing_count,
-                        max_workers=None, max_new_rows=None):
+                        max_workers=None, max_new_rows=None, progress_cb=None):
     """Fetch curated + genre archive rows (the slower second phase).
 
     Runs after the main rows are already on-screen so it never delays the
@@ -7675,6 +7675,11 @@ def _fetch_archive_rows(host, homepage_data, existing_count,
                 if items:
                     with lock:
                         result_dict[idx] = (label, items)
+                    if progress_cb:
+                        try:
+                            progress_cb(idx, label, items)
+                        except Exception:
+                            pass
                     logger.info('[PrippiHome] archive row "%s": %d items' % (label, len(items)))
                 else:
                     logger.error('[PrippiHome] archive "%s": 0 items after build' % label)

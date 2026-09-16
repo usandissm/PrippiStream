@@ -130,6 +130,9 @@ object PythonBridge {
     fun home(): List<JSONObject> =
         toList(bridge.callAttr("home_json").toString())
 
+    fun homeProgressState(): JSONObject =
+        JSONObject(bridge.callAttr("home_progress_state_json").toString())
+
     fun liveRows(): List<JSONObject> =
         toList(bridge.callAttr("live_rows_json").toString())
 

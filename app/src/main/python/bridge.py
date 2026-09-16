@@ -775,6 +775,17 @@ def _home_payload(sc_rows, anime_items=None):
     ]
 
 
+def home_progress_state():
+    """Stato leggero per il polling Compose della Home progressiva."""
+    with _HOME_LOCK:
+        rows = _HOME_STATE.get('sc_rows') or []
+        return {
+            'loading': bool(_HOME_STATE.get('loading')),
+            'complete': bool(_HOME_STATE.get('complete')),
+            'rows': len(rows),
+        }
+
+
 def _fill_home_background(host, homepage_data, main_rows, need_archive):
     """Seconda fase Home 2.0: archivio SC e AnimeUnity, senza bloccare la UI."""
     from platformcode import logger, prippihome
@@ -807,6 +818,31 @@ def _fill_home_background(host, homepage_data, main_rows, need_archive):
                 except Exception as exc:
                     logger.error('[bridge] home refresh main rows: %s' % exc)
 
+            archive_rows_by_index = {}
+            archive_lock = threading.Lock()
+
+            def publish_archive_row(index, label, items):
+                """Espone subito ciascuna riga SC pronta, senza aspettare tutte.
+
+                L'ordine finale viene comunque normalizzato dalla raccolta
+                completa qui sotto; durante il caricamento preferiamo mostrare
+                risultati utilizzabili alla Home vuota.
+                """
+                with archive_lock:
+                    archive_rows_by_index[index] = (label, items)
+                    partial = [archive_rows_by_index[key]
+                               for key in sorted(archive_rows_by_index)]
+                known = {str(label or '').strip().lower() for label, _items in sc_rows}
+                visible = list(sc_rows)
+                for partial_label, partial_items in partial:
+                    key = str(partial_label or '').strip().lower()
+                    if key and key not in known:
+                        visible.append((partial_label, partial_items))
+                        known.add(key)
+                with _HOME_LOCK:
+                    _HOME_STATE['sc_rows'] = visible
+                    _HOME_STATE['anime_items'] = _HOME_STATE.get('anime_items')
+
             archive_rows = prippihome._fetch_archive_rows(
                 host,
                 homepage_data,
@@ -814,6 +850,7 @@ def _fill_home_background(host, homepage_data, main_rows, need_archive):
                 max_workers=2 if _APP_LOW_POWER else None,
                 max_new_rows=None,
                 existing_labels=[label for label, _items in sc_rows],
+                progress_cb=publish_archive_row,
             ) or []
             known = {
                 str(label or '').strip().lower()
@@ -1822,6 +1859,10 @@ def fhd_for_4k_json(item_json='{}'):
 
 def home_json():
     return json.dumps(home(), ensure_ascii=False)
+
+
+def home_progress_state_json():
+    return json.dumps(home_progress_state(), ensure_ascii=False)
 
 
 def live_rows_json():

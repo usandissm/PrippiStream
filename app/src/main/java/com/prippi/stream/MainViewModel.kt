@@ -246,12 +246,19 @@ class MainViewModel(
             // Il backend low-power lavora con un pool ridotto ma completa
             // comunque tutte le righe. Continuiamo a raccogliere lo snapshot
             // progressivo finché quel lavoro serializzato può terminare.
-            repeat(if (lowPowerDevice) 24 else 8) {
+            // Non usiamo un numero fisso di refresh: su una rete lenta la
+            // raccolta dei generi SC puo' superare 20 secondi. Fermiamo il
+            // polling solo quando Python conferma che la seconda fase e' finita.
+            repeat(if (lowPowerDevice) 60 else 72) {
                 delay(if (lowPowerDevice) 5_000 else 2_500)
                 if (uiPaused || state.page != AppPage.HOME) return@launch
-                val rows = runCatching {
-                    withContext(Dispatchers.IO) { repository.loadHome() }
-                }.getOrDefault(emptyList())
+                val (rows, progress) = runCatching {
+                    withContext(Dispatchers.IO) {
+                        repository.loadHome() to repository.homeProgressState()
+                    }
+                }.getOrElse {
+                    emptyList<HomeRow>() to org.json.JSONObject().put("complete", false)
+                }
                 if (rows.isNotEmpty() && state.page == AppPage.HOME) {
                     withContext(Dispatchers.IO) {
                         homeSnapshotStore.save(rows)
@@ -264,6 +271,7 @@ class MainViewModel(
                         )
                     }
                 }
+                if (progress.optBoolean("complete", false)) return@launch
             }
         }
     }

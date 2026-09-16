@@ -7,6 +7,8 @@ class ContentRepository {
     fun loadHome(): List<HomeRow> =
         PythonBridge.home().map { HomeRow.fromJson(it) }.filter { it.items.isNotEmpty() }
 
+    fun homeProgressState(): JSONObject = PythonBridge.homeProgressState()
+
     fun liveRows(): List<HomeRow> =
         PythonBridge.liveRows().map { HomeRow.fromJson(it) }.filter { it.items.isNotEmpty() }
 
