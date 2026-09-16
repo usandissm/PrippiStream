@@ -849,7 +849,6 @@ def _fill_home_background(host, homepage_data, main_rows, need_archive):
                 len(sc_rows),
                 max_workers=2 if _APP_LOW_POWER else None,
                 max_new_rows=None,
-                existing_labels=[label for label, _items in sc_rows],
                 progress_cb=publish_archive_row,
             ) or []
             known = {
