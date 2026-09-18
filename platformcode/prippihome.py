@@ -5276,8 +5276,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 logger.error('[EpisodeMap] missing S%02dE%02d: source has %d episodes'
                              % (season_num, ep_num, len(episodes)))
                 xbmcgui.Dialog().notification(
-                    u'PrippiStream',
-                    u'Episodio non disponibile nella fonte selezionata',
+                    u'Episodio non disponibile',
+                    u"L'episodio selezionato non è disponibile al momento.",
                     xbmcgui.NOTIFICATION_WARNING, 3500)
                 return
 
