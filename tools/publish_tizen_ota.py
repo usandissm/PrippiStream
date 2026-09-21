@@ -21,6 +21,10 @@ PRIVATE_FILES = {
     "private_iptv_accounts": APP / "data" / "iptv_accounts.json",
     "private_iptv_catalog": APP / "data" / "iptv_catalog.json",
 }
+PRIVATE_OUTPUT_NAMES = {
+    "private_iptv_accounts": "data/iptv_accounts.json",
+    "private_iptv_catalog": "data/iptv_catalog.json",
+}
 
 
 def read(path: Path) -> str:
@@ -73,17 +77,17 @@ def main() -> None:
 
     files = {"html": body, "css": css, "legacy_css": legacy_css, "js": js}
     for key, path in PRIVATE_FILES.items():
-        if not path.is_file():
+        source = path if path.is_file() else OUT / PRIVATE_OUTPUT_NAMES[key]
+        if not source.is_file():
             raise RuntimeError(f"File privato OTA mancante: {path}")
-        json.loads(read(path))
-        files[key] = read(path)
+        json.loads(read(source))
+        files[key] = read(source)
     names = {
         "html": "app.html",
         "css": "app.css",
         "legacy_css": "app-legacy.css",
         "js": "app.js",
-        "private_iptv_accounts": "data/iptv_accounts.json",
-        "private_iptv_catalog": "data/iptv_catalog.json",
+        **PRIVATE_OUTPUT_NAMES,
     }
     OUT.mkdir(parents=True, exist_ok=True)
     for key, content in files.items():
