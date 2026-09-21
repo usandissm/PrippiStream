@@ -17,6 +17,10 @@ OUT = ROOT / "docs" / "tizen" / "app"
 LIVE_CATALOG = APP / "data" / "live_channels.json"
 LIVE_LOGOS = APP / "assets" / "tv_logos"
 LIVE_LOGO_URL = "https://raw.githubusercontent.com/usandissm/PrippiStream/main/docs/tizen/app/logos/"
+PRIVATE_FILES = {
+    "private_iptv_accounts": APP / "data" / "iptv_accounts.json",
+    "private_iptv_catalog": APP / "data" / "iptv_catalog.json",
+}
 
 
 def read(path: Path) -> str:
@@ -39,9 +43,13 @@ def main() -> None:
     index = read(APP / "index.html")
     body = extract(r"<body[^>]*>(.*?)</body>", index, "body HTML")
     inline_styles = re.findall(r"<style[^>]*>(.*?)</style>", index, re.IGNORECASE | re.DOTALL)
-    css_parts = [read(APP / "css" / "style.css").rstrip()]
-    css_parts.extend(style.strip() for style in inline_styles if style.strip())
-    css = "\n\n".join(css_parts) + "\n"
+    inline_css = [style.strip() for style in inline_styles if style.strip()]
+    css = "\n\n".join([read(APP / "css" / "style.css").rstrip(), *inline_css]) + "\n"
+    legacy_css = "\n\n".join([
+        read(APP / "css" / "style-legacy.css").rstrip(),
+        read(APP / "css" / "legacy-layout.css").rstrip(),
+        *inline_css,
+    ]) + "\n"
     live_catalog = json.loads(read(LIVE_CATALOG))
     live_bootstrap = (
         "window.__PRIPPI_LIVE_LOGO_BASE__ = "
@@ -63,11 +71,25 @@ def main() -> None:
         + read(APP / "main.js")
     )
 
-    files = {"html": body, "css": css, "js": js}
-    names = {"html": "app.html", "css": "app.css", "js": "app.js"}
+    files = {"html": body, "css": css, "legacy_css": legacy_css, "js": js}
+    for key, path in PRIVATE_FILES.items():
+        if not path.is_file():
+            raise RuntimeError(f"File privato OTA mancante: {path}")
+        json.loads(read(path))
+        files[key] = read(path)
+    names = {
+        "html": "app.html",
+        "css": "app.css",
+        "legacy_css": "app-legacy.css",
+        "js": "app.js",
+        "private_iptv_accounts": "data/iptv_accounts.json",
+        "private_iptv_catalog": "data/iptv_catalog.json",
+    }
     OUT.mkdir(parents=True, exist_ok=True)
     for key, content in files.items():
-        (OUT / names[key]).write_text(content, encoding="utf-8", newline="\n")
+        destination = OUT / names[key]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8", newline="\n")
     logo_out = OUT / "logos"
     if logo_out.exists():
         shutil.rmtree(logo_out)

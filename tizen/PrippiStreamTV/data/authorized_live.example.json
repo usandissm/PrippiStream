@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "channels": [
+    {
+      "row": "sport",
+      "title": "Nome canale",
+      "logo": "nome_logo.png",
+      "plot": "Descrizione o guida programmi opzionale.",
+      "sources": [
+        {
+          "url": "https://example.invalid/live/master.m3u8",
+          "manifest_type": "hls",
+          "headers": {
+            "Referer": "https://example.invalid/"
+          },
+          "drm_type": "",
+          "license_url": "",
+          "license_headers": {}
+        }
+      ]
+    }
+  ]
+}

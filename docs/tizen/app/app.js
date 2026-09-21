@@ -741,7 +741,7 @@ A("EncryptionSchemePolyfills",bp);function en(){Qo();Zo()}bp.install=en;"undefin
 //# sourceMappingURL=shaka-player.compiled.map
 
 window.__PRIPPI_LIVE_LOGO_BASE__ = "https://raw.githubusercontent.com/usandissm/PrippiStream/main/docs/tizen/app/logos/";
-window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltitle":"Rai 1","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai1","video_url":"https://www.raiplay.it/dirette/rai1.json","callSign":"","id":"","plot":"","logo":"rai_1.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"850"},{"channel":"raiplay","title":"Rai 2","fulltitle":"Rai 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai2","video_url":"https://www.raiplay.it/dirette/rai2.json","callSign":"","id":"","plot":"","logo":"rai_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"851"},{"channel":"raiplay","title":"Rai 3","fulltitle":"Rai 3","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai3","video_url":"https://www.raiplay.it/dirette/rai3.json","callSign":"","id":"","plot":"","logo":"rai_3.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"852"},{"channel":"raiplay","title":"Rai 4","fulltitle":"Rai 4","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4","video_url":"https://www.raiplay.it/dirette/rai4.json","callSign":"","id":"","plot":"","logo":"rai_4.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"853"},{"channel":"raiplay","title":"Rai 5","fulltitle":"Rai 5","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai5","video_url":"https://www.raiplay.it/dirette/rai5.json","callSign":"","id":"","plot":"","logo":"rai_5.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Movie","fulltitle":"Rai Movie","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raimovie","video_url":"https://www.raiplay.it/dirette/raimovie.json","callSign":"","id":"","plot":"","logo":"rai_movie.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Premium","fulltitle":"Rai Premium","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raipremium","video_url":"https://www.raiplay.it/dirette/raipremium.json","callSign":"","id":"","plot":"","logo":"rai_premium.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"858"},{"channel":"raiplay","title":"Rai Gulp","fulltitle":"Rai Gulp","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raigulp","video_url":"https://www.raiplay.it/dirette/raigulp.json","callSign":"","id":"","plot":"","logo":"rai_gulp.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Yoyo","fulltitle":"Rai Yoyo","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiyoyo","video_url":"https://www.raiplay.it/dirette/raiyoyo.json","callSign":"","id":"","plot":"","logo":"rai_yoyo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai News 24","fulltitle":"Rai News 24","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rainews24","video_url":"https://www.raiplay.it/dirette/rainews24.json","callSign":"","id":"","plot":"","logo":"rai_news_24.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Storia","fulltitle":"Rai Storia","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raistoria","video_url":"https://www.raiplay.it/dirette/raistoria.json","callSign":"","id":"","plot":"","logo":"rai_storia.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Sport","fulltitle":"Rai Sport","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raisport","video_url":"https://www.raiplay.it/dirette/raisport.json","callSign":"","id":"","plot":"","logo":"rai_sport.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Scuola","fulltitle":"Rai Scuola","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiscuola","video_url":"https://www.raiplay.it/dirette/raiscuola.json","callSign":"","id":"","plot":"","logo":"rai_scuola.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Radio 2","fulltitle":"Rai Radio 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rairadio2","video_url":"https://www.raiplay.it/dirette/rairadio2.json","callSign":"","id":"","plot":"","logo":"rai_radio_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai 4K","fulltitle":"Rai 4K","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4k","video_url":"https://www.raiplay.it/dirette/rai4k.json","callSign":"","id":"","plot":"","logo":"rai_4k.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Rete 4","fulltitle":"Rete 4","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/rete4","video_url":"","callSign":"R4","id":"","plot":"","logo":"rete_4.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/r4.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Canale 5","fulltitle":"Canale 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/canale5","video_url":"","callSign":"C5","id":"","plot":"","logo":"canale_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/c5.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"856"},{"channel":"mediasetplay","title":"Italia 1","fulltitle":"Italia 1","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia1","video_url":"","callSign":"I1","id":"","plot":"","logo":"italia_1.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i1.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"854"},{"channel":"mediasetplay","title":"20","fulltitle":"20","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/20mediaset","video_url":"","callSign":"LB","id":"","plot":"","logo":"20.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/20.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Iris","fulltitle":"Iris","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/iris","video_url":"","callSign":"KI","id":"","plot":"","logo":"iris.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/iris.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"La 5","fulltitle":"La 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/la5","video_url":"","callSign":"KA","id":"","plot":"","logo":"la_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la5.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Cine34","fulltitle":"Cine34","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/cine34","video_url":"","callSign":"B6","id":"","plot":"","logo":"cine34.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b6.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Focus","fulltitle":"Focus","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/focus","video_url":"","callSign":"FU","id":"","plot":"","logo":"focus.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/focus.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Top Crime","fulltitle":"Top Crime","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/topcrime","video_url":"","callSign":"LT","id":"","plot":"","logo":"top_crime.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/topcrime.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Boing","fulltitle":"Boing","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"KB","id":"","plot":"","logo":"boing.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/kb.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Cartoonito","fulltitle":"Cartoonito","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"LA","id":"","plot":"","logo":"cartoonito.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Mediaset Extra","fulltitle":"Mediaset Extra","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/mediasetextra","video_url":"","callSign":"KQ","id":"","plot":"","logo":"mediaset_extra.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/extra.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Italia 2","fulltitle":"Italia 2","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia2","video_url":"","callSign":"I2","id":"","plot":"","logo":"italia_2.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i2.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Radio 105","fulltitle":"Radio 105","contentType":"video","action":"findvideos","url":"https://105.net","video_url":"","callSign":"EC","id":"","plot":"","logo":"radio_105.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ec.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"R101tv","fulltitle":"R101tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/r101_b7871969","video_url":"","callSign":"ER","id":"","plot":"","logo":"r101tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/er.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"RMC","fulltitle":"RMC","contentType":"video","action":"findvideos","url":"https://radiomontecarlo.net","video_url":"","callSign":"BB","id":"","plot":"","logo":"rmc.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/bb.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Virgin Radio","fulltitle":"Virgin Radio","contentType":"video","action":"findvideos","url":"https://virginradio.it","video_url":"","callSign":"EW","id":"","plot":"","logo":"virgin_radio.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ew.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"27 Twentyseven","fulltitle":"27 Twentyseven","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/","video_url":"","callSign":"TS","id":"","plot":"","logo":"27_twentyseven.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ts.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"TGCOM","fulltitle":"TGCOM","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/grandefratello","video_url":"","callSign":"B3","id":"","plot":"","logo":"tgcom.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b3.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Radio Norba Tv","fulltitle":"Radio Norba Tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/radio-norba-tv","video_url":"","callSign":"U4","id":"","plot":"","logo":"radio_norba_tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/u4.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"la7","title":"La7","fulltitle":"La7","contentType":"video","action":"findvideos","url":"https://www.la7.it/dirette-tv","video_url":"","callSign":"","id":"","plot":"","logo":"la7.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"855"},{"channel":"la7","title":"La7d","fulltitle":"La7d","contentType":"video","action":"findvideos","url":"https://www.la7.it/live-la7cinema","video_url":"","callSign":"","id":"","plot":"","logo":"la7d.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Real Time","fulltitle":"Real Time","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/real-time","video_url":"","callSign":"","id":"310","plot":"","logo":"real_time.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"NOVE","fulltitle":"NOVE","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/nove","video_url":"","callSign":"","id":"311","plot":"","logo":"nove.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Giallo","fulltitle":"Giallo","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/giallo","video_url":"","callSign":"","id":"312","plot":"","logo":"giallo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"K2","fulltitle":"K2","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/k2","video_url":"","callSign":"","id":"313","plot":"","logo":"k2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Frisbee","fulltitle":"Frisbee","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/frisbee","video_url":"","callSign":"","id":"314","plot":"","logo":"frisbee.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Motor Trend","fulltitle":"Motor Trend","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/motor-trend","video_url":"","callSign":"","id":"315","plot":"","logo":"motor_trend.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Discovery Channel","fulltitle":"Discovery Channel","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/discovery-channel","video_url":"","callSign":"","id":"316","plot":"","logo":"discovery_channel.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Food Network","fulltitle":"Food Network","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/food-network","video_url":"","callSign":"","id":"319","plot":"","logo":"food_network.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Home and Garden TV","fulltitle":"Home and Garden TV","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/hgtv","video_url":"","callSign":"","id":"322","plot":"","logo":"home_and_garden_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"DMAX","fulltitle":"DMAX","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/dmax","video_url":"","callSign":"","id":"323","plot":"","logo":"dmax.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Warner Tv","fulltitle":"Warner Tv","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/wbtv-italy","video_url":"","callSign":"","id":"866","plot":"","logo":"warner_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"sportchannels","title":"Sky Cinema Uno","fulltitle":"Sky Cinema Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemauno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemauno","sport_fs":null,"daddy_code":"860"},{"channel":"sportchannels","title":"Sky Cinema Action","fulltitle":"Sky Cinema Action","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemaaction.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemaaction","sport_fs":null,"daddy_code":"861"},{"channel":"sportchannels","title":"Sky Cinema Collection","fulltitle":"Sky Cinema Collection","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemacollection.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemacollection","sport_fs":null,"daddy_code":"859"},{"channel":"sportchannels","title":"Sky Cinema Comedy","fulltitle":"Sky Cinema Comedy","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemacomedy.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemacomedy","sport_fs":null,"daddy_code":"862"},{"channel":"sportchannels","title":"Sky Cinema Drama","fulltitle":"Sky Cinema Drama","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemadrama.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemadrama","sport_fs":null,"daddy_code":"867"},{"channel":"sportchannels","title":"Sky Cinema Family","fulltitle":"Sky Cinema Family","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemafamily.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemafamily","sport_fs":null,"daddy_code":"865"},{"channel":"sportchannels","title":"Sky Cinema Romance","fulltitle":"Sky Cinema Romance","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemaromance.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemaromance","sport_fs":null,"daddy_code":"864"},{"channel":"sportchannels","title":"Sky Cinema Suspense","fulltitle":"Sky Cinema Suspense","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemasuspense.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemasuspense","sport_fs":null,"daddy_code":"868"},{"channel":"sportchannels","title":"Sky TG24","fulltitle":"Sky TG24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"tg24.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"tg24","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Uno","fulltitle":"Sky Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyuno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyuno","sport_fs":null,"daddy_code":"881"},{"channel":"sportchannels","title":"Sky Uno +1","fulltitle":"Sky Uno +1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyunoplus.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyunoplus","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Atlantic","fulltitle":"Sky Atlantic","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyatlantic.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyatlantic","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Serie","fulltitle":"Sky Serie","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyserie.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyserie","sport_fs":null,"daddy_code":"880"},{"channel":"sportchannels","title":"Sky Collection","fulltitle":"Sky Collection","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycollection.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycollection","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Investigation","fulltitle":"Sky Investigation","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyinvestigation.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyinvestigation","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Adventure","fulltitle":"Sky Adventure","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyadventure.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyadventure","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Crime","fulltitle":"Sky Crime","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycrime.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycrime","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Documentaries","fulltitle":"Sky Documentaries","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skydocumentaries.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skydocumentaries","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Nature","fulltitle":"Sky Nature","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skynature.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skynature","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"History","fulltitle":"History","contentType":"video","action":"live_channel","url":"","plot":"","logo":"historychannel.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"historychannel","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Comedy Central","fulltitle":"Comedy Central","contentType":"video","action":"live_channel","url":"","plot":"","logo":"comedycentral.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"comedycentral","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Arte","fulltitle":"Sky Arte","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyarte.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyarte","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"MTV","fulltitle":"MTV","contentType":"video","action":"live_channel","url":"","plot":"","logo":"mtv.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"mtv","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Cinema Uno +24","fulltitle":"Sky Cinema Uno +24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"863.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"daddy","sport_par":"863","sport_fs":null,"daddy_code":"863"},{"channel":"sportchannels","title":"Sky Sport 24","fulltitle":"Sky Sport 24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport24.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport24","sport_fs":"SkySport24IT","daddy_code":"869"},{"channel":"sportchannels","title":"Sky Sport Uno","fulltitle":"Sky Sport Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportuno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportuno","sport_fs":"SkySportUnoIT","daddy_code":"461"},{"channel":"sportchannels","title":"Sky Sport Calcio","fulltitle":"Sky Sport Calcio","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportcalcio.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportcalcio","sport_fs":"SkySportCalcioIT","daddy_code":"870"},{"channel":"sportchannels","title":"Sky Sport Arena","fulltitle":"Sky Sport Arena","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportarena.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportarena","sport_fs":"SkySportArenaIT","daddy_code":"462"},{"channel":"sportchannels","title":"Sky Sport Max","fulltitle":"Sky Sport Max","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmax.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmax","sport_fs":"SkySportMaxIT","daddy_code":"460"},{"channel":"sportchannels","title":"Sky Sport Tennis","fulltitle":"Sky Sport Tennis","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysporttennis.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysporttennis","sport_fs":"SkySportTennisIT","daddy_code":"576"},{"channel":"sportchannels","title":"Sky Sport F1","fulltitle":"Sky Sport F1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportf1.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportf1","sport_fs":"SkySportF1IT","daddy_code":"577"},{"channel":"sportchannels","title":"Sky Sport MotoGP","fulltitle":"Sky Sport MotoGP","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmotogp.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmotogp","sport_fs":"SkySportMotoGPIT","daddy_code":"575"},{"channel":"sportchannels","title":"Sky Sport Basket","fulltitle":"Sky Sport Basket","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportbasket.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportbasket","sport_fs":"SkySportBasketIT","daddy_code":"875"},{"channel":"sportchannels","title":"Sky Sport Golf","fulltitle":"Sky Sport Golf","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportgolf.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportgolf","sport_fs":"SkySportGolfIT","daddy_code":"574"},{"channel":"sportchannels","title":"Sky Sport Legend","fulltitle":"Sky Sport Legend","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportlegend.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportlegend","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport Mix","fulltitle":"Sky Sport Mix","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmix.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmix","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 251","fulltitle":"Sky Sport 251","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport251.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport251","sport_fs":null,"daddy_code":"871"},{"channel":"sportchannels","title":"Sky Sport 252","fulltitle":"Sky Sport 252","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport252.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport252","sport_fs":null,"daddy_code":"872"},{"channel":"sportchannels","title":"Sky Sport 253","fulltitle":"Sky Sport 253","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport253.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport253","sport_fs":null,"daddy_code":"873"},{"channel":"sportchannels","title":"Sky Sport 254","fulltitle":"Sky Sport 254","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport254.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport254","sport_fs":null,"daddy_code":"874"},{"channel":"sportchannels","title":"Sky Sport 255","fulltitle":"Sky Sport 255","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport255.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport255","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 256","fulltitle":"Sky Sport 256","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport256.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport256","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 257","fulltitle":"Sky Sport 257","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport257.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport257","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 259","fulltitle":"Sky Sport 259","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport259.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport259","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Zona DAZN","fulltitle":"Zona DAZN","contentType":"video","action":"live_channel","url":"","plot":"","logo":"ZonaDAZN.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"freeshot","sport_par":"ZonaDAZN","sport_fs":null,"daddy_code":"877"},{"channel":"sportchannels","title":"FIFA+ Italia","fulltitle":"FIFA+ Italia","contentType":"video","action":"live_channel","url":"","plot":"","logo":"FIFAplus_Italy.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"iptvorg","sport_par":"FIFA+ Italy","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Eurosport 1","fulltitle":"Eurosport 1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"878.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"878","sport_fs":null,"daddy_code":"878"},{"channel":"sportchannels","title":"Eurosport 2","fulltitle":"Eurosport 2","contentType":"video","action":"live_channel","url":"","plot":"","logo":"879.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"879","sport_fs":null,"daddy_code":"879"},{"channel":"sportchannels","title":"Rai Sport","fulltitle":"Rai Sport","contentType":"video","action":"live_channel","url":"","plot":"","logo":"882.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"882","sport_fs":null,"daddy_code":"882"}];
+window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltitle":"Rai 1","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai1","video_url":"https://www.raiplay.it/dirette/rai1.json","callSign":"","id":"","plot":"","logo":"rai_1.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"850"},{"channel":"raiplay","title":"Rai 2","fulltitle":"Rai 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai2","video_url":"https://www.raiplay.it/dirette/rai2.json","callSign":"","id":"","plot":"","logo":"rai_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"851"},{"channel":"raiplay","title":"Rai 3","fulltitle":"Rai 3","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai3","video_url":"https://www.raiplay.it/dirette/rai3.json","callSign":"","id":"","plot":"","logo":"rai_3.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"852"},{"channel":"raiplay","title":"Rai 4","fulltitle":"Rai 4","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4","video_url":"https://www.raiplay.it/dirette/rai4.json","callSign":"","id":"","plot":"","logo":"rai_4.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"853"},{"channel":"raiplay","title":"Rai 5","fulltitle":"Rai 5","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai5","video_url":"https://www.raiplay.it/dirette/rai5.json","callSign":"","id":"","plot":"","logo":"rai_5.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Movie","fulltitle":"Rai Movie","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raimovie","video_url":"https://www.raiplay.it/dirette/raimovie.json","callSign":"","id":"","plot":"","logo":"rai_movie.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Premium","fulltitle":"Rai Premium","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raipremium","video_url":"https://www.raiplay.it/dirette/raipremium.json","callSign":"","id":"","plot":"","logo":"rai_premium.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"858"},{"channel":"raiplay","title":"Rai Gulp","fulltitle":"Rai Gulp","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raigulp","video_url":"https://www.raiplay.it/dirette/raigulp.json","callSign":"","id":"","plot":"","logo":"rai_gulp.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Yoyo","fulltitle":"Rai Yoyo","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiyoyo","video_url":"https://www.raiplay.it/dirette/raiyoyo.json","callSign":"","id":"","plot":"","logo":"rai_yoyo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai News 24","fulltitle":"Rai News 24","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rainews24","video_url":"https://www.raiplay.it/dirette/rainews24.json","callSign":"","id":"","plot":"","logo":"rai_news_24.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Storia","fulltitle":"Rai Storia","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raistoria","video_url":"https://www.raiplay.it/dirette/raistoria.json","callSign":"","id":"","plot":"","logo":"rai_storia.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Sport","fulltitle":"Rai Sport","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raisport","video_url":"https://www.raiplay.it/dirette/raisport.json","callSign":"","id":"","plot":"","logo":"rai_sport.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Scuola","fulltitle":"Rai Scuola","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/raiscuola","video_url":"https://www.raiplay.it/dirette/raiscuola.json","callSign":"","id":"","plot":"","logo":"rai_scuola.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai Radio 2","fulltitle":"Rai Radio 2","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rairadio2","video_url":"https://www.raiplay.it/dirette/rairadio2.json","callSign":"","id":"","plot":"","logo":"rai_radio_2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"raiplay","title":"Rai 4K","fulltitle":"Rai 4K","contentType":"video","action":"findvideos","url":"https://www.raiplay.it/dirette/rai4k","video_url":"https://www.raiplay.it/dirette/rai4k.json","callSign":"","id":"","plot":"","logo":"rai_4k.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Rete 4","fulltitle":"Rete 4","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/rete4","video_url":"","callSign":"R4","id":"","plot":"","logo":"rete_4.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/r4.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Canale 5","fulltitle":"Canale 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/canale5","video_url":"","callSign":"C5","id":"","plot":"","logo":"canale_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/c5.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"856"},{"channel":"mediasetplay","title":"Italia 1","fulltitle":"Italia 1","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia1","video_url":"","callSign":"I1","id":"","plot":"","logo":"italia_1.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i1.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"854"},{"channel":"mediasetplay","title":"20","fulltitle":"20","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/20mediaset","video_url":"","callSign":"LB","id":"","plot":"","logo":"20.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/20.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Iris","fulltitle":"Iris","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/iris","video_url":"","callSign":"KI","id":"","plot":"","logo":"iris.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/iris.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"La 5","fulltitle":"La 5","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/la5","video_url":"","callSign":"KA","id":"","plot":"","logo":"la_5.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la5.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Cine34","fulltitle":"Cine34","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/cine34","video_url":"","callSign":"B6","id":"","plot":"","logo":"cine34.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b6.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Focus","fulltitle":"Focus","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/focus","video_url":"","callSign":"FU","id":"","plot":"","logo":"focus.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/focus.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Top Crime","fulltitle":"Top Crime","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/topcrime","video_url":"","callSign":"LT","id":"","plot":"","logo":"top_crime.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/topcrime.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Boing","fulltitle":"Boing","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"KB","id":"","plot":"","logo":"boing.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/kb.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Cartoonito","fulltitle":"Cartoonito","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/kids","video_url":"","callSign":"LA","id":"","plot":"","logo":"cartoonito.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/la.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Mediaset Extra","fulltitle":"Mediaset Extra","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/mediasetextra","video_url":"","callSign":"KQ","id":"","plot":"","logo":"mediaset_extra.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/extra.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Italia 2","fulltitle":"Italia 2","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/italia2","video_url":"","callSign":"I2","id":"","plot":"","logo":"italia_2.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/i2.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Radio 105","fulltitle":"Radio 105","contentType":"video","action":"findvideos","url":"https://105.net","video_url":"","callSign":"EC","id":"","plot":"","logo":"radio_105.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ec.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"R101tv","fulltitle":"R101tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/r101_b7871969","video_url":"","callSign":"ER","id":"","plot":"","logo":"r101tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/er.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"RMC","fulltitle":"RMC","contentType":"video","action":"findvideos","url":"https://radiomontecarlo.net","video_url":"","callSign":"BB","id":"","plot":"","logo":"rmc.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/bb.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Virgin Radio","fulltitle":"Virgin Radio","contentType":"video","action":"findvideos","url":"https://virginradio.it","video_url":"","callSign":"EW","id":"","plot":"","logo":"virgin_radio.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ew.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"27 Twentyseven","fulltitle":"27 Twentyseven","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/","video_url":"","callSign":"TS","id":"","plot":"","logo":"27_twentyseven.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/ts.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"TGCOM","fulltitle":"TGCOM","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/programmi-tv/grandefratello","video_url":"","callSign":"B3","id":"","plot":"","logo":"tgcom.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/b3.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"mediasetplay","title":"Radio Norba Tv","fulltitle":"Radio Norba Tv","contentType":"video","action":"findvideos","url":"https://mediasetplay.mediaset.it/radio-norba-tv","video_url":"","callSign":"U4","id":"","plot":"","logo":"radio_norba_tv.png","thumbnail":"https://static2.mediasetplay.mediaset.it/Mediaset_Italia_Production_-_Main/u4.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"la7","title":"La7","fulltitle":"La7","contentType":"video","action":"findvideos","url":"https://www.la7.it/dirette-tv","video_url":"","callSign":"","id":"","plot":"","logo":"la7.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":"855"},{"channel":"la7","title":"La7d","fulltitle":"La7d","contentType":"video","action":"findvideos","url":"https://www.la7.it/live-la7cinema","video_url":"","callSign":"","id":"","plot":"","logo":"la7d.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Real Time","fulltitle":"Real Time","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/real-time","video_url":"","callSign":"","id":"310","plot":"","logo":"real_time.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"NOVE","fulltitle":"NOVE","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/nove","video_url":"","callSign":"","id":"311","plot":"","logo":"nove.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Giallo","fulltitle":"Giallo","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/giallo","video_url":"","callSign":"","id":"312","plot":"","logo":"giallo.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"K2","fulltitle":"K2","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/k2","video_url":"","callSign":"","id":"313","plot":"","logo":"k2.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Frisbee","fulltitle":"Frisbee","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/frisbee","video_url":"","callSign":"","id":"314","plot":"","logo":"frisbee.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Motor Trend","fulltitle":"Motor Trend","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/motor-trend","video_url":"","callSign":"","id":"315","plot":"","logo":"motor_trend.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Discovery Channel","fulltitle":"Discovery Channel","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/discovery-channel","video_url":"","callSign":"","id":"316","plot":"","logo":"discovery_channel.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Food Network","fulltitle":"Food Network","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/food-network","video_url":"","callSign":"","id":"319","plot":"","logo":"food_network.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Home and Garden TV","fulltitle":"Home and Garden TV","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/hgtv","video_url":"","callSign":"","id":"322","plot":"","logo":"home_and_garden_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"DMAX","fulltitle":"DMAX","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/dmax","video_url":"","callSign":"","id":"323","plot":"","logo":"dmax.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"discoveryplus","title":"Warner Tv","fulltitle":"Warner Tv","contentType":"video","action":"findvideos","url":"https://www.discoveryplus.com/canali/wbtv-italy","video_url":"","callSign":"","id":"866","plot":"","logo":"warner_tv.png","thumbnail":"https://raw.githubusercontent.com/Stream4me/media/master/themes/default/thumb_on_the_air.png","is_live_channel":true,"isLive":true,"live_row":"tv","daddy_code":""},{"channel":"sportchannels","title":"Sky Cinema Uno","fulltitle":"Sky Cinema Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemauno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemauno","sport_fs":null,"daddy_code":"860"},{"channel":"sportchannels","title":"Sky Cinema Action","fulltitle":"Sky Cinema Action","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemaaction.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemaaction","sport_fs":null,"daddy_code":"861"},{"channel":"sportchannels","title":"Sky Cinema Collection","fulltitle":"Sky Cinema Collection","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemacollection.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemacollection","sport_fs":null,"daddy_code":"859"},{"channel":"sportchannels","title":"Sky Cinema Comedy","fulltitle":"Sky Cinema Comedy","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemacomedy.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemacomedy","sport_fs":null,"daddy_code":"862"},{"channel":"sportchannels","title":"Sky Cinema Drama","fulltitle":"Sky Cinema Drama","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemadrama.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemadrama","sport_fs":null,"daddy_code":"867"},{"channel":"sportchannels","title":"Sky Cinema Family","fulltitle":"Sky Cinema Family","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemafamily.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemafamily","sport_fs":null,"daddy_code":"865"},{"channel":"sportchannels","title":"Sky Cinema Romance","fulltitle":"Sky Cinema Romance","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemaromance.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemaromance","sport_fs":null,"daddy_code":"864"},{"channel":"sportchannels","title":"Sky Cinema Suspense","fulltitle":"Sky Cinema Suspense","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycinemasuspense.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycinemasuspense","sport_fs":null,"daddy_code":"868"},{"channel":"sportchannels","title":"Sky TG24","fulltitle":"Sky TG24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"tg24.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"tg24","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Uno","fulltitle":"Sky Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyuno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyuno","sport_fs":null,"daddy_code":"881"},{"channel":"sportchannels","title":"Sky Uno +1","fulltitle":"Sky Uno +1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyunoplus.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyunoplus","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Atlantic","fulltitle":"Sky Atlantic","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyatlantic.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyatlantic","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Serie","fulltitle":"Sky Serie","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyserie.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyserie","sport_fs":null,"daddy_code":"880"},{"channel":"sportchannels","title":"Sky Collection","fulltitle":"Sky Collection","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycollection.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycollection","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Investigation","fulltitle":"Sky Investigation","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyinvestigation.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyinvestigation","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Adventure","fulltitle":"Sky Adventure","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyadventure.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyadventure","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Crime","fulltitle":"Sky Crime","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skycrime.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skycrime","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Documentaries","fulltitle":"Sky Documentaries","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skydocumentaries.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skydocumentaries","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Nature","fulltitle":"Sky Nature","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skynature.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skynature","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"History","fulltitle":"History","contentType":"video","action":"live_channel","url":"","plot":"","logo":"historychannel.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"historychannel","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Comedy Central","fulltitle":"Comedy Central","contentType":"video","action":"live_channel","url":"","plot":"","logo":"comedycentral.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"comedycentral","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Arte","fulltitle":"Sky Arte","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skyarte.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"skyarte","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"MTV","fulltitle":"MTV","contentType":"video","action":"live_channel","url":"","plot":"","logo":"mtv.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"sky","sport_par":"mtv","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Cinema Uno +24","fulltitle":"Sky Cinema Uno +24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"863.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sky","sport_kind":"daddy","sport_par":"863","sport_fs":null,"daddy_code":"863"},{"channel":"sportchannels","title":"Sky Sport 24","fulltitle":"Sky Sport 24","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport24.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport24","sport_fs":"SkySport24IT","daddy_code":"869"},{"channel":"sportchannels","title":"Sky Sport Uno","fulltitle":"Sky Sport Uno","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportuno.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportuno","sport_fs":"SkySportUnoIT","daddy_code":"461"},{"channel":"sportchannels","title":"Sky Sport Calcio","fulltitle":"Sky Sport Calcio","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportcalcio.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportcalcio","sport_fs":"SkySportCalcioIT","daddy_code":"870"},{"channel":"sportchannels","title":"Sky Sport Arena","fulltitle":"Sky Sport Arena","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportarena.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportarena","sport_fs":"SkySportArenaIT","daddy_code":"462"},{"channel":"sportchannels","title":"Sky Sport Max","fulltitle":"Sky Sport Max","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmax.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmax","sport_fs":"SkySportMaxIT","daddy_code":"460"},{"channel":"sportchannels","title":"Sky Sport Tennis","fulltitle":"Sky Sport Tennis","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysporttennis.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysporttennis","sport_fs":"SkySportTennisIT","daddy_code":"576"},{"channel":"sportchannels","title":"Sky Sport F1","fulltitle":"Sky Sport F1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportf1.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportf1","sport_fs":"SkySportF1IT","daddy_code":"577"},{"channel":"sportchannels","title":"Sky Sport MotoGP","fulltitle":"Sky Sport MotoGP","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmotogp.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmotogp","sport_fs":"SkySportMotoGPIT","daddy_code":"575"},{"channel":"sportchannels","title":"Sky Sport Basket","fulltitle":"Sky Sport Basket","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportbasket.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportbasket","sport_fs":"SkySportBasketIT","daddy_code":"875"},{"channel":"sportchannels","title":"Sky Sport Golf","fulltitle":"Sky Sport Golf","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportgolf.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportgolf","sport_fs":"SkySportGolfIT","daddy_code":"574"},{"channel":"sportchannels","title":"Sky Sport Legend","fulltitle":"Sky Sport Legend","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportlegend.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportlegend","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport Mix","fulltitle":"Sky Sport Mix","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysportmix.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysportmix","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 251","fulltitle":"Sky Sport 251","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport251.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport251","sport_fs":null,"daddy_code":"871"},{"channel":"sportchannels","title":"Sky Sport 252","fulltitle":"Sky Sport 252","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport252.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport252","sport_fs":null,"daddy_code":"872"},{"channel":"sportchannels","title":"Sky Sport 253","fulltitle":"Sky Sport 253","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport253.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport253","sport_fs":null,"daddy_code":"873"},{"channel":"sportchannels","title":"Sky Sport 254","fulltitle":"Sky Sport 254","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport254.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport254","sport_fs":null,"daddy_code":"874"},{"channel":"sportchannels","title":"Sky Sport 255","fulltitle":"Sky Sport 255","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport255.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport255","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 256","fulltitle":"Sky Sport 256","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport256.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport256","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 257","fulltitle":"Sky Sport 257","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport257.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport257","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Sky Sport 259","fulltitle":"Sky Sport 259","contentType":"video","action":"live_channel","url":"","plot":"","logo":"skysport259.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"sky","sport_par":"skysport259","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Zona DAZN","fulltitle":"Zona DAZN","contentType":"video","action":"live_channel","url":"","plot":"","logo":"ZonaDAZN.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"freeshot","sport_par":"ZonaDAZN","sport_fs":null,"daddy_code":"877"},{"channel":"sportchannels","title":"FIFA+ Italia","fulltitle":"FIFA+ Italia","contentType":"video","action":"live_channel","url":"","plot":"","logo":"FIFAplus_Italy.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"iptvorg","sport_par":"FIFA+ Italy","sport_fs":null,"daddy_code":""},{"channel":"sportchannels","title":"Eurosport 1","fulltitle":"Eurosport 1","contentType":"video","action":"live_channel","url":"","plot":"","logo":"878.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"878","sport_fs":null,"daddy_code":"878"},{"channel":"sportchannels","title":"Eurosport 2","fulltitle":"Eurosport 2","contentType":"video","action":"live_channel","url":"","plot":"","logo":"879.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"879","sport_fs":null,"daddy_code":"879"},{"channel":"sportchannels","title":"Rai Sport","fulltitle":"Rai Sport","contentType":"video","action":"live_channel","url":"","plot":"","logo":"882.png","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"sport","sport_kind":"daddy","sport_par":"882","sport_fs":null,"daddy_code":"882"},{"channel":"catalog","title":"Atalanta","fulltitle":"Atalanta","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Bologna","fulltitle":"Bologna","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Cagliari","fulltitle":"Cagliari","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Como","fulltitle":"Como","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Fiorentina","fulltitle":"Fiorentina","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Frosinone","fulltitle":"Frosinone","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Genoa","fulltitle":"Genoa","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Inter","fulltitle":"Inter","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Juventus","fulltitle":"Juventus","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Lazio","fulltitle":"Lazio","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Lecce","fulltitle":"Lecce","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Milan","fulltitle":"Milan","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Monza","fulltitle":"Monza","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Napoli","fulltitle":"Napoli","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Parma","fulltitle":"Parma","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Roma","fulltitle":"Roma","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Sassuolo","fulltitle":"Sassuolo","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Torino","fulltitle":"Torino","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Udinese","fulltitle":"Udinese","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Venezia","fulltitle":"Venezia","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Zona Serie A","fulltitle":"Zona Serie A","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"calcio","catalog_only":true},{"channel":"catalog","title":"Netflix Live","fulltitle":"Netflix Live","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Action","fulltitle":"Sky Cinema Action","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Action +1","fulltitle":"Sky Cinema Action +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Collection","fulltitle":"Sky Cinema Collection","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Collection +1","fulltitle":"Sky Cinema Collection +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Comedy","fulltitle":"Sky Cinema Comedy","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Comedy +1","fulltitle":"Sky Cinema Comedy +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Drama","fulltitle":"Sky Cinema Drama","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Drama +1","fulltitle":"Sky Cinema Drama +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Due","fulltitle":"Sky Cinema Due","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Due +1","fulltitle":"Sky Cinema Due +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Due +24","fulltitle":"Sky Cinema Due +24","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Family","fulltitle":"Sky Cinema Family","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Family +1","fulltitle":"Sky Cinema Family +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Romance","fulltitle":"Sky Cinema Romance","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Romance +1","fulltitle":"Sky Cinema Romance +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Suspense","fulltitle":"Sky Cinema Suspense","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Suspense +1","fulltitle":"Sky Cinema Suspense +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Uno","fulltitle":"Sky Cinema Uno","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Uno +1","fulltitle":"Sky Cinema Uno +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Cinema Uno +24","fulltitle":"Sky Cinema Uno +24","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Comedy Central","fulltitle":"Sky Comedy Central","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Sky Serie","fulltitle":"Sky Serie","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"cinema","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 1","fulltitle":"Champions League Infinity 1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 10","fulltitle":"Champions League Infinity 10","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 11","fulltitle":"Champions League Infinity 11","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 12","fulltitle":"Champions League Infinity 12","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 2","fulltitle":"Champions League Infinity 2","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 3","fulltitle":"Champions League Infinity 3","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 4","fulltitle":"Champions League Infinity 4","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 5","fulltitle":"Champions League Infinity 5","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 6","fulltitle":"Champions League Infinity 6","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 7","fulltitle":"Champions League Infinity 7","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 8","fulltitle":"Champions League Infinity 8","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Champions League Infinity 9","fulltitle":"Champions League Infinity 9","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn 1 Exclusive","fulltitle":"Dazn 1 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn 2 Exclusive","fulltitle":"Dazn 2 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn 3 Exclusive","fulltitle":"Dazn 3 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn 4 Exclusive","fulltitle":"Dazn 4 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Diretta Goal Serie A Exclusive","fulltitle":"Dazn Diretta Goal Serie A Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Diretta Goal Serie B Exclusive","fulltitle":"Dazn Diretta Goal Serie B Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 1 Exclsuive","fulltitle":"Dazn NFL 1 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 10 Exclsuive","fulltitle":"Dazn NFL 10 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 2 Exclsuive","fulltitle":"Dazn NFL 2 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 3 Exclsuive","fulltitle":"Dazn NFL 3 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 4 Exclsuive","fulltitle":"Dazn NFL 4 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 5 Exclsuive","fulltitle":"Dazn NFL 5 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 6 Exclsuive","fulltitle":"Dazn NFL 6 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 7 Exclsuive","fulltitle":"Dazn NFL 7 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 8 Exclsuive","fulltitle":"Dazn NFL 8 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn NFL 9 Exclsuive","fulltitle":"Dazn NFL 9 Exclsuive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 1 Exclusive","fulltitle":"Dazn Sport 1 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 10 Exclusive","fulltitle":"Dazn Sport 10 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 11 Exclusive","fulltitle":"Dazn Sport 11 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 12 Exclusive","fulltitle":"Dazn Sport 12 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 13 Exclusive","fulltitle":"Dazn Sport 13 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 14 Exclusive","fulltitle":"Dazn Sport 14 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 15 Exclusive","fulltitle":"Dazn Sport 15 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 16 Exclusive","fulltitle":"Dazn Sport 16 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 17 Exclusive","fulltitle":"Dazn Sport 17 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 18 Exclusive","fulltitle":"Dazn Sport 18 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 19 Exclusive","fulltitle":"Dazn Sport 19 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 2 Exclusive","fulltitle":"Dazn Sport 2 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 20 Exclusive","fulltitle":"Dazn Sport 20 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 3 Exclusive","fulltitle":"Dazn Sport 3 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 4 Exclusive","fulltitle":"Dazn Sport 4 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 5 Exclusive","fulltitle":"Dazn Sport 5 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 6 Exclusive","fulltitle":"Dazn Sport 6 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 7 Exclusive","fulltitle":"Dazn Sport 7 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 8 Exclusive","fulltitle":"Dazn Sport 8 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Dazn Sport 9 Exclusive","fulltitle":"Dazn Sport 9 Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Eventi Calcio Amazon Prime","fulltitle":"Eventi Calcio Amazon Prime","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Eventi Napoli Calcio","fulltitle":"Eventi Napoli Calcio","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Mola TV Calcio 1","fulltitle":"Mola TV Calcio 1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Mola TV Calcio 2","fulltitle":"Mola TV Calcio 2","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Mola TV Calcio 3","fulltitle":"Mola TV Calcio 3","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 251","fulltitle":"Sky Sport 251","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 252","fulltitle":"Sky Sport 252","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 253","fulltitle":"Sky Sport 253","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 254","fulltitle":"Sky Sport 254","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 255","fulltitle":"Sky Sport 255","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 256","fulltitle":"Sky Sport 256","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport 257","fulltitle":"Sky Sport 257","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport Bar 1","fulltitle":"Sky Sport Bar 1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport Bar 2","fulltitle":"Sky Sport Bar 2","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Sky Sport Calcio","fulltitle":"Sky Sport Calcio","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Zona Dazn Exclusive","fulltitle":"Zona Dazn Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Zona Dazn Serie A","fulltitle":"Zona Dazn Serie A","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Zona Goal Serie A Exclusive","fulltitle":"Zona Goal Serie A Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Zona Goal Serie B Exclusive","fulltitle":"Zona Goal Serie B Exclusive","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"dazn","catalog_only":true},{"channel":"catalog","title":"Discovery","fulltitle":"Discovery","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Discovery +1","fulltitle":"Discovery +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"History","fulltitle":"History","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Sky Adventure","fulltitle":"Sky Adventure","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Sky Arte","fulltitle":"Sky Arte","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Sky Documentaries","fulltitle":"Sky Documentaries","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Sky Nature","fulltitle":"Sky Nature","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"documentari","catalog_only":true},{"channel":"catalog","title":"Crime + Inv","fulltitle":"Crime + Inv","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Discovery Giallo Italia","fulltitle":"Discovery Giallo Italia","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"MTV Italia","fulltitle":"MTV Italia","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Sky Atlantic","fulltitle":"Sky Atlantic","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Sky Atlantic +1","fulltitle":"Sky Atlantic +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Sky Investigation","fulltitle":"Sky Investigation","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Sky Uno","fulltitle":"Sky Uno","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true},{"channel":"catalog","title":"Sky Uno +1","fulltitle":"Sky Uno +1","contentType":"video","action":"catalog_only","url":"","video_url":"","callSign":"","id":"","plot":"Canale presente nel catalogo Live. La riproduzione richiede una sorgente autorizzata.","logo":"","thumbnail":"","is_live_channel":true,"isLive":true,"live_row":"intrattenimento","catalog_only":true}];
 
 (function () {
   'use strict';
@@ -749,6 +749,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   var TMDB_KEY = 'a1ab8b8669da03637a4b98fa39c39228';
   var TMDB = 'https://api.themoviedb.org/3';
   var SC_FALLBACKS = [
+    'https://streamingcommunityz.tools',
     'https://streamingcommunityz.support',
     'https://streamingcommunityz.pizza',
     'https://streamingcommunityz.run'
@@ -756,6 +757,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   var HOST_KEY = 'prippi.tizen.sc.host';
   var HOME_KEY = 'prippi.tizen.standalone.home.v3';
   var SEARCH_CACHE_PREFIX = 'prippi.tizen.search.v3.';
+  var ARTWORK_CACHE_PREFIX = 'prippi.tizen.artwork.v1.';
+  var ARTWORK_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
   var MEDIASET_GRAPH_URL = 'https://mediasetplay.api-graph.mediaset.it';
   var MEDIASET_GRAPH_HASH = '0cbec614877306e7f2814d2c16163d510c8fc87f1677bc34f95f4f55dc027dce';
   var LIVE_BACKEND = 'https://test34344.herokuapp.com/filter.php';
@@ -840,7 +843,40 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function absoluteUrl(value, base) {
-    try { return new URL(value || '', base).href; } catch (error) { return value || ''; }
+    value = String(value || '').trim();
+    base = String(base || '').trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    if (/^\/\//.test(value)) return (base.match(/^https?:/i) || ['https:'])[0] + value;
+    var origin = originOf(base);
+    if (value.charAt(0) === '/') return origin + value;
+    var cleanBase = base.split(/[?#]/)[0];
+    return cleanBase.slice(0, cleanBase.lastIndexOf('/') + 1) + value;
+  }
+
+  function originOf(value) {
+    var match = String(value || '').match(/^https?:\/\/[^\/?#]+/i);
+    return match ? match[0] : '';
+  }
+
+  function hostOf(value) {
+    return originOf(value).replace(/^https?:\/\//i, '');
+  }
+
+  function pathOf(value) {
+    return String(value || '').replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0] || '/';
+  }
+
+  function queryValue(value, key) {
+    var match = String(value || '').match(new RegExp('[?&]' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^&#]*)'));
+    return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+  }
+
+  function setQueryValue(value, key, content) {
+    var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var result = String(value || '').replace(new RegExp('([?&])' + escaped + '=[^&#]*&?'), function (_, prefix) {
+      return prefix === '?' ? '?' : '';
+    }).replace(/[?&]$/, '');
+    return result + (result.indexOf('?') >= 0 ? '&' : '?') + encodeURIComponent(key) + '=' + encodeURIComponent(content);
   }
 
   function queryString(values) {
@@ -854,9 +890,23 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return parts.join('&');
   }
 
+  function parseHtml(html) {
+    var parsed = null;
+    try { parsed = new DOMParser().parseFromString(html, 'text/html'); } catch (error) {}
+    if (parsed && parsed.querySelector) return parsed;
+    var container = document.createElement('div');
+    container.innerHTML = String(html || '');
+    return container;
+  }
+
   function parsePage(html) {
-    var doc = new DOMParser().parseFromString(html, 'text/html');
-    var node = doc.querySelector('[data-page]');
+    var source = String(html || ''), match = source.match(/\sdata-page=(['"])([\s\S]*?)\1/i);
+    if (match) {
+      var decoder = document.createElement('textarea');
+      decoder.innerHTML = match[2];
+      return JSON.parse(decoder.value || decoder.textContent || '{}');
+    }
+    var doc = parseHtml(source), node = doc.querySelector('[data-page]');
     if (!node) throw new Error('Pagina provider non riconosciuta');
     return JSON.parse(node.getAttribute('data-page') || '{}');
   }
@@ -893,8 +943,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return text(candidate + '/it/movies', {cache: 'no-store', credentials: 'include'}, 7000)
       .then(function (response) {
         parsePage(response.body);
-        var parsed = new URL(response.url);
-        var resolved = parsed.protocol + '//' + parsed.host;
+        var resolved = originOf(response.url || candidate) || candidate;
         localStorage.setItem(HOST_KEY, resolved);
         return resolved;
       }).catch(function () { return probe(candidates, index + 1); });
@@ -904,17 +953,17 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (force) hostPromise = null;
     if (hostPromise) return hostPromise;
     hostPromise = registryHost().then(function (remote) {
-      return probe(unique([localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS)), 0);
+      return probe(unique([SC_FALLBACKS[0], localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS.slice(1))), 0);
     }).catch(function (error) { hostPromise = null; throw error; });
     return hostPromise;
   }
 
   function rewriteHost(url, host) {
-    try {
-      var parsed = new URL(url, host);
-      if (/streamingcommunity/i.test(parsed.host)) return host + parsed.pathname + parsed.search;
-      return parsed.href;
-    } catch (error) { return url; }
+    url = String(url || '');
+    host = String(host || '').replace(/\/$/, '');
+    if (/^https?:\/\/[^/]*streamingcommunity/i.test(url)) return host + pathOf(url) + (url.match(/\?[^#]*/) || [''])[0];
+    if (url.charAt(0) === '/') return host + url;
+    return absoluteUrl(url, host + '/');
   }
 
   function dataPage(url, retry) {
@@ -1013,7 +1062,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function rowsFromPage(page, suffix) {
     var props = page.props || {}, host = props.app_url || localStorage.getItem(HOST_KEY) || SC_FALLBACKS[0];
-    var cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+    var cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
     return (props.sliders || []).map(function (slider, index) {
       var name = slider.name || slider.label || ('Riga ' + (index + 1));
       return {
@@ -1067,11 +1116,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       }
       function pump() {
         if (completeIfReady()) return;
-        while (!finished && active < 4 && next < entries.length && collected.length < target) {
+        if (window.__PRIPPI_PLAYBACK_ACTIVE__) { setTimeout(pump, 600); return; }
+        var concurrency = document.documentElement.className.indexOf('legacy-tizen') >= 0 ? 1 : 4;
+        while (!finished && active < concurrency && next < entries.length && collected.length < target) {
           (function (entry, index) {
             active += 1;
             deadline(dataPage(host + entry[1]), 8500, 'Riga lenta').then(function (page) {
-              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
               if (!Array.isArray(titles)) titles = titles.data || [];
               var items = flatten(titles).slice(0, 20).map(function (raw) { return itemFromRaw(raw, host, cdn); });
               var key = String(entry[0] || '').toLowerCase();
@@ -1204,7 +1255,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function searchAnimeUnity(query, registry, homeMode) {
     var host = (registry.direct || {}).animeunity || 'https://www.animeunity.so';
     return text(host.replace(/\/$/, '') + '/archivio', {cache: 'no-store', credentials: 'include'}, 8500).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html');
+      var doc = parseHtml(response.body);
       var tokenNode = doc.querySelector('meta[name="csrf-token"]');
       var token = tokenNode && tokenNode.getAttribute('content');
       if (!token) throw new Error('AnimeUnity CSRF non disponibile');
@@ -1235,12 +1286,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var finder = (registry.findhost || {})[name];
     if (!finder) return Promise.reject(new Error('Host ' + name + ' non configurato'));
     return text(finder, {cache: 'no-store'}, 6500).then(function (response) {
-      return new URL(response.url || finder).origin;
+      return originOf(response.url || finder);
     });
   }
 
   function parseHtmlSearch(source, host, html, query) {
-    var doc = new DOMParser().parseFromString(html, 'text/html'), output = [];
+    var doc = parseHtml(html), output = [];
     if (source === 'streamingita') {
       Array.prototype.forEach.call(doc.querySelectorAll('.result-item'), function (node) {
         var link = node.querySelector('a[href]'), image = node.querySelector('img'), year = node.querySelector('.year');
@@ -1486,7 +1537,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function mediasetHtmlPage(url, type) {
     return text(url, {cache: 'no-store', headers: {'Accept': 'text/html'}}, 12000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
+      var doc = parseHtml(response.body), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[data-testid="poster-card-link"][href]'), function (link) {
         var item = mediasetHtmlItem(link, type);
         var key = item && (item.seriesid || item.video_id || item.url);
@@ -1546,13 +1597,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function la7Search(query) {
     return text('https://www.la7.it/ricerca?query=' + encodeURIComponent(query) + '&page=0', {cache: 'no-store'}, 9000)
       .then(function (response) {
-        var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {}, grouped = {};
+        var doc = parseHtml(response.body), output = [], seen = {}, grouped = {};
         Array.prototype.forEach.call(doc.querySelectorAll('.view-content a[href]'), function (link) {
           var holder = link.querySelector('.holder-bg'), titleNode = link.querySelector('.title');
           if (!holder || !titleNode) return;
           var href = absoluteUrl(link.getAttribute('href'), 'https://www.la7.it'), style = holder.getAttribute('data-background-image') || holder.style.backgroundImage || '';
           var thumb = style.replace(/^.*url\(['"]?/, '').replace(/['"]?\).*$/, '');
-          var path = new URL(href).pathname.split('?')[0].replace(/^\/+|\/+$/g, '').split('/');
+          var path = pathOf(href).replace(/^\/+|\/+$/g, '').split('/');
           var isProgramVideo = path.length >= 3 && ['video', 'rivedila7', 'articolo'].indexOf(path[1]) >= 0 &&
             ['la7-cinema-tutti-i-film', 'film'].indexOf(path[0]) < 0;
           var itemTitle = titleNode.textContent.trim(), type = 'movie';
@@ -1688,12 +1739,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       expandedHomeRows = uniqueRows(mainRows.concat(archive, anime ? [anime] : [], official));
       if (expandedHomeRows.length) saveStandaloneHome(expandedHomeRows, false);
     }
+    var legacy = document.documentElement.className.indexOf('legacy-tizen') >= 0;
     var archiveTask = archiveRows(host, homepage, mainRows.length, function (partial) {
       archive = partial;
       publish();
     }).then(function (rows) { archive = rows || []; publish(); return rows; });
-    var animeTask = animeHomeRow().then(function (row) { anime = row; publish(); return row; });
-    var officialTask = officialHomeRows().then(function (rows) { official = rows || []; publish(); return rows; });
+    var animeTask = (legacy ? archiveTask : Promise.resolve()).then(function () { return animeHomeRow(); })
+      .then(function (row) { anime = row; publish(); return row; });
+    var officialTask = (legacy ? animeTask : Promise.resolve()).then(function () { return officialHomeRows(); })
+      .then(function (rows) { official = rows || []; publish(); return rows; });
     return Promise.all([archiveTask, animeTask, officialTask]).then(function () {
       publish();
       if (generation === expandedHomeGeneration) expandedHomeDone = true;
@@ -1752,7 +1806,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (cached) return Promise.resolve({items: cached, aggregated: true, cached: true});
     var scSearch = ensureHost(false).then(function (host) {
       return dataPage(host + '/it/search?q=' + encodeURIComponent(query)).then(function (page) {
-        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + new URL(resolvedHost).host);
+        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + hostOf(resolvedHost));
         return flatten(props.titles || []).slice(0, 100).map(function (raw) {
           var item = itemFromRaw(raw, resolvedHost, cdn);
           item.source = 'streamingcommunity';
@@ -1793,6 +1847,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function tmdbDetails(item) {
     var info = item.infoLabels || {}, type = tmdbType(item), id = info.tmdb_id || item.tmdb_id;
+    var cacheKey = ARTWORK_CACHE_PREFIX + type + '.' + encodeURIComponent(String(id || item.fulltitle || item.title || '').toLowerCase());
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached && cached.saved_at && Date.now() - cached.saved_at < ARTWORK_CACHE_MAX_AGE && cached.item) {
+        return Promise.resolve(Object.assign({}, item, cached.item, {
+          infoLabels: Object.assign({}, info, cached.item.infoLabels || {})
+        }));
+      }
+    } catch (error) {}
     var locate = id ? Promise.resolve(id) : json(TMDB + '/search/' + type + '?api_key=' + TMDB_KEY + '&language=it-IT&include_adult=false&query=' + encodeURIComponent(item.fulltitle || item.title || ''))
       .then(function (data) { return data.results && data.results[0] && data.results[0].id; });
     return locate.then(function (tmdbId) {
@@ -1807,8 +1870,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         labels.genre = (data.genres || []).map(function (genre) { return genre.name; }).join(', ');
         result.infoLabels = labels;
         result.plot = labels.plot;
-        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w500' + data.poster_path;
+        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w780' + data.poster_path;
         if (data.backdrop_path) result.fanart = 'https://image.tmdb.org/t/p/w1280' + data.backdrop_path;
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({saved_at: Date.now(), item: {
+            thumbnail: result.thumbnail || '', fanart: result.fanart || '', plot: result.plot || '', infoLabels: result.infoLabels || {}
+          }}));
+        } catch (error) {}
         return result;
       }).catch(function () { return item; });
     });
@@ -1818,7 +1886,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (item.channel === 'raiplay' || item.channel === 'mediasetplay' || item.channel === 'la7') return tmdbDetails(item);
     if (item.tmdbOnly) return tmdbDetails(item);
     return dataPage(item.url).then(function (page) {
-      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
       var merged = Object.assign({}, item, itemFromRaw(raw, host, cdn));
       if (item.url) merged.url = rewriteHost(item.url, host);
       return tmdbDetails(merged);
@@ -1904,7 +1972,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function mediasetSeasonPageEpisodes(seasonUrl, seasonNumber, parent) {
     if (!seasonUrl) return Promise.resolve([]);
     return text(seasonUrl, {cache: 'no-store', credentials: 'include'}, 12000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), fullIds = {}, fullOrder = [], output = [], seen = {};
+      var doc = parseHtml(response.body), fullIds = {}, fullOrder = [], output = [], seen = {};
       var patterns = [
         /editorialType\\?"\s*:\\?"Full Episode\\?"\s*,\\?"guid\\?"\s*:\\?"(F[A-Z0-9]+)/ig,
         /"editorialType"\s*:\s*"Full Episode"\s*,\s*"guid"\s*:\s*"(F[A-Z0-9]+)/ig
@@ -2000,7 +2068,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       });
     }
     return text(item.url, {cache: 'no-store', credentials: 'include'}, 11000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
+      var doc = parseHtml(response.body), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[href]'), function (link) {
         var art = link.querySelector('[data-background-image]'), titleNode = link.querySelector('.title, .occhiello, h3, h4');
         if (!art || !titleNode) return;
@@ -2038,7 +2106,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     }
     return dataPage(item.url).then(function (page) {
       var props = page.props || {}, titleData = props.title || {}, seasons = titleData.seasons || [];
-      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host), output = [];
+      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host)), output = [];
       var chain = Promise.resolve();
       seasons.forEach(function (season) {
         chain = chain.then(function () {
@@ -2076,7 +2144,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       });
     return iframePromise.then(function (iframeUrl) {
       return text(iframeUrl, {cache: 'no-store', credentials: 'include'}, 10000).then(function (response) {
-        var doc = new DOMParser().parseFromString(response.body, 'text/html'), frame = doc.querySelector('iframe');
+        var doc = parseHtml(response.body), frame = doc.querySelector('iframe');
         var embedUrl = frame && frame.getAttribute('src');
         if (!embedUrl) throw new Error('Player VixCloud non disponibile');
         return text(embedUrl, {cache: 'no-store', credentials: 'include', referrer: iframeUrl, referrerPolicy: 'unsafe-url'}, 10000)
@@ -2091,15 +2159,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var token = (data.body.match(/['"]token['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       var expires = (data.body.match(/['"]expires['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       if (!base || !token || !expires) throw new Error('Token VixCloud non disponibile');
-      var playlist = new URL(base), embed = new URL(data.embedUrl);
-      playlist.searchParams.set('token', token);
-      playlist.searchParams.set('expires', expires);
-      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist.searchParams.set('h', '1');
-      ['b', 'scz'].forEach(function (key) { if (embed.searchParams.get(key)) playlist.searchParams.set(key, embed.searchParams.get(key)); });
-      return text(playlist.href, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
+      var playlist = setQueryValue(setQueryValue(base, 'token', token), 'expires', expires);
+      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist = setQueryValue(playlist, 'h', '1');
+      ['b', 'scz'].forEach(function (key) { var value = queryValue(data.embedUrl, key); if (value) playlist = setQueryValue(playlist, key, value); });
+      return text(playlist, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
         .then(function (response) {
           if (response.body.indexOf('#EXTM3U') !== 0) throw new Error('Playlist HLS non valida');
-          return {url: playlist.href, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
+          return {url: playlist, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
         });
     });
   }
@@ -2110,31 +2176,240 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return (window.__PRIPPI_LIVE_LOGO_BASE__ || 'assets/tv_logos/') + item.logo;
   }
 
-  function live() {
-    var source = window.__PRIPPI_LIVE_CHANNELS__;
-    var catalog = source && source.length ? Promise.resolve(source) :
-      json('data/live_channels.json', {cache: 'no-store'}, 5000).catch(function () { return []; });
-    return catalog.then(function (values) {
-      var channels = values.map(function (entry) {
-        var item = Object.assign({}, entry);
-        item.thumbnail = liveLogo(item);
-        item.fanart = item.thumbnail;
-        item.isLive = true;
-        return item;
+  /*
+   * Endpoint Live autorizzati, caricati esclusivamente dal bundle locale.
+   * Il file non fa parte dell'OTA e contiene soltanto manifest HLS/DASH/MP4
+   * consegnati dal titolare del servizio, senza alcun resolver o scraping.
+   */
+  function authorizedLiveConfig() {
+    var injected = window.__PRIPPI_AUTHORIZED_LIVE_CHANNELS__;
+    if (injected && injected.length) return Promise.resolve(injected);
+    return json('data/authorized_live.json', {cache: 'no-store'}, 3500).then(function (payload) {
+      return payload && (payload.channels || payload.items) || [];
+    }).catch(function () { return []; });
+  }
+
+  function liveIdentity(row, titleValue) {
+    return String(row || 'tv').toLowerCase() + ':' + String(titleValue || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  function directAuthorizedSource(source) {
+    if (!source || !/^(?:https?):\/\//i.test(String(source.url || ''))) return null;
+    var type = String(source.manifest_type || source.type || '').toLowerCase();
+    if (!type) {
+      if (/\.mpd(?:\?|$)/i.test(source.url)) type = 'mpd';
+      else if (/\.m3u8(?:\?|$)/i.test(source.url)) type = 'hls';
+      else if (/\.(?:mp4|webm)(?:\?|$)/i.test(source.url)) type = 'progressive';
+    }
+    if (type !== 'hls' && type !== 'mpd' && type !== 'progressive') return null;
+    return {
+      url: String(source.url), manifest_type: type, headers: source.headers || {},
+      drm_type: String(source.drm_type || source.drm || ''),
+      license_key: String(source.license_key || ''), license_url: String(source.license_url || ''),
+      license_headers: source.license_headers || {}, subtitles: source.subtitles || []
+    };
+  }
+
+  function mergeAuthorizedLive(catalog, configured) {
+    var byIdentity = {}, output = (catalog || []).map(function (entry) { return Object.assign({}, entry); });
+    output.forEach(function (item, index) { byIdentity[liveIdentity(item.live_row, item.title)] = index; });
+    (configured || []).forEach(function (entry) {
+      var row = String(entry.row || entry.live_row || 'tv').toLowerCase();
+      var titleValue = String(entry.title || entry.fulltitle || '').trim();
+      var sources = (entry.sources || [entry]).map(directAuthorizedSource).filter(function (source) { return !!source; });
+      if (!titleValue || !sources.length) return;
+      var identity = liveIdentity(row, titleValue), existing = byIdentity[identity];
+      var item = existing === undefined ? {
+        channel: 'authorized-live', title: titleValue, fulltitle: titleValue, contentType: 'video',
+        live_row: row, is_live_channel: true, isLive: true
+      } : output[existing];
+      item.action = 'authorized_live';
+      item.catalog_only = false;
+      item.authorized_sources = sources;
+      item.url = sources[0].url;
+      item.headers = sources[0].headers;
+      item.logo = entry.logo || item.logo || '';
+      item.thumbnail = entry.thumbnail || item.thumbnail || '';
+      item.plot = entry.plot || item.plot || 'Canale Live autorizzato.';
+      if (existing === undefined) { byIdentity[identity] = output.length; output.push(item); }
+    });
+    return output;
+  }
+
+  // Stessa composizione visibile di sportchannels.build_items() dell'APK:
+  // SKY = native + cinema/intrattenimento/documentari; Sport = native +
+  // sport/calcio; DAZN = solo iptv_dazn. I URL del catalogo restano nel pool
+  // e non vengono copiati nelle card.
+  function poolVisualRow(category) {
+    category = String(category || '').toLowerCase();
+    if (category === 'cinema' || category === 'intrattenimento' || category === 'documentari') return 'sky';
+    if (category === 'sport' || category === 'calcio') return 'sport';
+    if (category === 'dazn') return 'iptv_dazn';
+    return '';
+  }
+
+  function poolTitleKey(value, row) {
+    var key = String(value || '').toLowerCase()
+      .replace(/\s*\(buffering\)\s*/ig, ' ')
+      .replace(/\s*\[(?:flh|fhd|hd)\]\s*/ig, ' ')
+      .replace(/\s+(?:fhd|full hd|hd)$/ig, '')
+      .replace(/\s*\+\s*24\b/g, ' +24')
+      .replace(/\s*\+\s*1\b/g, ' +1')
+      .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    if (row === 'sport') {
+      key = key.replace(/^sky\s+/, '');
+      if (key === 'sport nba' || key === 'nba') key = 'sport basket';
+    }
+    return key;
+  }
+
+  // Ordine e sinonimi sono quelli di sportchannels.py dell'APK.  La sorgente
+  // puo' cambiare ordine, ma la riga SKY deve restare riconoscibile e stabile.
+  var SKY_VISUAL_ORDER = [
+    'sky cinema uno', 'sky cinema uno +1', 'sky cinema uno +24',
+    'sky cinema stories', 'sky cinema collection', 'sky cinema family',
+    'sky cinema action', 'sky cinema suspense', 'sky cinema comedy',
+    'sky cinema romance', 'sky cinema drama', 'sky cinema due',
+    'sky cinema due +24',
+    'sky tg24', 'sky uno', 'sky uno +1', 'sky atlantic', 'sky atlantic +1',
+    'sky serie', 'sky collection', 'sky investigation', 'sky crime',
+    'sky adventure', 'sky documentaries', 'sky nature', 'history',
+    'comedy central', 'sky arte', 'mtv',
+    'discovery', 'discovery giallo italia', 'sky comedy central',
+    'crime + inv'
+  ];
+  var SKY_VISUAL_RANK = {};
+  SKY_VISUAL_ORDER.forEach(function (title, index) { SKY_VISUAL_RANK[title] = index; });
+  var SKY_VISUAL_ALIASES = {
+    'tg 24': 'sky tg24', 'sky tg 24': 'sky tg24',
+    'uno': 'sky uno', 'sky uno hd': 'sky uno', 'sky uno +1 hd': 'sky uno +1',
+    'atlantic': 'sky atlantic', 'sky atlantic hd': 'sky atlantic',
+    'sky atlantic +1 hd': 'sky atlantic +1', 'serie': 'sky serie',
+    'collection': 'sky collection', 'investigation': 'sky investigation',
+    'crime': 'sky crime', 'adventure': 'sky adventure',
+    'documentaries': 'sky documentaries', 'nature': 'sky nature',
+    'history channel': 'history', 'comedy central': 'comedy central',
+    'arte': 'sky arte', 'mtv italia': 'mtv'
+  };
+
+  function apkSkyCanonicalTitle(value) {
+    var title = String(value || '').toLowerCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    title = title.replace(/\s*\[(?:flh|fhd|hd)\]\s*/ig, ' ')
+      .replace(/\s+(?:fhd|hd)$/ig, '').replace(/^\s+|\s+$/g, '')
+      .replace(/\s*\+\s*24\b/g, ' +24').replace(/\s*\+\s*1\b/g, ' +1');
+    return SKY_VISUAL_ALIASES[title] || title;
+  }
+
+  function apkSkySortKey(item) {
+    var title = apkSkyCanonicalTitle(item.fulltitle || item.title), suffix = 0, base = title;
+    if (/ \+24$/.test(title)) { base = title.slice(0, -4).replace(/\s+$/g, ''); suffix = 2; }
+    else if (/ \+1$/.test(title)) { base = title.slice(0, -3).replace(/\s+$/g, ''); suffix = 1; }
+    return [Object.prototype.hasOwnProperty.call(SKY_VISUAL_RANK, base) ? SKY_VISUAL_RANK[base] : 10000, suffix, title];
+  }
+
+  function compareApkSkyOrder(left, right) {
+    var a = apkSkySortKey(left), b = apkSkySortKey(right);
+    for (var index = 0; index < a.length; index += 1) {
+      if (a[index] < b[index]) return -1;
+      if (a[index] > b[index]) return 1;
+    }
+    return 0;
+  }
+
+  function poolLiveCards(catalog) {
+    var categoryOrder = ['cinema', 'intrattenimento', 'documentari', 'sport', 'calcio', 'dazn'];
+    var output = [];
+    categoryOrder.forEach(function (category) {
+      (catalog || []).forEach(function (entry) {
+        if (String(entry.category || '').toLowerCase() !== category) return;
+        var row = poolVisualRow(category), titleValue = String(entry.title || '').trim();
+        if (!row || !titleValue || titleValue.toLowerCase() === 'netflix live') return;
+        output.push({
+          channel: 'catalog', title: titleValue, fulltitle: titleValue,
+          contentType: 'video', action: 'live_channel', live_row: row,
+          is_live_channel: true, isLive: true, logo: entry.logo || '',
+          thumbnail: entry.logo || '', plot: titleValue
+        });
       });
-      var definitions = [
-        {key: 'tv', id: 'live_tv', title: 'TV'},
-        {key: 'sky', id: 'live_sky', title: 'SKY'},
-        {key: 'sport', id: 'live_sport', title: 'Sport Live'}
-      ];
-      var rows = definitions.map(function (definition) {
-        return {
-          id: definition.id,
-          title: definition.title,
-          items: channels.filter(function (item) { return (item.live_row || 'tv') === definition.key; })
-        };
-      }).filter(function (row) { return row.items.length; });
-      return {rows: rows};
+    });
+    return output;
+  }
+
+  function apkLiveOrder(items, row) {
+    var seen = {}, output = [];
+    (items || []).forEach(function (item) {
+      var key = row === 'sky' ? apkSkyCanonicalTitle(item.fulltitle || item.title) :
+        poolTitleKey(item.fulltitle || item.title, row);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      output.push(item);
+    });
+    // APK: SKY ha un ranking esplicito; DAZN sposta solo Champions in coda.
+    // Sport e TV non vengono ordinati: conservano la sequenza della sorgente.
+    if (row === 'sky') {
+      output.sort(compareApkSkyOrder);
+    } else if (row === 'iptv_dazn') {
+      output.sort(function (left, right) {
+        return (/champions/i.test(left.title || '') ? 1 : 0) - (/champions/i.test(right.title || '') ? 1 : 0);
+      });
+    }
+    return output;
+  }
+
+  function buildLiveRows(catalog, authorized, iptvCatalog) {
+    // Le card locali sono già risolvibili dal motore Tizen: tenerle anche nel
+    // primo paint garantisce sempre le quattro righe visive, incluso DAZN.
+    var values = mergeAuthorizedLive(catalog, authorized);
+    values = values.concat(poolLiveCards(iptvCatalog || []));
+    var channels = values.map(function (entry) {
+      var item = Object.assign({}, entry);
+      // Anche le voci locali native possono usare le categorie tecniche del
+      // catalogo IPTV: normalizzale prima del primo paint, non solo nel merge.
+      item.live_row = poolVisualRow(item.live_row) || item.live_row;
+      item.thumbnail = liveLogo(item);
+      item.fanart = item.thumbnail;
+      item.isLive = true;
+      return item;
+    });
+    function visualLiveRow(value) {
+      value = String(value || 'tv').toLowerCase();
+      return value === 'dazn' ? 'iptv_dazn' : value;
+    }
+    var definitions = [
+      {key: 'sky', id: 'live_sky', title: 'SKY'},
+      {key: 'sport', id: 'live_sport', title: 'Sport Live'},
+      {key: 'iptv_dazn', id: 'live_iptv_dazn', title: 'DAZN'},
+      {key: 'tv', id: 'live_tv', title: 'TV'}
+    ];
+    return definitions.map(function (definition) {
+      return {
+        id: definition.id,
+        title: definition.title,
+        items: apkLiveOrder(channels.filter(function (item) {
+          return visualLiveRow(item.live_row) === definition.key;
+        }), definition.key)
+      };
+    }).filter(function (row) { return row.items.length; });
+  }
+
+  function liveBaseCatalog() {
+    var source = window.__PRIPPI_LIVE_CHANNELS__;
+    return source && source.length ? Promise.resolve(source) :
+      json('data/live_channels.json', {cache: 'no-store'}, 5000).catch(function () { return []; });
+  }
+
+  function live() {
+    // Le quattro righe native compaiono appena il bundle locale e' letto.
+    // Il catalogo IPTV, piu' pesante, completa la stessa struttura dopo.
+    return liveBaseCatalog().then(function (catalog) {
+      return {rows: buildLiveRows(catalog, [], []), expanding: true};
+    });
+  }
+
+  function liveExpanded() {
+    return Promise.all([liveBaseCatalog(), authorizedLiveConfig(), loadIptvCatalog()]).then(function (loaded) {
+      return {rows: buildLiveRows(loaded[0], loaded[1], loaded[2]), expanding: false};
     });
   }
 
@@ -2257,7 +2532,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (index >= seeds.length) throw new Error('Dominio Daddy non raggiungibile');
       var seed = seeds[index++];
       return text(seed.replace(/\/$/, '') + '/', {cache: 'no-store'}, 8000).then(function (response) {
-        var base = new URL(response.url || seed).origin;
+        var base = originOf(response.url || seed);
         try { localStorage.setItem('prippi.tizen.daddy.domain', base); } catch (error) {}
         return base;
       }).catch(next);
@@ -2270,26 +2545,34 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var code = String(item.daddy_code || (item.sport_kind === 'daddy' ? item.sport_par : '') || '');
     if (!code) return Promise.reject(new Error('Fallback Daddy non disponibile'));
     return daddyDomain().then(function (base) {
-      return text(base + '/stream/stream-' + encodeURIComponent(code) + '.php', {
+      var pageUrl = base + '/stream/stream-' + encodeURIComponent(code) + '.php';
+      return text(pageUrl, {
         cache: 'no-store', headers: {'Referer': base + '/'}
-      }, 10000).then(function (response) { return {base: base, body: response.body}; });
+      }, 10000).then(function (response) {
+        return {base: base, pageUrl: pageUrl, body: response.body};
+      });
     }).then(function (page) {
       var iframe = (page.body.match(/<iframe[^>]+src=["']([^"']+)/i) || [])[1];
       if (!iframe) throw new Error('Player Daddy non disponibile');
       iframe = absoluteUrl(iframe, page.base + '/');
       return text(iframe, {cache: 'no-store', headers: {'Referer': page.base + '/'}}, 10000)
-        .then(function (response) { return {iframe: iframe, body: response.body}; });
+        .then(function (response) {
+          return {iframe: iframe, pageUrl: page.pageUrl, body: response.body};
+        });
     }).then(function (player) {
       var encoded = (player.body.match(/atob\(['"]([^'"]+)/i) || [])[1];
       var url = encoded ? cleanUrl(atob(encoded)) : '';
       if (!/^https?:/i.test(url)) throw new Error('Stream Daddy non disponibile');
-      var origin = new URL(player.iframe).origin;
+      var origin = originOf(player.iframe);
       return {
         url: url,
         manifest_type: 'hls',
         drm_type: '',
         headers: {'User-Agent': NOWTV_UA, 'Referer': origin + '/', 'Origin': origin},
-        live_source: 'daddy'
+        live_source: 'daddy',
+        // The outer stream page must create the inner iframe itself: opening the
+        // inner player directly loses Daddy's expected referrer and is denied.
+        embed_url: player.pageUrl
       };
     });
   }
@@ -2313,7 +2596,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (!token) throw new Error('Token live non disponibile');
       return {
         url: 'https://lovely.lovetier.bz/' + encodeURIComponent(code) + '/tracks-v1a1/mono.m3u8?token=' + encodeURIComponent(token),
-        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')}
+        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')},
+        live_source: 'freeshot', embed_url: 'https://popcdn.day/player/' + encodeURIComponent(code)
       };
     });
   }
@@ -2343,11 +2627,20 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return Promise.reject(new Error('Resolver live non supportato: ' + (kind || 'sconosciuto')));
   }
 
+  function resolveLiveFallback(item) {
+    var fallback = item.sport_fs ? resolveFreeshotLive(item) :
+      Promise.reject(new Error('Fallback Freeshot non disponibile'));
+    if (item.daddy_code) {
+      fallback = fallback.catch(function () { return resolveDaddyLive(item); });
+    }
+    return fallback;
+  }
+
   function resolveRai(item) {
     if (!item.video_url) return Promise.reject(new Error('Endpoint Rai non disponibile'));
     return json(item.video_url, {cache: 'no-store', credentials: 'include'}, 10000).then(function (data) {
       if (data.first_item_path) {
-        var nested = new URL(data.first_item_path, 'https://www.raiplay.it').href.replace(/\.html\?json/i, '.json');
+        var nested = absoluteUrl(data.first_item_path, 'https://www.raiplay.it/').replace(/\.html\?json/i, '.json');
         return json(nested, {cache: 'no-store', credentials: 'include'}, 10000);
       }
       return data;
@@ -2482,7 +2775,527 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     });
   }
 
+  function resolveAuthorizedLive(item) {
+    var candidates = (item.authorized_sources || []).map(directAuthorizedSource)
+      .filter(function (source) { return !!source; });
+    if (!candidates.length) {
+      var direct = directAuthorizedSource(item);
+      if (direct) candidates.push(direct);
+    }
+    if (!candidates.length) return Promise.reject(new Error('Endpoint autorizzato non configurato'));
+    // Il primo endpoint e' quello preferito; gli altri restano nell'oggetto
+    // per il player e per future verifiche di salute, senza reti nascoste.
+    var selected = candidates[0];
+    selected.fallback_sources = candidates.slice(1);
+    return Promise.resolve(selected);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pool IPTV Group-E (Xtream Codes) — port JS di iptv_pool.py dell'APK.
+  // Carica account e catalogo dai file privati in data/ e alloca localmente uno
+  // slot libero leggendo lo stato remoto del pannello provider. I client non si
+  // parlano tra loro: ogni installazione consulta active_cons/max_connections.
+  // ---------------------------------------------------------------------------
+  var IPTV_ACCOUNT_TTL = 30 * 60 * 1000;   // 30 minuti (come _ACCOUNT_TTL)
+  var IPTV_CATALOG_TTL = 6 * 3600 * 1000;  // 6 ore (come _TTL)
+  // Lasciamo spazio al fallback e al player: il timeout visibile e' 18 s,
+  // dunque il pool non puo' occupare l'intera finestra da solo.
+  var IPTV_POOL_RESOLVE_BUDGET = 6500;
+  var iptvAccountsCache = null;
+  var iptvAccountsLoadedAt = 0;
+  var iptvCatalogCache = null;
+  var iptvCatalogLoadedAt = 0;
+
+  // --- 2e1: lease locali (port di _leases / release) ------------------------
+  // url -> {exp, leaseId}. Uno slot e' trattenuto da un solo lease attivo; lo
+  // stesso leaseId puo' rinnovare il proprio slot senza riprovare la rete.
+  // Solo RAM: al riavvio si riparte puliti (come in Python).
+  var iptvLeases = {};
+
+  // Scarta i lease scaduti (come la pulizia all'inizio di acquire).
+  function iptvPruneLeases() {
+    var now = Date.now();
+    Object.keys(iptvLeases).forEach(function (url) {
+      if (iptvLeases[url].exp <= now) delete iptvLeases[url];
+    });
+  }
+
+  // Rilascio esplicito di uno slot (port di release()).
+  function iptvRelease(url) {
+    if (!url) return;
+    delete iptvLeases[url];
+  }
+
+  // Registra o rinnova il lease su uno slot. Ritorna false se lo slot e' gia'
+  // trattenuto da un altro leaseId non scaduto; altrimenti fissa la scadenza
+  // (minimo 60s, come max(60, ttl) in Python). Il check di raggiungibilita'
+  // resta a carico del chiamante: qui si gestisce solo l'allocazione.
+  function iptvHoldLease(url, leaseId, ttlMs) {
+    var now = Date.now();
+    var active = iptvLeases[url];
+    if (active && active.exp > now && active.leaseId !== leaseId) return false;
+    iptvLeases[url] = {exp: now + Math.max(60 * 1000, ttlMs || 900 * 1000), leaseId: leaseId};
+    return true;
+  }
+
+  function loadIptvAccounts() {
+    if (iptvAccountsCache && Date.now() - iptvAccountsLoadedAt < IPTV_ACCOUNT_TTL) {
+      return Promise.resolve(iptvAccountsCache);
+    }
+    var otaPrivate = window.__PRIPPI_PRIVATE_DATA__ || {};
+    if (otaPrivate.iptv_accounts) {
+      var otaRows = Array.isArray(otaPrivate.iptv_accounts.accounts) ? otaPrivate.iptv_accounts.accounts : [];
+      iptvAccountsCache = otaRows.filter(function (x) { return x && x.host && x.username && x.password; });
+      iptvAccountsLoadedAt = Date.now();
+      return Promise.resolve(iptvAccountsCache);
+    }
+    return json('data/iptv_accounts.json', {cache: 'no-store'}, 8000).then(function (blob) {
+      var rows = blob && Array.isArray(blob.accounts) ? blob.accounts : [];
+      iptvAccountsCache = rows.filter(function (x) {
+        return x && x.host && x.username && x.password;
+      });
+    }).catch(function () { iptvAccountsCache = []; })
+      .then(function () { iptvAccountsLoadedAt = Date.now(); return iptvAccountsCache; });
+  }
+
+  function loadIptvCatalog() {
+    if (iptvCatalogCache && Date.now() - iptvCatalogLoadedAt < IPTV_CATALOG_TTL) {
+      return Promise.resolve(iptvCatalogCache);
+    }
+    var otaPrivate = window.__PRIPPI_PRIVATE_DATA__ || {};
+    if (otaPrivate.iptv_catalog) {
+      iptvCatalogCache = Array.isArray(otaPrivate.iptv_catalog.items) ? otaPrivate.iptv_catalog.items : [];
+      iptvCatalogLoadedAt = Date.now();
+      return Promise.resolve(iptvCatalogCache);
+    }
+    return json('data/iptv_catalog.json', {cache: 'no-store'}, 8000).then(function (blob) {
+      iptvCatalogCache = blob && Array.isArray(blob.items) ? blob.items : [];
+    }).catch(function () { iptvCatalogCache = []; })
+      .then(function () { iptvCatalogLoadedAt = Date.now(); return iptvCatalogCache; });
+  }
+
+  // Identificativo stabile dell'account (come l'aid Python: scheme://host/user).
+  function iptvAccountId(account) {
+    return (account.scheme || 'http') + '://' + account.host + '/' + account.username;
+  }
+
+  // Chiamata al pannello Xtream (player_api.php). Come _account_api: timeout
+  // breve e header fissi; un errore HTTP o di rete diventa reject.
+  function iptvAccountApi(account, action, timeoutMs) {
+    var base = (account.scheme || 'http') + '://' + account.host + '/player_api.php?username=' +
+      encodeURIComponent(account.username) + '&password=' + encodeURIComponent(account.password);
+    if (action) base += '&action=' + action;
+    return json(base, {headers: {'User-Agent': 'PrippiStream/2.x', 'Accept': 'application/json'}}, timeoutMs || 4000);
+  }
+
+  // Slot libero? Come _account_free: legge active_cons/max_connections dal
+  // pannello remoto. Ritorna {active, maximum} oppure null (pannello morto,
+  // account disattivato o pieno). I client non si parlano tra loro.
+  function iptvAccountFree(account) {
+    return iptvAccountApi(account, '', 3000).then(function (data) {
+      var info = data && typeof data === 'object' ? (data.user_info || {}) : {};
+      var active = parseInt(info.active_cons || 0, 10);
+      var maximum = parseInt(info.max_connections || 0, 10);
+      var enabled = String(info.auth !== undefined ? info.auth : '1') === '1' &&
+        String(info.status !== undefined ? info.status : 'Active').toLowerCase() === 'active';
+      if (!enabled || maximum <= 0 || active >= maximum) return null;
+      return {active: active, maximum: maximum};
+    }).catch(function () { return null; });
+  }
+
+  // --- 2c: lineup (get_live_streams) e match del canale ---------------------
+  var IPTV_STREAM_MAP_TTL = 6 * 3600 * 1000;  // 6 ore, come _STREAM_MAP_TTL Python
+  var iptvStreamMapCache = {};
+
+  // Titolo normalizzato per i confronti (casefold + strip, come in Python).
+  function iptvNormTitle(value) {
+    return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // ES5: WebKit non ha .endsWith.
+  function iptvEndsWith(haystack, suffix) {
+    var n = haystack.length - suffix.length;
+    return n >= 0 && haystack.slice(n) === suffix;
+  }
+
+  // Match del canale nel lineup: prima exact sul nome normalizzato, poi
+  // suffisso/prefisso a confine di parola (es. "Sky Sport Uno HD" per
+  // "Sky Sport Uno"). Con piu' varianti vince FHD su HD/SD, poi il nome
+  // piu' corto (piu' vicino al titolo richiesto). Ritorna stream_id o null.
+  function iptvMatchChannel(streamMap, title) {
+    var wanted = iptvNormTitle(title);
+    if (!wanted || !streamMap) return null;
+    if (streamMap[wanted] !== undefined) return streamMap[wanted];
+    var hits = [];
+    Object.keys(streamMap).forEach(function (name) {
+      var n = iptvNormTitle(name);
+      if (!n || n === wanted) return;
+      if (iptvEndsWith(n, ' ' + wanted) || n.indexOf(wanted + ' ') === 0) {
+        hits.push({name: n, id: streamMap[name]});
+      }
+    });
+    if (!hits.length) return null;
+    hits.sort(function (a, b) {
+      var fa = a.name.indexOf('fhd') >= 0 ? 0 : 1;
+      var fb = b.name.indexOf('fhd') >= 0 ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return a.name.length - b.name.length;
+    });
+    return hits[0].id;
+  }
+
+  // stream_id del titolo su un account, con cache del lineup per account
+  // (6 ore). La mappa e' nome normalizzato -> stream_id da get_live_streams.
+  function iptvAccountChannel(account, title) {
+    var aid = iptvAccountId(account);
+    var cached = iptvStreamMapCache[aid];
+    if (cached && Date.now() - cached.at < IPTV_STREAM_MAP_TTL) {
+      return Promise.resolve(iptvMatchChannel(cached.map, title));
+    }
+    return iptvAccountApi(account, 'get_live_streams', 8000).then(function (rows) {
+      var map = {};
+      if (Array.isArray(rows)) rows.forEach(function (row) {
+        if (row && row.name !== undefined && row.stream_id !== undefined) {
+          map[iptvNormTitle(row.name)] = String(row.stream_id);
+        }
+      });
+      iptvStreamMapCache[aid] = {at: Date.now(), map: map};
+      return iptvMatchChannel(map, title);
+    }).catch(function () { return null; });
+  }
+
+  // --- 2d1: shuffle deterministico (port di hashlib.sha256 + random.Random) --
+  // Moltiplicazione a 32 bit come Math.imul (assente in WebKit Tizen).
+  function iptvImul(a, b) {
+    var ah = (a >>> 16) & 0xffff, al = a & 0xffff;
+    var bh = (b >>> 16) & 0xffff, bl = b & 0xffff;
+    return ((al * bl + (((ah * bl + al * bh) << 16) >>> 0)) | 0);
+  }
+
+  // Hash FNV-1a a 32 bit: stesso input -> sempre lo stesso seed. Sostituisce
+  // hashlib.sha256 solo per generare la semente (non serve collisione forte).
+  function iptvHashString(str) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = iptvImul(h, 0x01000193);
+    }
+    return h >>> 0;
+  }
+
+  // PRNG Mulberry32: deterministico dato il seed, buona distribuzione.
+  function iptvMulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      var t = iptvImul(a ^ (a >>> 15), 1 | a);
+      t = (t + iptvImul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Fisher-Yates in-place con il PRNG fornito.
+  function iptvShuffle(arr, seed) {
+    var rnd = iptvMulberry32(seed);
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(rnd() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // Seme del pool: title|leaseId|finestra di 20s. Stesso titolo+lease dentro
+  // la stessa finestra -> stesso ordine (tutti i client concordano); dopo 20s
+  // l'ordine cambia e si riprova da un'altra posizione.
+  function iptvPoolSeed(title, leaseId) {
+    return iptvHashString(String(title || '') + '|' + String(leaseId || '') + '|' + (Math.floor(Date.now() / 1000 / 20)));
+  }
+
+  // --- 2d2: batch probe concorrente (port di ThreadPoolExecutor) -----------
+  // Interroga in parallelo i pannelli degli account del lotto e restituisce
+  // le righe {free, account, aid} ordinate per carico: prima il rapporto
+  // active/maximum piu' basso, poi l'active assoluto (come checked.sort).
+  function iptvProbeBatch(batch) {
+    return Promise.all(batch.map(function (pair) {
+      return iptvAccountFree(pair.account).then(function (free) {
+        if (!free) return null;
+        return {free: free, account: pair.account, aid: pair.aid};
+      });
+    })).then(function (results) {
+      var checked = results.filter(Boolean);
+      checked.sort(function (a, b) {
+        var ra = a.free.active / Math.max(1, a.free.maximum);
+        var rb = b.free.active / Math.max(1, b.free.maximum);
+        if (ra !== rb) return ra - rb;
+        return a.free.active - b.free.active;
+      });
+      return checked;
+    });
+  }
+
+  // --- 2d3a: probe di raggiungibilita' (port di _reachable_url) ------------
+  // GET con header VLC e timeout di 5s. Con mode no-cors la risposta e'
+  // opaca (non si legge lo status), quindi "raggiungibile" = il server ha
+  // risposto; timeout o errore di rete -> false. Ritorna sempre una Promise
+  // che risolve con true/false, mai reject.
+  function iptvReachableUrl(url) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (!settled) { settled = true; resolve(false); }
+      }, 5000);
+      fetch(url, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        headers: {'User-Agent': 'VLC/3.0.21 LibVLC/3.0.21'}
+      }).then(function () {
+        if (!settled) { settled = true; clearTimeout(timer); resolve(true); }
+      }).catch(function () {
+        if (!settled) { settled = true; clearTimeout(timer); resolve(false); }
+      });
+    });
+  }
+
+  // --- 2d3b: orchestratore del pool (port di _pool_url) --------------------
+  var iptvWarmAccountIds = {};
+
+  function iptvPoolUrl(title, leaseId, excluded) {
+    return loadIptvAccounts().then(function (accounts) {
+      if (!accounts || !accounts.length) return null;
+      var excludedSet = {};
+      (excluded || []).forEach(function (aid) { excludedSet[aid] = true; });
+      // Copia: lo shuffle non deve alterare l'array in cache condiviso.
+      var pool = accounts.slice();
+      iptvShuffle(pool, iptvPoolSeed(title, leaseId));
+      // Sort stabile per warm: i pronti (0) precedono gli altri (1), e a parita'
+      // di classe WebKit conserva l'ordine casuale appena generato.
+      pool.sort(function (a, b) {
+        var wa = iptvWarmAccountIds[iptvAccountId(a)] ? 0 : 1;
+        var wb = iptvWarmAccountIds[iptvAccountId(b)] ? 0 : 1;
+        return wa - wb;
+      });
+      var candidates = [];
+      pool.forEach(function (account) {
+        var aid = iptvAccountId(account);
+        if (!excludedSet[aid]) candidates.push({account: account, aid: aid});
+      });
+
+      function probeBatch(offset) {
+        if (offset >= candidates.length) return Promise.resolve(null);
+        var batch = candidates.slice(offset, offset + 8);
+        return iptvProbeBatch(batch).then(function (checked) {
+          function walk(index) {
+            if (index >= checked.length) return probeBatch(offset + 8);
+            var row = checked[index];
+            return iptvAccountChannel(row.account, title).then(function (streamId) {
+              if (!streamId) return walk(index + 1);
+              var scheme = row.account.scheme || 'http';
+              var url = scheme + '://' + row.account.host + '/live/' +
+                row.account.username + '/' + row.account.password + '/' + streamId + '.ts';
+              return iptvReachableUrl(url).then(function (ok) {
+                if (!ok) return walk(index + 1);
+                return {url: url, aid: row.aid};
+              });
+            });
+          }
+          return walk(0);
+        });
+      }
+
+      return probeBatch(0);
+    }).catch(function () { return null; });
+  }
+
+  // --- 2e2: tentativi pool per titolo (port di _pool_attempts) -------------
+  // wanted -> [aid, aid, ...]. A attempt=0 si azzera la lista; agli attempt
+  // successivi restituisce gli aid gia' provati cosi' il pool li esclude.
+  var iptvPoolAttempts = {};
+
+  function iptvGetExcluded(wanted, attempt) {
+    if (parseInt(attempt || 0, 10) === 0) {
+      iptvPoolAttempts[wanted] = [];
+    }
+    return (iptvPoolAttempts[wanted] || []).slice();
+  }
+
+  function iptvRecordAttempt(wanted, aid) {
+    if (!iptvPoolAttempts[wanted]) iptvPoolAttempts[wanted] = [];
+    iptvPoolAttempts[wanted].push(aid);
+  }
+
+  // --- 2e3: candidati catalogo + mirror stexxino (port di _candidates) -----
+  // Per i link Peter-Pan (/live/4/987654321/<id>.ts) restituisce l'URL e il
+  // mirror sull'host stexxino; per gli altri solo l'URL stesso. L'ordine
+  // conta: si prova prima la sorgente originale, poi il mirror.
+  function iptvCatalogCandidates(cleanUrl) {
+    var out = [cleanUrl];
+    var m = String(cleanUrl || '').match(/^https?:\/\/[^/]+\/live\/4\/987654321\/(\d+\.ts)$/i);
+    if (m) {
+      out.push('http://9a9p78nt92.stexxino2020.xyz/live/ginevra86/a090922a/' + m[1]);
+    }
+    return out;
+  }
+
+  // --- 2e4: orchestratore finale acquire (port di acquire()) ---------------
+  // Fase 1: pool account (iptvPoolUrl) con esclusi dai tentativi precedenti.
+  // Fase 2: fallback catalogo locale — per ogni sorgente del titolo, strip
+  //         dei parametri '|', candidati + mirror stexxino, check lease e
+  //         raggiungibilita'. Ritorna l'URL o null.
+  function iptvAcquire(title, leaseId, ttlMs, attempt) {
+    var wanted = iptvNormTitle(title);
+    if (!wanted) return Promise.resolve(null);
+    var excluded = iptvGetExcluded(wanted, parseInt(attempt || 0, 10));
+
+    return deadline(iptvPoolUrl(title, leaseId + '#' + (attempt || 0), excluded),
+      IPTV_POOL_RESOLVE_BUDGET, 'Pool IPTV lento').catch(function () { return null; }).then(function (pooled) {
+      if (pooled) {
+        iptvRecordAttempt(wanted, pooled.aid);
+        iptvHoldLease(pooled.url, leaseId, ttlMs);
+        return pooled.url;
+      }
+
+      // Fase 2: fallback catalogo locale
+      iptvPruneLeases();
+      return loadIptvCatalog().then(function (catalog) {
+        function walkItem(index) {
+          if (index >= catalog.length) return null;
+          var item = catalog[index];
+          if (iptvNormTitle(item.title) !== wanted) return walkItem(index + 1);
+          var sources = item.sources || [];
+
+          function walkSource(sIdx) {
+            if (sIdx >= sources.length) return walkItem(index + 1);
+            var cleanUrl = String(sources[sIdx]).split('|')[0].trim();
+            if (!cleanUrl) return walkSource(sIdx + 1);
+            var candidates = iptvCatalogCandidates(cleanUrl);
+
+            function walkCandidate(cIdx) {
+              if (cIdx >= candidates.length) return walkSource(sIdx + 1);
+              var candidate = candidates[cIdx];
+              var active = iptvLeases[candidate];
+              // Lease gia' nostro: rinnova e ritorna.
+              if (active && active.exp > Date.now()) {
+                if (active.leaseId === leaseId) {
+                  iptvHoldLease(candidate, leaseId, ttlMs);
+                  return candidate;
+                }
+                // Trattenuto da un altro: prossimo candidato.
+                return walkCandidate(cIdx + 1);
+              }
+              // Slot libero: verifica raggiungibilita' poi prendi il lease.
+              return iptvReachableUrl(candidate).then(function (ok) {
+                if (!ok) return walkCandidate(cIdx + 1);
+                iptvHoldLease(candidate, leaseId, ttlMs);
+                return candidate;
+              });
+            }
+
+            return walkCandidate(0);
+          }
+
+          return walkSource(0);
+        }
+
+        return walkItem(0);
+      });
+    }).catch(function () { return null; });
+  }
+
+  // --- 2e5: warmup in background (port di warmup()) ------------------------
+  var iptvWarmupDoneAt = 0;
+
+  function iptvWarmup(limit) {
+    limit = parseInt(limit || 12, 10);
+    var now = Date.now();
+    // Cooldown 30 min: se abbiamo gia' account warm e non e' passato abbastanza tempo.
+    if (Object.keys(iptvWarmAccountIds).length > 0 && now - iptvWarmupDoneAt < 30 * 60 * 1000) {
+      return Promise.resolve(Object.keys(iptvWarmAccountIds).length);
+    }
+    return loadIptvAccounts().then(function (accounts) {
+      if (!accounts || !accounts.length) return 0;
+      // Shuffle casuale (non deterministico: serve solo a variare l'ordine di probe).
+      var pool = accounts.slice();
+      for (var i = pool.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+
+      // Batch da 12: trova gli account con slot liberi, fino a limit.
+      function probeFree(offset) {
+        // Il warmup e' un'ottimizzazione, non deve trasformarsi in una
+        // scansione completa di account: prova al massimo i primi due batch.
+        if (offset >= Math.min(pool.length, 24)) return Promise.resolve([]);
+        var batch = pool.slice(offset, offset + 12).map(function (account) {
+          return {account: account, aid: iptvAccountId(account)};
+        });
+        return iptvProbeBatch(batch).then(function (checked) {
+          if (checked.length >= limit) return checked.slice(0, limit);
+          return probeFree(offset + 12).then(function (more) {
+            return checked.concat(more).slice(0, limit);
+          });
+        });
+      }
+
+      var freeAccounts = [];
+      return probeFree(0).then(function (free) {
+        freeAccounts = free;
+        // Precarica il lineup per ogni account free: popola iptvStreamMapCache
+        // cosi' i lookup successivi sono istantanei (6h di cache).
+        return Promise.all(free.map(function (row) {
+          return iptvAccountChannel(row.account, '__prippi_warmup__');
+        }));
+      }).then(function () {
+        freeAccounts.forEach(function (row) {
+          iptvWarmAccountIds[row.aid] = true;
+        });
+        iptvWarmupDoneAt = Date.now();
+        return Object.keys(iptvWarmAccountIds).length;
+      }).catch(function () {
+        // Errore non critico: registra comunque gli account trovati.
+        freeAccounts.forEach(function (row) {
+          iptvWarmAccountIds[row.aid] = true;
+        });
+        iptvWarmupDoneAt = Date.now();
+        return Object.keys(iptvWarmAccountIds).length;
+      });
+    }).catch(function () { return 0; });
+  }
+
+  // --- Step 3a: risoluzione live tramite pool IPTV --------------------------
+  var iptvWarmupStarted = false;
+
+  function iptvLeaseIdForItem(item) {
+    // Stabile per canale (row+title): stesso lease tra play e zapping, cosi'
+    // il rinnovo dentro acquire() ritrova lo slot gia' preso.
+    return 'tizen:' + liveIdentity(item.live_row || item.channel || 'tv', item.title);
+  }
+
+  function resolveIptvPool(item) {
+    var title = String(item.fulltitle || item.title || '').trim();
+    if (!title) return Promise.reject(new Error('Canale IPTV senza titolo'));
+    var attempt = parseInt(item._iptvAttempt || 0, 10);
+    return iptvAcquire(title, iptvLeaseIdForItem(item), 900 * 1000, attempt).then(function (url) {
+      if (!url) throw new Error('Nessuno slot IPTV disponibile per ' + title);
+      // Il primo canale ha priorita' assoluta: il warmup parte soltanto dopo
+      // aver trovato una sorgente e con un numero limitato di candidati.
+      if (!iptvWarmupStarted) {
+        iptvWarmupStarted = true;
+        setTimeout(function () { try { iptvWarmup(4); } catch (error) {} }, 2500);
+      }
+      // .ts Xtream: il player deve mandare l'User-Agent VLC (come in Python).
+      return {
+        url: url,
+        manifest_type: 'hls',
+        drm_type: '',
+        headers: {'User-Agent': 'VLC/3.0.21 LibVLC/3.0.21'},
+        live_source: 'iptv_pool'
+      };
+    });
+  }
+
   function resolve(item) {
+    if (item.action === 'authorized_live' || item.authorized_sources) return resolveAuthorizedLive(item);
     if (item.channel === 'sportchannels' || item.sport_kind) return resolveSportLive(item);
     if (item.channel === 'raiplay') return withDaddyFallback(resolveRai(item), item);
     if (item.channel === 'mediasetplay') return withDaddyFallback(resolveMediaset(item), item);
@@ -2496,6 +3309,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     }
     if (item.channel === 'streamingcommunity' || /streamingcommunity/i.test(item.url || '')) return resolveStreamingCommunity(item);
     if (item.channel === 'discoveryplus') return resolveDiscovery(item);
+    // Canali sincronizzati dal catalogo IPTV Group-E: nessun URL diretto,
+    // la sorgente viene acquisita dal pool (account + lineup) o dai source
+    // locali del catalogo con lease.
+    if (item.channel === 'catalog') return resolveIptvPool(item);
     if (/\.(m3u8|mpd|mp4)(\?|$)/i.test(item.url || '')) {
       return Promise.resolve({url: item.url, manifest_type: /\.mpd/i.test(item.url) ? 'mpd' : /\.m3u8/i.test(item.url) ? 'hls' : 'progressive', headers: item.headers || {}, drm_type: ''});
     }
@@ -2508,9 +3325,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (route === '/home-expanded') return expandedHome();
     if (route === '/search') return search(decodeURIComponent((String(path).split('q=')[1] || '').replace(/\+/g, ' ')));
     if (route === '/detail') return detail((body || {}).item || {});
+    if (route === '/artwork') return tmdbDetails((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});
+    if (route === '/resolve-live-fallback') return resolveLiveFallback((body || {}).item || {});
     if (route === '/live') return live();
+    if (route === '/live-expanded') return liveExpanded();
     if (route === '/live-epg') return skyEpg((body || {}).rows || []);
     if (route === '/browse-macros') return Promise.resolve({items: []});
     if (route === '/settings') return Promise.resolve({items: [
@@ -2530,13 +3350,21 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   var HOME_CACHE = 'prippi.tizen.home.v3';
   var CW_KEY = 'prippi.tizen.continue_watching.v1';
+  var SEARCH_HISTORY_KEY = 'prippi.tizen.search_history.v1';
   var CACHE_MAX_AGE = 30 * 60 * 1000;
   var PLAYER_HIDE_MS = 6500;
   var CW_MIN_PROGRESS_MS = 10000;
-  var CW_COMPLETE_PERCENT = 92;
+  var CW_COMPLETE_PERCENT = 97;
   var CW_MAX_ITEMS = 30;
+  var SEARCH_HISTORY_MAX_ITEMS = 10;
   var UP_NEXT_PROMPT_MS = 60000;
-  var UP_NEXT_MIN_WATCHED_MS = 60000;
+  var PLAY_RESOLVE_TIMEOUT_MS = 18000;
+  var HOME_LOAD_TIMEOUT_MS = 12000;
+  var LIVE_LOAD_TIMEOUT_MS = 7500;
+  var DIAGNOSTIC_KEY = 'prippi.tizen.diagnostics.v1';
+  var DIAGNOSTIC_MAX_ITEMS = 24;
+  var cwFlow = window.PrippiCwFlow;
+  var mediaPrefs = window.PrippiMediaPrefs;
   var avplay = window.webapis && window.webapis.avplay;
   var state = {
     page: 'home',
@@ -2562,7 +3390,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     playerLive: false,
     playerEngine: '',
     playerUiTimer: null,
+    playerUiVisible: true,
+    playerFocusId: 'player-toggle',
     playerTick: null,
+    artworkTimer: null,
+    artworkQueue: [],
+    artworkJobs: {},
+    artworkWorkerBusy: false,
     toastTimer: null,
     htmlFallback: false,
     hlsInstance: null,
@@ -2570,9 +3404,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     hlsFatalRetries: 0,
     playerItem: null,
     pendingResumeMs: 0,
+    avResumeAttempts: 0,
+    avResumeInFlight: false,
     lastProgressSave: 0,
     episodeQueue: [],
     episodeIndex: -1,
+    episodeQueueComplete: false,
     episodeParent: null,
     upNextVisible: false,
     upNextCancelled: false,
@@ -2584,12 +3421,58 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     liveRowTitle: '',
     liveSwitchBusy: false,
     liveSwitchAt: 0,
+    trackCycleIndex: -1,
+    trackPreferenceTimer: null,
     playRequestId: 0
   };
 
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
       return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[character];
+    });
+  }
+
+  function diagnostic(label, detail) {
+    var entry = {
+      at: new Date().toISOString().slice(11, 19),
+      label: String(label || 'Evento'),
+      detail: String(detail || '').replace(/[\r\n]+/g, ' ').slice(0, 180)
+    };
+    var entries = [];
+    try { entries = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '[]'); } catch (error) {}
+    if (!Array.isArray(entries)) entries = [];
+    entries.push(entry);
+    entries = entries.slice(-DIAGNOSTIC_MAX_ITEMS);
+    try { localStorage.setItem(DIAGNOSTIC_KEY, JSON.stringify(entries)); } catch (error) {}
+    try { if (window.console && console.log) console.log('[PrippiTV] ' + entry.label + ': ' + entry.detail); } catch (error) {}
+  }
+
+  function diagnosticEntries() {
+    try {
+      var entries = JSON.parse(localStorage.getItem(DIAGNOSTIC_KEY) || '[]');
+      return Array.isArray(entries) ? entries : [];
+    } catch (error) { return []; }
+  }
+
+  function withTimeout(promise, milliseconds, message) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error(message || 'Operazione troppo lenta'));
+      }, milliseconds);
+      promise.then(function (value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }).catch(function (error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      });
     });
   }
 
@@ -2600,6 +3483,14 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function image(item) {
     return item && (item.thumbnail || item.poster || item.fanart) || '';
+  }
+
+  function isLiveMedia(item) {
+    if (!item) return false;
+    var explicit = item.isLive;
+    if (explicit === true || explicit === 1 || String(explicit).toLowerCase() === 'true') return true;
+    var kind = String(item.contentType || item.mediaType || info(item).mediatype || '').toLowerCase();
+    return kind === 'live' || kind === 'channel';
   }
 
   function info(item) {
@@ -2617,7 +3508,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (item && String(item.contentType || '').toLowerCase() === 'episode') return 'episode';
     if (/episode/.test(value)) return 'episode';
     if (/tv|serie|season/.test(value)) return 'series';
-    if (item && item.isLive) return 'live';
+    if (isLiveMedia(item)) return 'live';
     return 'movie';
   }
 
@@ -2631,10 +3522,29 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (!parts.length) {
       if (isSeries(item)) parts.push('Serie TV');
       else if (isEpisode(item)) parts.push('Episodio');
-      else if (item.isLive) parts.push('In diretta');
+      else if (isLiveMedia(item)) parts.push('In diretta');
       else parts.push('Film');
     }
     return parts.join('  -  ');
+  }
+
+  function continueWatchingSeriesTitle(item) {
+    var labels = info(item);
+    return String(labels.tvshowtitle || item.contentSerieName || item.serieName || item.show || '').trim();
+  }
+
+  function continueWatchingEpisodeNote(item) {
+    if (!isEpisode(item)) return '';
+    var labels = info(item), season = Number(labels.season || item.contentSeason || item.season || 0);
+    var episode = Number(labels.episode || item.contentEpisodeNumber || item.episode || 0);
+    var code = (season > 0 ? 'S' + ('0' + season).slice(-2) : '') +
+      (episode > 0 ? 'E' + ('0' + episode).slice(-2) : '');
+    var episodeName = String(item.contentTitle || item.title || labels.title || '').trim();
+    var seriesName = continueWatchingSeriesTitle(item);
+    if (episodeName.toLowerCase() === seriesName.toLowerCase() || /^(s\d+e\d+|episodio\s+\d+)$/i.test(episodeName)) {
+      episodeName = '';
+    }
+    return [code, episodeName].filter(Boolean).join(' · ');
   }
 
   function normalizedKey(value) {
@@ -2642,28 +3552,37 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function continueKey(item, parent) {
-    var labels = info(item), parentLabels = info(parent || {}), episode = isEpisode(item), series = episode || isSeries(item);
-    var tmdb = series ? (parentLabels.tmdb_id || labels.tmdb_id) : labels.tmdb_id;
-    var name = episode ? ((parent && title(parent)) || item.contentSerieName || item.show || title(item)) : title(item);
-    var fallback = normalizedKey(name) || normalizedKey(item.url) || normalizedKey(item.video_id);
-    return (series ? 'tv_' : 'movie_') + (tmdb || fallback);
+    return cwFlow.continueKey(item, parent);
+  }
+
+  function readSearchHistory() {
+    try {
+      var entries = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+      return Array.isArray(entries) ? entries.filter(function (value) {
+        return typeof value === 'string' && value.replace(/^\s+|\s+$/g, '').length >= 2;
+      }).slice(0, SEARCH_HISTORY_MAX_ITEMS) : [];
+    } catch (error) { return []; }
+  }
+
+  function saveSearchHistory(query) {
+    var clean = String(query || '').replace(/^\s+|\s+$/g, '');
+    if (clean.length < 2) return readSearchHistory();
+    var lower = clean.toLowerCase();
+    var entries = readSearchHistory().filter(function (value) {
+      return String(value).toLowerCase() !== lower;
+    });
+    entries.unshift(clean);
+    entries = entries.slice(0, SEARCH_HISTORY_MAX_ITEMS);
+    try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(entries)); } catch (error) {}
+    return entries;
+  }
+
+  function clearSearchHistory() {
+    try { localStorage.removeItem(SEARCH_HISTORY_KEY); } catch (error) {}
   }
 
   function sameMedia(left, right) {
-    if (!left || !right) return false;
-    if (isEpisode(left) || isEpisode(right)) {
-      if (left.video_id && right.video_id) return String(left.video_id) === String(right.video_id);
-      var leftSeason = Number(left.season || left.contentSeason || 0), rightSeason = Number(right.season || right.contentSeason || 0);
-      var leftEpisode = Number(left.episode || left.contentEpisodeNumber || 0), rightEpisode = Number(right.episode || right.contentEpisodeNumber || 0);
-      var leftSeries = normalizedKey(left.contentSerieName || left.show || ''), rightSeries = normalizedKey(right.contentSerieName || right.show || '');
-      if (leftSeason && leftEpisode && leftSeason === rightSeason && leftEpisode === rightEpisode &&
-          (!leftSeries || !rightSeries || leftSeries === rightSeries)) return true;
-    }
-    if (left.video_id && right.video_id) return String(left.video_id) === String(right.video_id);
-    if (left.url && right.url) return String(left.url) === String(right.url);
-    return Number(left.season || left.contentSeason || 0) === Number(right.season || right.contentSeason || 0) &&
-      Number(left.episode || left.contentEpisodeNumber || 0) === Number(right.episode || right.contentEpisodeNumber || 0) &&
-      normalizedKey(left.contentSerieName || left.show || left.fulltitle) === normalizedKey(right.contentSerieName || right.show || right.fulltitle);
+    return cwFlow.sameMedia(left, right);
   }
 
   function cleanStoredItem(item) {
@@ -2679,9 +3598,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     try {
       var entries = JSON.parse(localStorage.getItem(CW_KEY) || '[]');
       if (!Array.isArray(entries)) return [];
-      return entries.filter(function (entry) {
-        return entry && entry.key && entry.item && !entry.item.isLive;
-      }).sort(function (a, b) { return Number(b.updatedAt || 0) - Number(a.updatedAt || 0); }).slice(0, CW_MAX_ITEMS);
+      var migrated = cwFlow.migrateEntries(entries, CW_MAX_ITEMS);
+      if (JSON.stringify(entries) !== JSON.stringify(migrated)) {
+        try { localStorage.setItem(CW_KEY, JSON.stringify(migrated)); } catch (writeError) {}
+      }
+      return migrated;
     } catch (error) { return []; }
   }
 
@@ -2714,32 +3635,41 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function saveContinueWatching(item, position, duration, force) {
-    if (!item || item.isLive || state.playerLive) return;
+    if (!item || isLiveMedia(item) || state.playerLive) return;
     position = Math.max(0, Number(position || 0));
     duration = Math.max(0, Number(duration || 0));
     var parent = state.episodeParent, key = continueKey(item, parent), entries = readContinueWatching();
     if (!force && position < CW_MIN_PROGRESS_MS) return;
     if (!force && duration > 0 && position >= duration * CW_COMPLETE_PERCENT / 100) {
+      var completedNext = isEpisode(item) ? nextEpisodeItem() : null;
+      if (completedNext) {
+        saveContinueWatching(completedNext, 0, 0, true);
+        return;
+      }
       writeContinueWatching(entries.filter(function (entry) { return entry.key !== key; }));
       refreshContinueWatchingRow();
       return;
     }
-    var queue = [], queueIndex = -1;
+    var queue = [], queueIndex = -1, queueComplete = false;
     if (isEpisode(item)) {
       var sourceQueue = state.episodeQueue.length ? state.episodeQueue : [item];
-      var sourceIndex = state.episodeIndex >= 0 ? state.episodeIndex : sourceQueue.findIndex(function (value) { return sameMedia(value, item); });
+      var normalizedQueue = cwFlow.normalizeEpisodeQueue(sourceQueue, item);
+      sourceQueue = normalizedQueue.items;
+      var sourceIndex = normalizedQueue.index;
       sourceIndex = Math.max(0, sourceIndex);
-      queue = sourceQueue.slice(sourceIndex, sourceIndex + 24).map(compactQueueItem);
+      queue = sourceQueue.slice(sourceIndex, sourceIndex + cwFlow.MAX_QUEUE_ITEMS).map(compactQueueItem);
       if (!queue.length || !sameMedia(queue[0], item)) queue.unshift(compactQueueItem(item));
       queueIndex = 0;
+      queueComplete = state.episodeQueueComplete && sourceIndex + queue.length >= sourceQueue.length;
     }
     var entry = {
-      schema: 1,
+      schema: cwFlow.SCHEMA,
       key: key,
       item: cleanStoredItem(item),
       parent: parent ? cleanStoredItem(parent) : null,
       queue: queue,
       index: queueIndex,
+      queueComplete: queueComplete,
       position: position,
       duration: duration,
       updatedAt: Date.now()
@@ -2755,6 +3685,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var item;
       if (isEpisode(entry.item)) {
         item = Object.assign({}, entry.parent || entry.item, {contentType: 'tvshow'});
+        var seriesTitle = entry.parent ? title(entry.parent) : continueWatchingSeriesTitle(entry.item);
+        if (seriesTitle && seriesTitle !== 'Senza titolo') item.fulltitle = seriesTitle;
         item._cwResumeItem = entry.item;
       } else item = Object.assign({}, entry.item);
       item._cwEntry = entry;
@@ -2818,9 +3750,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       esc(titleText) + '</h2><p>' + esc(bodyText || 'Ancora un momento...') + '</p></div></div>';
   }
 
-  function emptyMarkup(titleText, bodyText, icon) {
+  function emptyMarkup(titleText, bodyText, icon, retry) {
     return '<div class="empty-state"><div class="state-panel"><div class="state-icon">' +
-      esc(icon || '!') + '</div><h2>' + esc(titleText) + '</h2><p>' + esc(bodyText) + '</p></div></div>';
+      esc(icon || '!') + '</div><h2>' + esc(titleText) + '</h2><p>' + esc(bodyText) + '</p>' +
+      (retry ? '<button class="state-action" data-retry="' + esc(retry) + '" data-focusable data-zone="state" data-focus-key="retry:' + esc(retry) + '">Riprova</button>' : '') +
+      '</div></div>';
   }
 
   function errorMarkup(message, retry) {
@@ -2832,10 +3766,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function cardMarkup(item, options) {
     options = options || {};
-    var id = saveItem(item), live = !!options.live, episode = isEpisode(item), classes = 'card';
+    var id = saveItem(item), live = isLiveMedia(item) || options.live === true, episode = isEpisode(item), classes = 'card';
     if (live) classes += ' live';
     if (episode) classes += ' episode';
-    var meta = live ? (item.epg || item.program || 'In diretta') : itemNote(item);
+    var cwEpisode = item._cwEntry && item._cwEntry.item;
+    var meta = live ? (item.epg || item.program || 'In diretta') :
+      (cwEpisode && isEpisode(cwEpisode) ? continueWatchingEpisodeNote(cwEpisode) : itemNote(item));
     var badge = options.badge ? '<span class="card-badge">' + esc(options.badge) + '</span>' : '';
     var progress = Number(item._cwProgress || 0);
     var progressMarkup = progress > 0 ? '<span class="card-progress"><i style="width:' + Math.min(100, progress) + '%"></i></span>' : '';
@@ -2854,7 +3790,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       esc(row.title || 'PrippiStream') + '</h2><span class="row-count">' + items.length + '</span></div>' +
       '<div class="cards">' + items.map(function (item, column) {
         return cardMarkup(item, {
-          live: live || item.isLive,
+          live: live === true || isLiveMedia(item),
+          // Come nella UI TV Android: il canale configurato e autorizzato parte
+          // con OK. Anche i canali del catalogo IPTV Group-E partono subito:
+          // /resolve li risolve dal pool (Step 3), lo zapping cicla la riga.
+          action: (live === true || isLiveMedia(item)) ? 'play' : 'detail',
           zone: 'row',
           row: rowIndex,
           col: column,
@@ -2927,12 +3867,18 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function renderSearchMarkup() {
+    var history = readSearchHistory();
+    var historyMarkup = history.length ? '<section id="search-history" class="search-history"><div class="search-history-heading"><h3>Ricerche recenti</h3>' +
+      '<button id="search-history-clear" class="secondary-action" data-focusable data-zone="search-history" data-history-index="' + history.length + '" data-focus-key="search:history:clear">Cancella</button></div>' +
+      '<div class="search-history-items">' + history.map(function (query, index) {
+        return '<button class="filter-chip" data-search-history="' + esc(query) + '" data-focusable data-zone="search-history" data-history-index="' + index + '" data-focus-key="search:history:' + index + '">' + esc(query) + '</button>';
+      }).join('') + '</div></section>' : '';
     return '<div class="page-scroll"><div class="section-intro"><div><h2>Trova qualcosa da guardare</h2>' +
       '<p>Cerca film, serie TV e anime con il telecomando.</p></div></div>' +
       '<div class="search-box"><input id="query" data-focusable data-zone="form" data-form-index="0" ' +
       'data-focus-key="search:query" autocomplete="off" placeholder="Titolo di un film o di una serie">' +
       '<button id="search-go" class="action" data-focusable data-zone="form" data-form-index="1" ' +
-      'data-focus-key="search:go">Cerca</button></div><div id="search-status" class="search-status">Scrivi almeno due caratteri.</div>' +
+      'data-focus-key="search:go">Cerca</button></div>' + historyMarkup + '<div id="search-status" class="search-status">Scrivi almeno due caratteri.</div>' +
       '<div id="search-filters" class="browse-filters search-filters hidden"><button class="filter-chip selected" data-search-filter="all" data-focusable data-zone="filters" data-filter-index="0">Tutto</button>' +
       '<button class="filter-chip" data-search-filter="film" data-focusable data-zone="filters" data-filter-index="1">Film</button>' +
       '<button class="filter-chip" data-search-filter="serie" data-focusable data-zone="filters" data-filter-index="2">Serie TV</button>' +
@@ -2965,8 +3911,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function renderBrowseMarkup(filter) {
     filter = filter || 'all';
     var items = browseItems(filter);
-    var fallback = state.homeError ? errorMarkup(state.homeError, 'home') :
-      loadingMarkup('Catalogo in caricamento', 'La sezione apparirà appena la Home sarà disponibile.');
+    var label = {raiplay: 'RaiPlay', mediasetplay: 'Mediaset', la7: 'La7'}[filter] || 'questa sezione';
+    var fallback = state.homeError ? errorMarkup(state.homeError, 'home') : state.homeLoading ?
+      loadingMarkup('Catalogo in caricamento', 'La sezione apparirà appena la Home sarà disponibile.') :
+      emptyMarkup('Nessun titolo in ' + label, 'Aggiorna la Home o riprova più tardi.', '—', 'home');
     return '<div class="page-scroll"><div class="section-intro"><div><h2>Esplora il catalogo</h2>' +
       '<p>Una raccolta unica, organizzata per il grande schermo.</p></div></div>' +
       '<div class="browse-filters"><button class="filter-chip ' + (filter === 'all' ? 'selected' : '') + '" data-filter="all" data-focusable data-zone="filters" data-filter-index="0">Tutto</button>' +
@@ -3004,13 +3952,18 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var subtitles = localStorage.getItem('prippi.tizen.subtitles') === 'on';
     var reduced = localStorage.getItem('prippi.tizen.reduced-motion') === 'on';
     var version = document.documentElement.getAttribute('data-prippi-version') || 'bundle locale';
+    var entries = diagnosticEntries().slice(-6).reverse();
+    var diagnostics = entries.length ? entries.map(function (entry) {
+      return '<li><b>' + esc(entry.at + '  ' + entry.label) + '</b><span>' + esc(entry.detail) + '</span></li>';
+    }).join('') : '<li><span>Nessun evento di riproduzione registrato.</span></li>';
     return '<div class="page-scroll"><div class="section-intro"><div><h2>Preferenze TV</h2>' +
       '<p>Impostazioni semplici, pensate per telecomando e schermi condivisi.</p></div></div><div class="settings-grid">' +
       settingCard('runtime', 'Motore', 'L\'app funziona direttamente sulla TV, senza PC.', 'Standalone', null) +
       settingCard('version', 'Aggiornamenti', 'Bundle verificato tramite SHA-256.', version, null) +
       settingCard('subtitles', 'Sottotitoli automatici', 'Restano disattivati finché non li selezioni nel player.', subtitles ? 'ON' : 'OFF', {index: 0}) +
       settingCard('reduced-motion', 'Animazioni ridotte', 'Riduce transizioni e lavoro grafico sui dispositivi lenti.', reduced ? 'ON' : 'OFF', {index: 1}) +
-      '</div></div>';
+      '</div><section class="diagnostic-panel"><div><h3>Diagnostica riproduzione</h3><p>Ultimi eventi della TV: utile anche se Samsung non espone i log al PC.</p></div>' +
+      '<ul>' + diagnostics + '</ul><button data-diagnostic-clear data-focusable data-zone="settings" data-setting-index="2" data-focus-key="diagnostic:clear">Cancella diagnostica</button></section></div>';
   }
 
   function renderPage(preserveFocus) {
@@ -3076,7 +4029,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       renderPage(true);
       status(true, 'Home pronta');
     }
-    request('/home').then(function (response) {
+    withTimeout(request('/home'), HOME_LOAD_TIMEOUT_MS, 'Home troppo lenta. Riprova.').then(function (response) {
       var rows = response.rows || [];
       if (!rows.length) throw new Error('Il catalogo non contiene righe');
       acceptHome(rows, response.cached ? 'Home dalla cache' : response.fallback ? 'Catalogo disponibile' : 'Connesso');
@@ -3085,7 +4038,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.homeLoading = false;
       state.homeError = error.message || 'Catalogo non disponibile';
       status(false, 'Connessione da verificare');
-      if (!state.home.length && (state.page === 'home' || state.page === 'browse')) renderPage(true);
+      if (state.page === 'home' || state.page === 'browse') renderPage(true);
     });
   }
 
@@ -3108,7 +4061,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function loadLive() {
     state.liveLoading = true;
     state.liveError = '';
-    request('/live').then(function (response) {
+    withTimeout(request('/live'), LIVE_LOAD_TIMEOUT_MS, 'Canali troppo lenti. Riprova.').then(function (response) {
       state.liveLoading = false;
       state.live = (response.rows || []).map(function (row) {
         var normalized = Object.assign({}, row);
@@ -3118,6 +4071,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.liveError = '';
       renderPage(true);
       status(true, 'Canali aggiornati');
+      request('/live-expanded', {rows: state.live}).then(function (expanded) {
+        if (!expanded || !expanded.rows || !expanded.rows.length) return;
+        state.live = expanded.rows;
+        if (state.page === 'live') renderPage(true);
+      }).catch(function () {});
       request('/live-epg', {rows: state.live}).then(function (epgResponse) {
         if (!epgResponse || !epgResponse.rows) return;
         state.live = epgResponse.rows;
@@ -3146,16 +4104,30 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (!input || !button) return;
     button.onclick = runSearch;
     input.onkeydown = function (event) { if (event.keyCode === 13) runSearch(); };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-search-history]'), function (historyButton) {
+      historyButton.onclick = function () {
+        input.value = historyButton.getAttribute('data-search-history') || '';
+        runSearch();
+      };
+    });
+    var clear = document.getElementById('search-history-clear');
+    if (clear) clear.onclick = function () {
+      clearSearchHistory();
+      var history = document.getElementById('search-history');
+      if (history && history.parentNode) history.parentNode.removeChild(history);
+      focusElement(input);
+    };
   }
 
   function runSearch() {
     var input = document.getElementById('query'), query = input ? input.value.replace(/^\s+|\s+$/g, '') : '';
     var statusElement = document.getElementById('search-status'), results = document.getElementById('search-results');
-    if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) input.focus(); return; }
+    if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) focusElement(input); return; }
     statusElement.textContent = 'Ricerca in corso...';
     results.innerHTML = '';
     request('/search?q=' + encodeURIComponent(query)).then(function (response) {
       var items = response.items || [];
+      saveSearchHistory(query);
       if (!items.length) {
         statusElement.textContent = 'Nessun risultato per "' + query + '".';
         results.innerHTML = emptyMarkup('Nessun risultato', 'Prova un titolo diverso.', '?');
@@ -3237,6 +4209,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       };
       element.setAttribute('data-focus-key', 'setting:' + element.getAttribute('data-setting'));
     });
+    var clear = document.querySelector('[data-diagnostic-clear]');
+    if (clear) clear.onclick = function () {
+      try { localStorage.removeItem(DIAGNOSTIC_KEY); } catch (error) {}
+      renderPage(true);
+      toast('Diagnostica cancellata');
+    };
   }
 
   function bindContent(root) {
@@ -3248,6 +4226,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         var retry = element.getAttribute('data-retry');
         if (retry === 'home') loadHome();
         if (retry === 'live') loadLive();
+        if (retry === 'episodes' && state.detailParent) showEpisodes(state.detailParent);
       };
     });
     Array.prototype.forEach.call(root.querySelectorAll('[data-item]'), function (element) {
@@ -3261,9 +4240,69 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       };
       element.onfocus = function () {
         rememberFocus(element);
-        if (state.page === 'home') updateHero(state.items[element.getAttribute('data-item')]);
+        var focused = state.items[element.getAttribute('data-item')];
+        if (state.page === 'home') updateHero(focused);
+        queueArtworkUpgrade(focused, element, true);
       };
+      queueArtworkUpgrade(state.items[element.getAttribute('data-item')], element, false);
     });
+  }
+
+  function applyArtworkUpgrade(item, updated, element) {
+    if (!item || !updated) return;
+    if (updated.thumbnail) item.thumbnail = updated.thumbnail;
+    if (updated.poster) item.poster = updated.poster;
+    if (updated.fanart) item.fanart = updated.fanart;
+    if (updated.infoLabels) item.infoLabels = Object.assign({}, item.infoLabels || {}, updated.infoLabels);
+    if (element) {
+      var poster = element.querySelector && element.querySelector('.poster');
+      if (poster && image(item)) poster.style.backgroundImage = 'url("' + image(item).replace(/["\\]/g, '\\$&') + '")';
+    }
+    if (state.page === 'home' && document.activeElement === element) updateHero(item);
+  }
+
+  function artworkKey(item) {
+    return mediaType(item) + ':' + title(item).toLowerCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+  }
+
+  function scheduleArtworkWorker(delay) {
+    clearTimeout(state.artworkTimer);
+    state.artworkTimer = setTimeout(runArtworkWorker, delay == null ? 500 : delay);
+  }
+
+  function runArtworkWorker() {
+    if (state.artworkWorkerBusy || !state.artworkQueue.length) return;
+    if (window.__PRIPPI_PLAYBACK_ACTIVE__ || document.hidden) { scheduleArtworkWorker(1200); return; }
+    var job = state.artworkQueue.shift();
+    if (!job || !state.artworkJobs[job.key]) { scheduleArtworkWorker(0); return; }
+    state.artworkWorkerBusy = true;
+    request('/artwork', {item: job.refs[0].item}).then(function (updated) {
+      job.refs.forEach(function (ref) {
+        ref.item._artworkHd = true;
+        applyArtworkUpgrade(ref.item, updated, ref.element);
+      });
+    }).catch(function () {}).then(function () {
+      delete state.artworkJobs[job.key];
+      state.artworkWorkerBusy = false;
+      if (state.artworkQueue.length) scheduleArtworkWorker(550);
+    });
+  }
+
+  function queueArtworkUpgrade(item, element, priority) {
+    if (!item || isLiveMedia(item) || item._artworkHd) return;
+    var key = artworkKey(item), job = state.artworkJobs[key], index;
+    if (job) {
+      job.refs.push({item: item, element: element});
+      if (priority) {
+        index = state.artworkQueue.indexOf(job);
+        if (index > 0) { state.artworkQueue.splice(index, 1); state.artworkQueue.unshift(job); }
+      }
+    } else {
+      job = {key: key, refs: [{item: item, element: element}]};
+      state.artworkJobs[key] = job;
+      if (priority) state.artworkQueue.unshift(job); else state.artworkQueue.push(job);
+    }
+    scheduleArtworkWorker(priority ? 80 : 650);
   }
 
   function updateHero(item) {
@@ -3287,7 +4326,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (labels.rating) values.push('Valutazione ' + Number(labels.rating).toFixed(1));
     if (labels.runtime) values.push(labels.runtime + ' min');
     if (labels.genre) values.push(labels.genre);
-    if (!values.length) values.push(isSeries(item) ? 'Serie TV' : isEpisode(item) ? 'Episodio' : item.isLive ? 'Live' : 'Film');
+    if (!values.length) values.push(isSeries(item) ? 'Serie TV' : isEpisode(item) ? 'Episodio' : isLiveMedia(item) ? 'Live' : 'Film');
     return values.map(function (value) { return '<span class="detail-chip">' + esc(value) + '</span>'; }).join('');
   }
 
@@ -3296,46 +4335,53 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.detail = item;
     state.detailParent = null;
     renderDetail(item);
+    if (item.catalog_only) return;
     request('/detail', {item: item}).then(function (updated) {
       state.detail = updated;
+      applyArtworkUpgrade(item, updated, null);
       var paragraph = document.querySelector('#detail .detail-body p');
       if (paragraph) paragraph.textContent = updated.plot || item.plot || 'Nessuna trama disponibile.';
       var art = document.getElementById('detail');
       if (updated.fanart) art.style.backgroundImage = 'url("' + updated.fanart.replace(/["\\]/g, '\\$&') + '")';
+      var poster = document.querySelector('#detail .detail-poster');
+      if (poster && image(updated)) poster.style.backgroundImage = 'url("' + image(updated).replace(/["\\]/g, '\\$&') + '")';
     }).catch(function () {});
   }
 
   function renderDetail(item) {
-    var series = isSeries(item), live = !!item.isLive, cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
+    var series = isSeries(item), live = isLiveMedia(item), cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
+    var catalogOnly = item.catalog_only === true;
     var hasResume = !!(cw && cw.position >= CW_MIN_PROGRESS_MS);
     var resumeItem = series && cw ? Object.assign({}, item, {_cwEntry: cw, _cwResumeItem: cw.item}) :
       cw ? Object.assign({}, item, {_cwEntry: cw}) : item;
     var actions = [], actionIndex = 0, overlay = document.getElementById('detail');
-    if (hasResume) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Riprendi</button>');
-    if (series) actions.push('<button id="detail-episodes"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
-    else actions.push('<button id="detail-primary"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasResume ? 'Dall\'inizio' : 'Riproduci') + '</button>');
-    if (!live) actions.push('<button id="detail-trailer" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Trailer</button>');
-    if (cw) actions.push('<button id="detail-remove-cw" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Rimuovi da Continua a guardare</button>');
+    if (!catalogOnly) {
+      if (hasResume) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Riprendi</button>');
+      if (series) actions.push('<button id="detail-episodes"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
+      else actions.push('<button id="detail-primary"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasResume ? 'Dall\'inizio' : 'Riproduci') + '</button>');
+      if (!live) actions.push('<button id="detail-trailer" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Trailer</button>');
+      if (cw) actions.push('<button id="detail-remove-cw" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Rimuovi da Continua a guardare</button>');
+    } else actions.push('<span class="detail-chip">Catalogo Live</span>');
     actions.push('<button id="detail-close" data-focusable data-zone="detail" data-detail-index="' + actionIndex + '">Indietro</button>');
     state.detailParent = null;
     overlay.className = 'overlay';
     overlay.style.backgroundImage = item.fanart ? 'url("' + item.fanart.replace(/["\\]/g, '\\$&') + '")' : '';
     overlay.innerHTML = '<div class="detail-layout"><div class="detail-poster" style="background-image:url(\'' + esc(image(item)) + '\')"></div>' +
-      '<div class="detail-body"><span class="eyebrow">' + esc(series ? 'Serie TV' : item.isLive ? 'Canale Live' : 'PrippiStream') + '</span>' +
+      '<div class="detail-body"><span class="eyebrow">' + esc(series ? 'Serie TV' : live ? 'Canale Live' : 'PrippiStream') + '</span>' +
       '<h2>' + esc(title(item)) + '</h2><div class="detail-meta">' + detailMeta(item) + '</div>' +
       '<p>' + esc(item.plot || 'Caricamento informazioni...') + '</p><div class="actions">' +
       actions.join('') + '</div></div></div>';
-    if (hasResume) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
-    if (series) document.getElementById('detail-episodes').onclick = function () { showEpisodes(item); };
-    else document.getElementById('detail-primary').onclick = function () { play(item, {fromStart: hasResume}); };
-    if (!live) document.getElementById('detail-trailer').onclick = function () { toast('Trailer non ancora disponibile per questo contenuto.'); };
-    if (cw) document.getElementById('detail-remove-cw').onclick = function () {
+    if (!catalogOnly && hasResume) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
+    if (!catalogOnly && series) document.getElementById('detail-episodes').onclick = function () { showEpisodes(item); };
+    else if (!catalogOnly) document.getElementById('detail-primary').onclick = function () { play(item, {fromStart: hasResume}); };
+    if (!catalogOnly && !live) document.getElementById('detail-trailer').onclick = function () { toast('Trailer non ancora disponibile per questo contenuto.'); };
+    if (!catalogOnly && cw) document.getElementById('detail-remove-cw').onclick = function () {
       removeContinueWatching(cw.item || item._cwResumeItem || item, cw.parent || (series ? item : null));
       closeDetail();
       toast('Rimosso da Continua a guardare');
     };
     document.getElementById('detail-close').onclick = closeDetail;
-    focusElement(document.getElementById(hasResume ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
+    focusElement(document.getElementById(catalogOnly ? 'detail-close' : hasResume ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
   }
 
   function showEpisodes(item) {
@@ -3343,7 +4389,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.detailParent = item;
     overlay.style.backgroundImage = '';
     overlay.innerHTML = '<div class="episodes-layout"><div class="episodes-header"><div class="episodes-titlebar">' +
-      '<button id="episodes-back" class="episodes-back" data-focusable data-zone="episodes-header" data-focus-key="episodes:back">&#8592;</button>' +
+      '<button id="episodes-back" class="episodes-back" data-focusable data-zone="episodes-header" data-focus-key="episodes:back" aria-label="Torna al dettaglio"><span aria-hidden="true">&#8592;</span><span>Indietro</span></button>' +
       '<div><span class="eyebrow">Serie TV</span><h2>' + esc(title(item)) + '</h2></div></div>' +
       '<div id="season-picker" class="season-picker"></div></div><div id="episode-content">' +
       loadingMarkup('Caricamento episodi', 'Le stagioni saranno disponibili appena pronte.') + '</div></div>';
@@ -3362,13 +4408,14 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         return a._displaySeason - b._displaySeason || Number(a.episode || a.contentEpisodeNumber || 0) - Number(b.episode || b.contentEpisodeNumber || 0);
       });
       state.episodeParent = item;
-      state.episodeQueue = episodes.slice();
+      state.episodeQueue = cwFlow.normalizeEpisodeQueue(episodes).items;
       state.episodeIndex = -1;
+      state.episodeQueueComplete = true;
       seasons.sort(function (a, b) { return a - b; });
-      renderEpisodeSeason(item, episodes, seasons, seasons[0]);
+      renderEpisodeSeason(item, state.episodeQueue, seasons, seasons[0]);
     }).catch(function (error) {
       var content = document.getElementById('episode-content');
-      if (content) content.innerHTML = errorMarkup(error.message);
+      if (content) content.innerHTML = errorMarkup(error.message, 'episodes');
     });
   }
 
@@ -3470,33 +4517,87 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.liveRowTitle = found ? found.row.title : 'Live TV';
   }
 
+  function ensureEpisodeQueue(item) {
+    if (!isEpisode(item) || !state.episodeParent || state.episodeQueueComplete) return;
+    var parent = state.episodeParent, expected = item, requestId = state.playRequestId;
+    request('/episodes', {item: parent}).then(function (response) {
+      if (requestId !== state.playRequestId || !state.playerItem || !sameMedia(state.playerItem, expected)) return;
+      var episodes = response.items || response.episodes || [];
+      if (!episodes.length) return;
+      var normalized = cwFlow.normalizeEpisodeQueue(episodes, expected);
+      state.episodeQueue = normalized.items;
+      state.episodeIndex = normalized.index;
+      state.episodeQueueComplete = true;
+      refreshPlayerActions();
+      var times = currentPlayerTimes();
+      updateUpNext(times.current, times.duration);
+    }).catch(function () {});
+  }
+
   function play(item, options) {
     options = options || {};
     var entry = item._cwEntry || null, target = item._cwResumeItem || item, requestId = ++state.playRequestId;
-    if (target.isLive && !options.switchingLive) prepareLiveSession(target);
+    window.__PRIPPI_PLAYBACK_ACTIVE__ = true;
+    if (isLiveMedia(target) && !options.switchingLive) prepareLiveSession(target);
     if (entry && item._cwResumeItem) {
       state.episodeParent = entry.parent || item;
-      state.episodeQueue = entry.queue || [];
-      state.episodeIndex = Number(entry.index == null ? -1 : entry.index);
+      var restoredQueue = cwFlow.normalizeEpisodeQueue(entry.queue || [], target);
+      state.episodeQueue = restoredQueue.items;
+      state.episodeIndex = restoredQueue.index;
+      state.episodeQueueComplete = entry.queueComplete === true;
     } else if (isEpisode(target)) {
-      state.episodeIndex = state.episodeQueue.findIndex(function (candidate) { return sameMedia(candidate, target); });
+      var activeQueue = cwFlow.normalizeEpisodeQueue(state.episodeQueue, target);
+      state.episodeQueue = activeQueue.items;
+      state.episodeIndex = activeQueue.index;
     } else {
       state.episodeQueue = [];
       state.episodeIndex = -1;
+      state.episodeQueueComplete = false;
       state.episodeParent = null;
     }
     var saved = entry || findContinueWatching(target, state.episodeParent);
     state.pendingResumeMs = !options.fromStart && saved && sameMedia(saved.item, target) ? Number(saved.position || 0) : 0;
+    state.avResumeAttempts = 0;
+    state.avResumeInFlight = false;
     state.playerItem = target;
+    diagnostic('Risoluzione avviata', (isLiveMedia(target) ? 'Live' : 'VOD') + ' · ' + playbackTitle(target));
     state.switchingEpisode = !!options.switching;
+    ensureEpisodeQueue(target);
     if (!options.switching && !options.switchingLive) toast('Ricerca della sorgente migliore...');
     else setPlayerText(playbackTitle(target), 'Preparazione episodio successivo...');
     if (options.switchingLive) setPlayerText(playbackTitle(target), 'Cambio canale...');
-    return request('/resolve', {item: target}).then(function (response) {
+    return withTimeout(request('/resolve', {item: target}), PLAY_RESOLVE_TIMEOUT_MS, 'Risoluzione sorgente scaduta dopo 18 secondi').then(function (response) {
       if (requestId !== state.playRequestId) throw {stale: true};
       var url = findUrl(response);
       if (!url) throw new Error('Nessuno stream compatibile restituito');
-      if (String(response.drm_type || '').toLowerCase() === 'clearkey') return openClearKeyPlayer(url, target, response);
+      diagnostic('Sorgente risolta', (response.manifest_type || 'sconosciuto') + ' · DRM ' + (response.drm_type || 'nessuno'));
+      if (response.embed_url && !isNativeMedia(url, response.manifest_type) && isLiveMedia(target) &&
+          document.documentElement.className.indexOf('legacy-tizen') >= 0) {
+        openEmbed(response.embed_url, target);
+        return null;
+      }
+      if (String(response.drm_type || '').toLowerCase() === 'clearkey') {
+        return openClearKeyPlayer(url, target, response).catch(function (drmError) {
+          if (!isLiveMedia(target)) throw drmError;
+          return request('/resolve-live-fallback', {item: target}).then(function (fallback) {
+            if (requestId !== state.playRequestId) throw {stale: true};
+            var fallbackUrl = findUrl(fallback);
+            if (!fallbackUrl) throw new Error('Sorgente alternativa non disponibile');
+            toast('DRM non compatibile: avvio la sorgente alternativa...');
+            if (fallback.embed_url && !isNativeMedia(fallbackUrl, fallback.manifest_type) &&
+                document.documentElement.className.indexOf('legacy-tizen') >= 0) {
+              openEmbed(fallback.embed_url, target);
+            } else if (isNativeMedia(fallbackUrl, fallback.manifest_type)) {
+              openPlayer(fallbackUrl, target, fallback.headers || {}, fallback.manifest_type || '');
+            } else openEmbed(fallbackUrl, target);
+            return null;
+          }).catch(function (fallbackError) {
+            if (fallbackError && fallbackError.stale) throw fallbackError;
+            throw new Error((drmError.message || 'DASH/DRM non riproducibile') + '; ' +
+              (fallbackError.message || 'sorgente alternativa non disponibile'));
+          });
+        });
+      }
       if (isNativeMedia(url, response.manifest_type)) openPlayer(url, target, response.headers || {}, response.manifest_type || '');
       else openEmbed(url, target);
       return null;
@@ -3506,12 +4607,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (requestId !== state.playRequestId || (error && error.stale)) return;
       state.switchingEpisode = false;
       state.liveSwitchBusy = false;
+      diagnostic('Riproduzione fallita', error && error.message || String(error));
       if (options.switchingLive && state.liveQueue.length > 1 && Number(options.liveAttempts || 0) < state.liveQueue.length - 1) {
         switchLive(Number(options.liveDirection || 1), Number(options.liveAttempts || 0) + 1, true);
         return;
       }
       toast('Riproduzione non disponibile: ' + error.message, true);
-      if (state.playerOpen) { setPlayerText(playbackTitle(target), target.isLive ? 'Canale non disponibile' : 'Episodio non disponibile'); showPlayerUi(true); }
+      if (state.playerOpen) { setPlayerText(playbackTitle(target), isLiveMedia(target) ? 'Canale non disponibile' : 'Contenuto non disponibile'); showPlayerUi(true); }
     });
   }
 
@@ -3524,15 +4626,21 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function openPlayerShell(item) {
     clearTimeout(state.episodeTransitionTimer);
     state.episodeTransitionTimer = null;
+    clearTimeout(state.trackPreferenceTimer);
+    state.trackPreferenceTimer = null;
     stopPlayerMedia();
     var detail = document.getElementById('detail');
     if (detail && detail.className.indexOf('hidden') < 0) closeDetail();
     state.playerOpen = true;
-    state.playerLive = !!item.isLive;
+    state.playerLive = isLiveMedia(item);
     state.playing = false;
     var player = document.getElementById('player');
-    player.className = state.playerLive ? 'player live' : 'player';
-    document.getElementById('player-kind').textContent = state.playerLive ? 'IN DIRETTA' : 'PRIPPISTREAM';
+    player.className = state.playerLive ? 'player live' : 'player ondemand';
+    sizePlayerViewport();
+    var status = document.getElementById('player-status');
+    var castStatus = item.castStatus || item.cast_status || item.castDevice || item.cast_device || '';
+    status.textContent = state.playerLive ? 'LIVE' : (castStatus ? String(castStatus) : '');
+    status.className = state.playerLive ? 'player-status live' : 'player-status';
     document.getElementById('player-rewind').disabled = state.playerLive;
     document.getElementById('player-forward').disabled = state.playerLive;
     state.playerItem = item;
@@ -3540,10 +4648,32 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.upNextVisible = false;
     state.upNextCancelled = false;
     state.episodeTransitionScheduled = false;
+    state.trackCycleIndex = -1;
     hideUpNext(false);
     setPlayerText(playbackTitle(item), 'Connessione...');
     setPlayerProgress(0, 0, 0);
+    refreshPlayerActions();
+    updatePlayButton();
     showPlayerUi(true);
+  }
+
+  function sizePlayerViewport() {
+    // Tizen 6/Q60A non calcola affidabilmente `inset: 0` sui layer fixed:
+    // senza misure esplicite #player resta 0×0 e taglia il video con overflow.
+    var width = Math.max(1, Number(window.innerWidth || document.documentElement.clientWidth || 1920));
+    var height = Math.max(1, Number(window.innerHeight || document.documentElement.clientHeight || 1080));
+    ['player', 'player-ui', 'html-player', 'avplay', 'embed-player'].forEach(function (id) {
+      var element = document.getElementById(id);
+      if (!element || !element.style) return;
+      var position = id === 'player' ? 'fixed' : 'absolute';
+      element.style.setProperty('position', position, 'important');
+      element.style.setProperty('left', '0px', 'important');
+      element.style.setProperty('top', '0px', 'important');
+      element.style.setProperty('right', 'auto', 'important');
+      element.style.setProperty('bottom', 'auto', 'important');
+      element.style.setProperty('width', width + 'px', 'important');
+      element.style.setProperty('height', height + 'px', 'important');
+    });
   }
 
   function openEmbed(url, item) {
@@ -3553,10 +4683,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (old) old.parentNode.removeChild(old);
     var frame = document.createElement('iframe');
     frame.id = 'embed-player';
-    frame.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;z-index:1';
+    frame.style.cssText = 'position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;border:0;background:#000;z-index:1';
     frame.src = url;
     frame.setAttribute('allowfullscreen', '');
-    frame.onload = function () { state.playing = true; setPlayerText(playbackTitle(item), 'Player del provider'); showPlayerUi(true); };
+    frame.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+    frame.onload = function () { state.playing = true; updatePlayButton(); setPlayerText(playbackTitle(item), 'Player del provider'); showPlayerUi(true); };
     player.insertBefore(frame, document.getElementById('avplay'));
   }
 
@@ -3566,8 +4697,21 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var htmlPreferred = /^(hls|progressive)$/i.test(manifest || '') || /\.m3u8(\?|$)/i.test(url || '');
     var hls = /^hls$/i.test(manifest || '') || /\.m3u8(\?|$)/i.test(url || '');
     var hasHeaders = headers && Object.keys(headers).length > 0;
+    // L'AVPlay dell'emulatore espone l'API, ma il relativo backend video può
+    // andare in crash con HLS diretto. Sulle TV Samsung reali resta invece il
+    // percorso preferito e più affidabile.
+    var directHlsAvplay = hls && !hasHeaders && !!avplay && !isEmulatorRuntime();
+    var nativeHlsWithoutAvplay = hls && !hasHeaders && !avplay;
     state.htmlFallback = false;
-    if (hls && (isEmulatorRuntime() || hasHeaders) && window.Hls && Hls.isSupported()) {
+    // Sui TV Samsung reali AVPlay è più affidabile di MSE/Hls.js per HLS
+    // diretto: evita blocchi del resolver SC e la sola traccia audio Live.
+    if (directHlsAvplay) {
+      diagnostic('Player selezionato', 'AVPlay HLS diretto');
+      openAvPlayer(url, item, headers || {});
+      return;
+    }
+    if (hls && !nativeHlsWithoutAvplay && window.Hls && Hls.isSupported()) {
+      diagnostic('Player selezionato', 'HLS.js');
       openHlsJs(url, item, headers || {});
       return;
     }
@@ -3577,13 +4721,27 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       video.style.display = 'block';
       video.src = url;
       video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
-      video.onplaying = function () { state.playing = true; state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); showPlayerUi(false); };
-      video.oncanplay = function () { applyHtmlResume(video); video.play(); };
+      video.onplaying = function () { state.playing = true; updatePlayButton(); state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); queueApplyTrackPreferences(100); showPlayerUi(false); };
+      video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
+      video.oncanplay = function () {
+        applyHtmlResume(video); queueApplyTrackPreferences(0);
+        var started = video.play();
+        state.playing = true;
+        updatePlayButton();
+        setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
+        startTimeline();
+        showPlayerUi(false);
+        if (started && started.catch) started.catch(function () {});
+      };
       video.onended = handlePlaybackCompleted;
       video.onerror = function () {
         if (state.htmlFallback) return;
         state.htmlFallback = true;
         video.pause(); video.removeAttribute('src'); video.load();
+        if (hls && nativeHlsWithoutAvplay && window.Hls && Hls.isSupported()) {
+          openHlsJs(url, item, headers || {});
+          return;
+        }
         if (hls && isEmulatorRuntime()) {
           setPlayerText(playbackTitle(item), 'HLS non supportato dal player HTML dell\'emulatore');
           showPlayerUi(true);
@@ -3606,6 +4764,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (isEmulatorRuntime()) {
       return Promise.reject(new Error('ClearKey va verificato sulla TV Samsung reale; la sessione DRM chiude l\'emulatore'));
     }
+    var modernEme = typeof navigator.requestMediaKeySystemAccess === 'function' &&
+      window.HTMLMediaElement && typeof HTMLMediaElement.prototype.setMediaKeys === 'function';
+    if (document.documentElement.className.indexOf('legacy-tizen') >= 0 && !modernEme) {
+      return Promise.reject(new Error('ClearKey EME moderno non disponibile su Tizen 2.4'));
+    }
     if (!window.shaka || !window.shaka.Player) return Promise.reject(new Error('Runtime DASH/ClearKey non disponibile'));
     var pair = clearKeyPair(response);
     if (!pair) return Promise.reject(new Error('Chiave ClearKey non valida'));
@@ -3619,11 +4782,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
     video.onplaying = function () {
       state.playing = true;
+      updatePlayButton();
       setPlayerText(playbackTitle(item), 'In diretta');
       startTimeline();
+      queueApplyTrackPreferences(100);
       showPlayerUi(false);
     };
-    video.onerror = function () { setPlayerText(playbackTitle(item), 'Errore decoder ClearKey'); showPlayerUi(true); };
     var player = new window.shaka.Player(video), clearKeys = {};
     clearKeys[pair.kid] = pair.key;
     state.shakaInstance = player;
@@ -3640,18 +4804,51 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         });
       });
     }
-    player.addEventListener('error', function (event) {
-      var detail = event && event.detail;
-      setPlayerText(playbackTitle(item), 'Errore DASH/DRM' + (detail && detail.code ? ' (' + detail.code + ')' : ''));
-      showPlayerUi(true);
-    });
+    player.addEventListener('trackschanged', function () { queueApplyTrackPreferences(0); });
+    player.addEventListener('adaptation', function () { queueApplyTrackPreferences(100); });
     setPlayerText(playbackTitle(item), 'Preparazione DASH/ClearKey...');
-    return player.load(url).then(function () {
-      var started = video.play();
-      return started && started.then ? started : Promise.resolve();
-    }).catch(function (error) {
-      var detail = error && error.detail;
-      throw new Error(detail && detail.code ? 'DASH/DRM ' + detail.code : error.message || 'DASH/DRM non riproducibile');
+    return new Promise(function (resolve, reject) {
+      var settled = false, startTimer = null;
+      function normalizedError(error) {
+        var detail = error && error.detail, code = detail && detail.code || error && error.code;
+        return new Error(code ? 'DASH/DRM ' + code : error && error.message || 'DASH/DRM non riproducibile');
+      }
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(startTimer);
+        video.removeEventListener('playing', started);
+        reject(normalizedError(error));
+      }
+      function started() {
+        if (settled) return;
+        settled = true;
+        clearTimeout(startTimer);
+        video.removeEventListener('playing', started);
+        resolve();
+      }
+      video.addEventListener('playing', started);
+      video.onerror = function () {
+        setPlayerText(playbackTitle(item), 'Errore decoder ClearKey');
+        showPlayerUi(true);
+        fail(new Error('Errore decoder ClearKey'));
+      };
+      player.addEventListener('error', function (event) {
+        var error = normalizedError(event && event.detail || event);
+        setPlayerText(playbackTitle(item), error.message);
+        showPlayerUi(true);
+        fail(error);
+      });
+      try {
+        player.load(url).then(function () {
+          applyStoredTrackPreferences();
+          var playResult;
+          try { playResult = video.play(); } catch (error) { fail(error); return; }
+          if (playResult && playResult.catch) playResult.catch(fail);
+          startTimer = setTimeout(function () { fail(new Error('Timeout avvio DASH/DRM')); }, 10000);
+          if (!video.paused && video.readyState >= 2) started();
+        }).catch(fail);
+      } catch (error) { fail(error); }
     });
   }
 
@@ -3661,16 +4858,19 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.hlsFatalRetries = 0;
     surface.style.display = 'none';
     video.style.display = 'block';
+    video.autoplay = true;
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
     video.onplaying = function () {
       state.playing = true;
+      updatePlayButton();
       state.switchingEpisode = false;
       setPlayerText(playbackTitle(item), 'Riproduzione');
       startTimeline();
+      queueApplyTrackPreferences(100);
       showPlayerUi(false);
     };
     video.onended = handlePlaybackCompleted;
-    video.onerror = function () { failHlsJs(item, 'Errore del decoder video dell\'emulatore'); };
+    video.onerror = function () { failHlsJs(item, 'Errore del decoder video'); };
     var hls = new Hls({
       enableWorker: false,
       enableWebVTT: false,
@@ -3686,10 +4886,20 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       }
     });
     state.hlsInstance = hls;
+    video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
+    if (Hls.Events.AUDIO_TRACKS_UPDATED) hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function () { queueApplyTrackPreferences(0); });
+    if (Hls.Events.SUBTITLE_TRACKS_UPDATED) hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function () { queueApplyTrackPreferences(0); });
     hls.on(Hls.Events.MANIFEST_PARSED, function () {
       applyHtmlResume(video);
+      applyStoredTrackPreferences();
       var started;
       try { started = video.play(); } catch (error) { failHlsJs(item, error.message); return; }
+      state.playing = true;
+      updatePlayButton();
+      state.switchingEpisode = false;
+      setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
+      startTimeline();
+      showPlayerUi(false);
       if (started && started.catch) started.catch(function (error) { failHlsJs(item, error.message); });
     });
     hls.on(Hls.Events.ERROR, function (event, data) {
@@ -3712,6 +4922,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function failHlsJs(item, reason) {
     state.playing = false;
+    updatePlayButton();
     clearInterval(state.playerTick);
     setPlayerText(playbackTitle(item), 'Riproduzione non disponibile: ' + reason);
     showPlayerUi(true);
@@ -3727,8 +4938,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     video.style.display = 'block';
     video.src = url;
     video.onwaiting = function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); };
-    video.onplaying = function () { state.playing = true; state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); showPlayerUi(false); };
-    video.oncanplay = function () { applyHtmlResume(video); video.play(); };
+    video.onplaying = function () { state.playing = true; updatePlayButton(); state.switchingEpisode = false; setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); startTimeline(); queueApplyTrackPreferences(100); showPlayerUi(false); };
+    video.onloadedmetadata = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); };
+    video.oncanplay = function () { applyHtmlResume(video); queueApplyTrackPreferences(0); video.play(); };
     video.onended = handlePlaybackCompleted;
     video.onerror = function () { setPlayerText(playbackTitle(item), 'Formato video non supportato dal dispositivo'); showPlayerUi(true); };
     video.load();
@@ -3740,15 +4952,20 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (!avplay) { setPlayerText(playbackTitle(item), 'AVPlay non disponibile in questo ambiente'); showPlayerUi(true); return; }
     var video = document.getElementById('html-player'), surface = document.getElementById('avplay');
     state.playerEngine = 'avplay';
+    diagnostic('Player selezionato', 'AVPlay nativo');
     video.style.display = 'none';
     surface.style.display = 'block';
     try {
       avplay.setListener({
         onbufferingstart: function () { setPlayerText(playbackTitle(item), 'Buffering...'); showPlayerUi(false); },
         onbufferingcomplete: function () { setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione'); },
+        oncurrentplaytime: function () {
+          if (state.pendingResumeMs >= CW_MIN_PROGRESS_MS) applyAvResume();
+        },
         onstreamcompleted: handlePlaybackCompleted,
         onerror: function (error) {
           state.playing = false;
+          updatePlayButton();
           if (fallbackToHtml(url, item)) return;
           setPlayerText(playbackTitle(item), 'Errore player: ' + error);
           showPlayerUi(true);
@@ -3761,9 +4978,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (headers && headers.Cookie) {
         try { avplay.setStreamingProperty('COOKIE', headers.Cookie); } catch (error) {}
       }
-      avplay.setDisplayRect(0, 0, 1920, 1080);
-      avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO');
+      setAvplayFullscreen();
       avplay.prepareAsync(function () {
+        setAvplayFullscreen();
+        applyStoredTrackPreferences();
         startAvPlayback(item);
       }, function (error) {
         if (fallbackToHtml(url, item)) return;
@@ -3771,38 +4989,108 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         showPlayerUi(true);
       });
     } catch (error) {
+      diagnostic('Errore AVPlay', error.message || String(error));
       setPlayerText(playbackTitle(item), 'Errore AVPlay: ' + error.message);
       showPlayerUi(true);
     }
   }
 
+  function setAvplayFullscreen() {
+    var physicalWidth = Number(window.screen && (window.screen.availWidth || window.screen.width)) || 0;
+    var physicalHeight = Number(window.screen && (window.screen.availHeight || window.screen.height)) || 0;
+    var viewportWidth = Math.max(1, physicalWidth || window.innerWidth || document.documentElement.clientWidth || 1920);
+    var viewportHeight = Math.max(1, physicalHeight || window.innerHeight || document.documentElement.clientHeight || 1080);
+    // AVPlay richiede che il rettangolo dell'object nel DOM e quello hardware
+    // restino sincronizzati. Le sole regole CSS esterne non sono sufficienti
+    // sul runtime Tizen 6 della Q60A, che altrimenti lascia il piano a 0×0.
+    var surface = document.getElementById('avplay');
+    if (surface && surface.style) {
+      surface.style.setProperty('position', 'absolute', 'important');
+      surface.style.setProperty('left', '0px', 'important');
+      surface.style.setProperty('top', '0px', 'important');
+      surface.style.setProperty('right', 'auto', 'important');
+      surface.style.setProperty('bottom', 'auto', 'important');
+      surface.style.setProperty('width', viewportWidth + 'px', 'important');
+      surface.style.setProperty('height', viewportHeight + 'px', 'important');
+      surface.style.setProperty('display', 'block', 'important');
+      surface.style.setProperty('visibility', 'visible', 'important');
+    }
+    avplay.setDisplayRect(0, 0, viewportWidth, viewportHeight);
+    // Letterbox conserva il rapporto originale: niente zoom o immagine stirata.
+    avplay.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
+    diagnostic('Superficie AVPlay', viewportWidth + '×' + viewportHeight + ' letterbox');
+  }
+
   function applyHtmlResume(video) {
     var resume = Number(state.pendingResumeMs || 0);
-    state.pendingResumeMs = 0;
-    if (resume >= CW_MIN_PROGRESS_MS && isFinite(video.duration)) {
-      try { video.currentTime = Math.min(video.duration - 1, resume / 1000); } catch (error) {}
-    }
+    if (resume < CW_MIN_PROGRESS_MS) { state.pendingResumeMs = 0; return false; }
+    if (!isFinite(video.duration) || video.duration <= 0) return false;
+    try {
+      video.currentTime = Math.max(0, Math.min(video.duration - 1, resume / 1000));
+      state.pendingResumeMs = 0;
+      return true;
+    } catch (error) { return false; }
   }
 
   function startAvPlayback(item) {
     var resume = Number(state.pendingResumeMs || 0);
-    state.pendingResumeMs = 0;
     function started() {
       try { avplay.play(); } catch (error) {}
       state.playing = true;
+      updatePlayButton();
       state.switchingEpisode = false;
       setPlayerText(playbackTitle(item), state.playerLive ? 'In diretta' : 'Riproduzione');
       startTimeline();
       showPlayerUi(false);
+      if (resume >= CW_MIN_PROGRESS_MS) setTimeout(applyAvResume, 200);
     }
-    if (resume >= CW_MIN_PROGRESS_MS) {
-      try { avplay.seekTo(resume, started, started); } catch (error) { started(); }
-    } else started();
+    if (resume < CW_MIN_PROGRESS_MS) state.pendingResumeMs = 0;
+    started();
+  }
+
+  function applyAvResume() {
+    var resume = Number(state.pendingResumeMs || 0);
+    if (resume < CW_MIN_PROGRESS_MS || state.playerEngine !== 'avplay' || !avplay) return false;
+    if (state.avResumeInFlight || state.avResumeAttempts >= 6) return false;
+    var target = resume, duration = 0, current = 0;
+    try {
+      duration = Number(avplay.getDuration() || 0);
+      current = Number(avplay.getCurrentTime() || 0);
+    } catch (error) {}
+    if (duration > 1000) target = Math.min(target, duration - 1000);
+    if (current >= Math.max(0, target - 12000)) {
+      state.pendingResumeMs = 0;
+      state.avResumeAttempts = 0;
+      return true;
+    }
+    state.avResumeInFlight = true;
+    state.avResumeAttempts += 1;
+    function retry() {
+      state.avResumeInFlight = false;
+      setTimeout(applyAvResume, 350);
+    }
+    function verify() {
+      state.avResumeInFlight = false;
+      var reached = 0;
+      try { reached = Number(avplay.getCurrentTime() || 0); } catch (error) {}
+      if (reached >= Math.max(0, target - 12000)) {
+        state.pendingResumeMs = 0;
+        state.avResumeAttempts = 0;
+        updateTimeline();
+      } else setTimeout(applyAvResume, 350);
+    }
+    try { avplay.seekTo(target, function () { setTimeout(verify, 250); }, retry); }
+    catch (error) { retry(); }
+    return true;
   }
 
   function setPlayerText(name, subtitle) {
     document.getElementById('player-title').textContent = name || '';
     document.getElementById('player-subtitle').textContent = subtitle || '';
+    if (state.playerLive) {
+      var program = state.playerItem && (state.playerItem.epg || state.playerItem.program || state.playerItem.nowPlaying || state.playerItem.now_playing);
+      document.getElementById('player-live-program').textContent = program || subtitle || '';
+    }
   }
 
   function timeLabel(milliseconds) {
@@ -3813,9 +5101,164 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function setPlayerProgress(current, duration, percent) {
-    document.getElementById('player-progress').style.width = (percent || 0) + '%';
+    percent = Math.max(0, Math.min(100, Number(percent) || 0));
+    document.getElementById('player-progress').style.width = percent + '%';
+    document.getElementById('player-thumb').style.left = percent + '%';
     document.getElementById('player-current').textContent = state.playerLive ? '' : timeLabel(current);
     document.getElementById('player-duration').textContent = state.playerLive ? 'LIVE' : timeLabel(duration);
+    document.getElementById('player-scrubber').setAttribute('aria-valuenow', String(Math.round(percent)));
+  }
+
+  function setActionVisible(id, visible) {
+    var element = document.getElementById(id);
+    if (!element) return;
+    element.className = visible ? '' : 'hidden';
+  }
+
+  function playerTrackInfo() {
+    var result = {audio: [], text: []}, video = document.getElementById('html-player');
+    try {
+      if (state.playerEngine === 'hlsjs' && state.hlsInstance) {
+        result.audio = state.hlsInstance.audioTracks || [];
+        result.text = state.hlsInstance.subtitleTracks || [];
+      } else if (state.playerEngine === 'shaka' && state.shakaInstance) {
+        if (state.shakaInstance.getAudioLanguagesAndRoles) result.audio = state.shakaInstance.getAudioLanguagesAndRoles() || [];
+        else if (state.shakaInstance.getVariantTracks) {
+          var seenAudio = {};
+          result.audio = (state.shakaInstance.getVariantTracks() || []).filter(function (track) {
+            var key = String(track.language || '') + ':' + String((track.audioRoles || [])[0] || '');
+            if (seenAudio[key]) return false;
+            seenAudio[key] = true;
+            return true;
+          });
+        }
+        result.text = state.shakaInstance.getTextTracks ? state.shakaInstance.getTextTracks() : [];
+      } else if (state.playerEngine === 'avplay' && avplay && avplay.getTotalTrackInfo) {
+        (avplay.getTotalTrackInfo() || []).forEach(function (track) {
+          if (String(track.type).toUpperCase() === 'AUDIO') result.audio.push(track);
+          if (String(track.type).toUpperCase() === 'TEXT') result.text.push(track);
+        });
+      } else {
+        if (video.audioTracks) result.audio = Array.prototype.slice.call(video.audioTracks);
+        if (video.textTracks) result.text = Array.prototype.slice.call(video.textTracks);
+      }
+    } catch (error) {}
+    return result;
+  }
+
+  function refreshPlayerActions() {
+    var episode = isEpisode(state.playerItem);
+    setActionVisible('player-episodes', !!(episode && state.episodeParent));
+    // Il pannello tracce resta raggiungibile anche nelle dirette: diversi
+    // manifest live espongono audio alternativi o sottotitoli soltanto dopo
+    // l'avvio, e nascondere il comando in anticipo li rendeva inaccessibili.
+    setActionVisible('player-tracks', true);
+    setActionVisible('player-next', !!(episode && nextEpisodeItem()));
+  }
+
+  function trackLabel(track, fallback) {
+    if (!track) return fallback;
+    var raw = track.label || track.language || track.lang || track.name || track.extra_info || fallback;
+    if (typeof raw === 'string' && raw.charAt(0) === '{') {
+      try {
+        var extra = JSON.parse(raw);
+        raw = extra.track_name || extra.label || extra.track_lang || extra.language || fallback;
+      } catch (error) {}
+    }
+    return String(raw || fallback);
+  }
+
+  function selectSubtitleTrack(tracks, index) {
+    var video = document.getElementById('html-player');
+    if (state.playerEngine === 'hlsjs' && state.hlsInstance) {
+      state.hlsInstance.subtitleTrack = index;
+      if (typeof state.hlsInstance.subtitleDisplay !== 'undefined') state.hlsInstance.subtitleDisplay = index >= 0;
+    } else if (state.playerEngine === 'shaka' && state.shakaInstance) {
+      state.shakaInstance.setTextTrackVisibility(index >= 0);
+      if (index >= 0 && state.shakaInstance.selectTextTrack) state.shakaInstance.selectTextTrack(tracks.text[index]);
+    } else if (state.playerEngine === 'avplay' && avplay) {
+      if (index >= 0) {
+        if (avplay.setSilentSubtitle) avplay.setSilentSubtitle(false);
+        avplay.selectTrack('TEXT', Number(tracks.text[index].index));
+      } else if (avplay.setSilentSubtitle) avplay.setSilentSubtitle(true);
+    } else if (video.textTracks) {
+      Array.prototype.slice.call(video.textTracks).forEach(function (track, trackIndex) {
+        track.mode = trackIndex === index ? 'showing' : 'disabled';
+      });
+    }
+  }
+
+  function selectAudioTrack(tracks, index) {
+    var video = document.getElementById('html-player'), track = tracks.audio[index];
+    if (!track) return;
+    if (state.playerEngine === 'hlsjs' && state.hlsInstance) state.hlsInstance.audioTrack = index;
+    else if (state.playerEngine === 'shaka' && state.shakaInstance && state.shakaInstance.selectAudioLanguage) {
+      state.shakaInstance.selectAudioLanguage(track.language || '', track.role || (track.audioRoles || [])[0] || '');
+    } else if (state.playerEngine === 'avplay' && avplay) avplay.selectTrack('AUDIO', Number(track.index));
+    else if (video.audioTracks) {
+      Array.prototype.slice.call(video.audioTracks).forEach(function (audio, trackIndex) { audio.enabled = trackIndex === index; });
+    }
+  }
+
+  function persistTrackPreference(patch) {
+    if (!mediaPrefs || state.playerLive || !state.playerItem) return false;
+    return mediaPrefs.set(localStorage, state.playerItem, state.episodeParent, patch, continueKey);
+  }
+
+  function applyStoredTrackPreferences() {
+    if (!mediaPrefs || !state.playerOpen || state.playerLive || !state.playerItem) return false;
+    var preferred = mediaPrefs.get(localStorage, state.playerItem, state.episodeParent, continueKey);
+    if (!preferred) return false;
+    var tracks = playerTrackInfo(), plan = mediaPrefs.selectionPlan(tracks.audio, tracks.text, preferred), changed = false;
+    try {
+      if (plan.audioIndex !== null) {
+        selectAudioTrack(tracks, plan.audioIndex);
+        changed = true;
+      }
+      if (plan.subtitleIndex !== null) {
+        selectSubtitleTrack(tracks, plan.subtitleIndex);
+        changed = true;
+      }
+    } catch (error) {}
+    return changed;
+  }
+
+  function queueApplyTrackPreferences(delay) {
+    clearTimeout(state.trackPreferenceTimer);
+    state.trackPreferenceTimer = setTimeout(function () {
+      state.trackPreferenceTimer = null;
+      applyStoredTrackPreferences();
+    }, Math.max(0, Number(delay || 0)));
+  }
+
+  function cyclePlayerTracks() {
+    var tracks = playerTrackInfo(), index, selected;
+    var subtitleChoices = tracks.text.length ? tracks.text.length + 1 : 0;
+    // Anche una sola traccia può essere scelta esplicitamente: così la lingua
+    // diventa la preferenza globale della serie quando episodi successivi ne
+    // espongono più di una.
+    var audioChoices = tracks.audio.length ? tracks.audio.length : 0;
+    var totalChoices = subtitleChoices + audioChoices;
+    try {
+      if (!totalChoices) {
+        toast('Nessuna traccia alternativa disponibile');
+      } else {
+        state.trackCycleIndex = (state.trackCycleIndex + 1) % totalChoices;
+      }
+      if (subtitleChoices && state.trackCycleIndex < subtitleChoices) {
+        index = state.trackCycleIndex - 1;
+        selectSubtitleTrack(tracks, index);
+        persistTrackPreference({sub_lang: index >= 0 ? mediaPrefs.trackPreference(tracks.text[index]) : mediaPrefs.SUBTITLES_OFF});
+        selected = index >= 0 ? trackLabel(tracks.text[index], 'Traccia ' + (index + 1)) : 'disattivati';
+        toast('Sottotitoli: ' + selected);
+      } else if (audioChoices) {
+        index = state.trackCycleIndex - subtitleChoices;
+        selectAudioTrack(tracks, index);
+        persistTrackPreference({audio_lang: mediaPrefs.trackPreference(tracks.audio[index])});
+        toast('Audio: ' + trackLabel(tracks.audio[index], 'Traccia ' + (index + 1)));
+      }
+    } catch (error) { toast('Cambio traccia non disponibile', true); }
+    showPlayerUi(true, 'player-tracks');
   }
 
   function updateTimeline() {
@@ -3826,7 +5269,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var current = isHtmlPlayerEngine() ? video.currentTime * 1000 : avplay.getCurrentTime();
       var percent = duration > 0 && isFinite(duration) ? Math.min(100, current / duration * 100) : 0;
       setPlayerProgress(current, duration, percent);
-      if (!state.playerLive && state.playerItem && Date.now() - state.lastProgressSave >= 5000) {
+      if (!state.playerLive && state.playerItem && state.pendingResumeMs < CW_MIN_PROGRESS_MS &&
+          Date.now() - state.lastProgressSave >= 5000) {
         state.lastProgressSave = Date.now();
         saveContinueWatching(state.playerItem, current, duration, false);
       }
@@ -3837,6 +5281,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function startTimeline() {
     clearInterval(state.playerTick);
     updateTimeline();
+    refreshPlayerActions();
+    setTimeout(refreshPlayerActions, 700);
     state.playerTick = setInterval(updateTimeline, 700);
   }
 
@@ -3848,7 +5294,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function updateUpNext(current, duration) {
     if (!isEpisode(state.playerItem) || state.upNextCancelled || !nextEpisodeItem() || !duration) return;
     var remaining = Math.max(0, duration - current);
-    if (!state.upNextVisible && current >= UP_NEXT_MIN_WATCHED_MS && remaining > 0 && remaining <= UP_NEXT_PROMPT_MS) showUpNext();
+    if (!state.upNextVisible && cwFlow.shouldShowUpNext(current, duration, true, state.upNextCancelled, UP_NEXT_PROMPT_MS)) showUpNext();
     if (!state.upNextVisible) return;
     var seconds = Math.max(0, Math.ceil(remaining / 1000));
     var timer = document.getElementById('up-next-timer'), progress = document.getElementById('up-next-progress');
@@ -3890,32 +5336,47 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function handlePlaybackCompleted() {
     if (!state.playerOpen || state.switchingEpisode || state.episodeTransitionScheduled) return;
     state.playing = false;
+    updatePlayButton();
     clearInterval(state.playerTick);
-    if (isEpisode(state.playerItem) && nextEpisodeItem() && !state.upNextCancelled) {
+    var completedNext = isEpisode(state.playerItem) ? nextEpisodeItem() : null;
+    if (completedNext) saveContinueWatching(completedNext, 0, 0, true);
+    if (completedNext && !state.upNextCancelled) {
       state.episodeTransitionScheduled = true;
       setPlayerText(playbackTitle(state.playerItem), 'Avvio episodio successivo...');
       clearTimeout(state.episodeTransitionTimer);
       state.episodeTransitionTimer = setTimeout(switchToNextEpisode, 800);
       return;
     }
-    if (state.playerItem) removeContinueWatching(state.playerItem, state.episodeParent);
+    if (state.playerItem && !completedNext) removeContinueWatching(state.playerItem, state.episodeParent);
     hideUpNext(false);
     setPlayerText(playbackTitle(state.playerItem || {}), 'Riproduzione completata');
     showPlayerUi(true);
   }
 
-  function showPlayerUi(focusControls) {
+  function isPlayerUiVisible() {
+    return document.getElementById('player-ui').className.indexOf('hidden') < 0;
+  }
+
+  function hidePlayerUi() {
+    if (!state.playerOpen || state.upNextVisible) return;
+    clearTimeout(state.playerUiTimer);
+    state.playerUiVisible = false;
+    document.getElementById('player-ui').className = 'player-ui hidden';
+    focusElement(document.getElementById('player'));
+  }
+
+  function showPlayerUi(focusControls, preferredId) {
     var ui = document.getElementById('player-ui');
     ui.className = 'player-ui';
+    state.playerUiVisible = true;
     clearTimeout(state.playerUiTimer);
     if (focusControls) {
-      var active = document.activeElement;
-      if (!active || active.getAttribute('data-zone') !== 'player') focusElement(document.getElementById('player-toggle'));
+      var targetId = preferredId || state.playerFocusId || 'player-toggle';
+      var target = document.getElementById(targetId);
+      if (!target || !isVisible(target) || target.disabled) target = document.getElementById('player-toggle');
+      focusElement(target);
     }
-    if (state.playing) state.playerUiTimer = setTimeout(function () {
-      if (document.activeElement && document.activeElement.getAttribute('data-zone') === 'player') return;
-      ui.className = 'player-ui hidden';
-    }, PLAYER_HIDE_MS);
+    if (state.playing) state.playerUiTimer = setTimeout(hidePlayerUi, PLAYER_HIDE_MS);
   }
 
   function currentPlayerTimes() {
@@ -3928,6 +5389,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function stopPlayerMedia() {
     var frame = document.getElementById('embed-player'), video = document.getElementById('html-player');
+    clearTimeout(state.trackPreferenceTimer);
+    state.trackPreferenceTimer = null;
     if (frame) frame.parentNode.removeChild(frame);
     if (state.hlsInstance) {
       try { state.hlsInstance.destroy(); } catch (error) {}
@@ -3938,24 +5401,29 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.shakaInstance = null;
     }
     try { video.pause(); video.removeAttribute('src'); video.load(); } catch (error) {}
-    video.onwaiting = video.onplaying = video.oncanplay = video.onended = video.onerror = null;
+    video.onwaiting = video.onplaying = video.onloadedmetadata = video.oncanplay = video.onended = video.onerror = null;
     video.style.display = 'none';
     try { avplay.stop(); avplay.close(); } catch (error) {}
     clearInterval(state.playerTick);
     document.getElementById('avplay').style.display = 'none';
   }
 
-  function closePlayer() {
+  function closePlayer(skipRestore) {
     if (!state.playerOpen && document.getElementById('player').className.indexOf('hidden') >= 0) return;
     var times = currentPlayerTimes();
-    if (state.playerItem && !state.playerLive) saveContinueWatching(state.playerItem, times.current, times.duration, false);
+    if (state.playerItem && !state.playerLive && state.pendingResumeMs < CW_MIN_PROGRESS_MS) {
+      saveContinueWatching(state.playerItem, times.current, times.duration, false);
+    }
     stopPlayerMedia();
     state.playerOpen = false;
+    window.__PRIPPI_PLAYBACK_ACTIVE__ = false;
     state.playing = false;
     state.playerLive = false;
     state.playerEngine = '';
     state.playerItem = null;
     state.pendingResumeMs = 0;
+    state.avResumeAttempts = 0;
+    state.avResumeInFlight = false;
     state.switchingEpisode = false;
     state.episodeTransitionScheduled = false;
     clearTimeout(state.episodeTransitionTimer);
@@ -3964,12 +5432,21 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.liveIndex = -1;
     state.liveRowTitle = '';
     state.liveSwitchBusy = false;
+    state.trackCycleIndex = -1;
     state.playRequestId += 1;
     hideUpNext(false);
     clearTimeout(state.playerUiTimer);
+    state.playerUiVisible = true;
     document.getElementById('player').className = 'player hidden';
     document.getElementById('player-ui').className = 'player-ui';
-    setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
+    if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
+  }
+
+  function updatePlayButton() {
+    var button = document.getElementById('player-toggle');
+    if (!button) return;
+    button.className = state.playing ? 'player-toggle' : 'player-toggle paused';
+    button.setAttribute('aria-label', state.playing ? 'Pausa' : 'Riprendi');
   }
 
   function togglePlayback() {
@@ -3978,13 +5455,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (state.playing) {
         if (isHtmlPlayerEngine()) video.pause(); else if (state.playerEngine === 'avplay') avplay.pause();
         state.playing = false;
-        document.getElementById('player-toggle').textContent = 'Riprendi';
         setPlayerText(document.getElementById('player-title').textContent, 'In pausa');
       } else {
         if (isHtmlPlayerEngine()) video.play(); else if (state.playerEngine === 'avplay') avplay.play();
         state.playing = true;
-        document.getElementById('player-toggle').textContent = 'Pausa';
       }
+      updatePlayButton();
       showPlayerUi(true);
     } catch (error) { toast('Comando player non disponibile', true); }
   }
@@ -3999,8 +5475,22 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         else avplay.jumpBackward(Math.abs(seconds) * 1000, function () {}, function () {});
       }
       updateTimeline();
-      showPlayerUi(true);
+      showPlayerUi(false);
     } catch (error) { toast('Seek non disponibile', true); }
+  }
+
+  function scrubTimeline(direction) {
+    var times = currentPlayerTimes();
+    var step = times.duration > 0 ? Math.max(10000, Math.min(60000, times.duration * .015)) : 10000;
+    seek(direction * step / 1000);
+    showPlayerUi(true, 'player-scrubber');
+  }
+
+  function openPlayerEpisodes() {
+    var parent = state.episodeParent;
+    if (!parent) { toast('Elenco episodi non disponibile'); return; }
+    closePlayer(true);
+    showEpisodes(parent);
   }
 
   function switchLive(direction, attempts, bypassDebounce) {
@@ -4023,9 +5513,28 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function isVisible(element) { return !!(element && element.offsetParent !== null); }
 
+  function resetNonScrollableRoots() {
+    try { window.scrollTo(0, 0); } catch (error) {}
+    [document.documentElement, document.body, document.querySelector('.main'), document.getElementById('content')]
+      .forEach(function (root) {
+        if (!root) return;
+        root.scrollLeft = 0;
+        root.scrollTop = 0;
+      });
+  }
+
+  function focusWithoutRootScroll(element) {
+    resetNonScrollableRoots();
+    try { element.focus({preventScroll: true}); }
+    catch (error) { element.focus(); }
+    resetNonScrollableRoots();
+    /* Alcuni WebKit Tizen applicano lo scroll nativo nel frame successivo. */
+    setTimeout(resetNonScrollableRoots, 0);
+  }
+
   function focusElement(element) {
     if (!isVisible(element)) return false;
-    element.focus();
+    focusWithoutRootScroll(element);
     rememberFocus(element);
     ensureVisible(element);
     return true;
@@ -4146,7 +5655,16 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var formIndex = Number(active.getAttribute('data-form-index'));
       if (key === 37) return formIndex > 0 ? focusElement(document.querySelector('[data-form-index="' + (formIndex - 1) + '"]')) : focusActiveNav();
       if (key === 39) return focusElement(document.querySelector('[data-form-index="' + (formIndex + 1) + '"]'));
+      if (key === 40) return focusElement(document.querySelector('#search-history [data-focusable], #search-results [data-focusable]'));
+    }
+    if (zone === 'search-history') {
+      var historyIndex = Number(active.getAttribute('data-history-index'));
+      var historyItems = elementsInZone('search-history');
+      if (key === 37) return historyIndex > 0 ? focusElement(historyItems[historyIndex - 1]) : focusActiveNav();
+      if (key === 39 && historyIndex < historyItems.length - 1) return focusElement(historyItems[historyIndex + 1]);
+      if (key === 38) return focusElement(document.getElementById('query'));
       if (key === 40) return focusElement(document.querySelector('#search-results [data-focusable]'));
+      return false;
     }
     if (zone === 'filters') {
       var filterIndex = Number(active.getAttribute('data-filter-index'));
@@ -4154,7 +5672,14 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       if (key === 39) return focusElement(document.querySelector('[data-filter-index="' + (filterIndex + 1) + '"]'));
       if (key === 40) return focusElement(document.querySelector('#browse-grid [data-focusable], #search-results [data-focusable]'));
     }
-    if (zone === 'settings') return moveByGeometry(active, key, document.querySelector('.settings-grid')) || (key === 37 ? focusActiveNav() : false);
+    if (zone === 'settings') {
+      var settingIndex = Number(active.getAttribute('data-setting-index'));
+      var settings = elementsInZone('settings');
+      if (key === 37) return focusActiveNav();
+      if (key === 38 && settingIndex > 0) return focusElement(settings[settingIndex - 1]);
+      if (key === 40 && settingIndex >= 0 && settingIndex < settings.length - 1) return focusElement(settings[settingIndex + 1]);
+      return false;
+    }
     if (zone === 'state') return key === 37 ? focusActiveNav() : false;
     if (zone === 'detail' || zone === 'episodes-header' || zone === 'episode-seasons' || zone === 'episodes') {
       return moveByGeometry(active, key, document.getElementById('detail'));
@@ -4162,19 +5687,44 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     return moveByGeometry(active, key, document.getElementById('content'));
   }
 
-  function playerButtons() {
-    return ['player-rewind', 'player-toggle', 'player-forward'].map(function (id) { return document.getElementById(id); }).filter(function (button) {
-      return isVisible(button) && !button.disabled;
+  function visiblePlayerControls(ids) {
+    return ids.map(function (id) { return document.getElementById(id); }).filter(function (element) {
+      return isVisible(element) && !element.disabled;
     });
   }
 
+  function playerRows() {
+    var rows = [visiblePlayerControls(['player-exit']), visiblePlayerControls(['player-rewind', 'player-toggle', 'player-forward'])];
+    if (!state.playerLive) rows.push(visiblePlayerControls(['player-scrubber']));
+    rows.push(visiblePlayerControls(['player-episodes', 'player-tracks', 'player-next']));
+    return rows.filter(function (row) { return row.length; });
+  }
+
   function movePlayerFocus(key) {
-    var buttons = playerButtons(), active = document.activeElement, index = buttons.indexOf(active);
-    if (key === 37 && index > 0) return focusElement(buttons[index - 1]);
-    if (key === 39 && index >= 0 && index < buttons.length - 1) return focusElement(buttons[index + 1]);
-    if (key === 38) return focusElement(document.getElementById('player-exit'));
-    if (key === 40 && active === document.getElementById('player-exit')) return focusElement(document.getElementById('player-toggle'));
-    return false;
+    var active = document.activeElement, rows = playerRows(), rowIndex = -1, columnIndex = -1;
+    if (active === document.getElementById('player-scrubber') && (key === 37 || key === 39)) {
+      scrubTimeline(key === 37 ? -1 : 1);
+      return true;
+    }
+    rows.some(function (row, index) {
+      var found = row.indexOf(active);
+      if (found < 0) return false;
+      rowIndex = index;
+      columnIndex = found;
+      return true;
+    });
+    if (rowIndex < 0) return focusElement(document.getElementById('player-toggle'));
+    if (key === 37 && columnIndex > 0) return focusElement(rows[rowIndex][columnIndex - 1]);
+    if (key === 39 && columnIndex < rows[rowIndex].length - 1) return focusElement(rows[rowIndex][columnIndex + 1]);
+    if (key === 38 && rowIndex > 0) {
+      var upper = rows[rowIndex - 1], upperIndex = Math.round(columnIndex * Math.max(0, upper.length - 1) / Math.max(1, rows[rowIndex].length - 1));
+      return focusElement(upper[upperIndex]);
+    }
+    if (key === 40 && rowIndex < rows.length - 1) {
+      var lower = rows[rowIndex + 1], lowerIndex = Math.round(columnIndex * Math.max(0, lower.length - 1) / Math.max(1, rows[rowIndex].length - 1));
+      return focusElement(lower[lowerIndex]);
+    }
+    return true;
   }
 
   function registerKeys() {
@@ -4185,7 +5735,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     } catch (error) {}
   }
 
-  document.addEventListener('focusin', function (event) { rememberFocus(event.target); });
+  document.addEventListener('focusin', function (event) {
+    rememberFocus(event.target);
+    if (event.target && /^player-/.test(event.target.id || '') && event.target.hasAttribute('data-focusable')) state.playerFocusId = event.target.id;
+  });
 
   document.addEventListener('keydown', function (event) {
     var key = event.keyCode, active;
@@ -4200,26 +5753,32 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         }
         if (key === 13 && active && active.getAttribute('data-zone') === 'upnext') { event.preventDefault(); active.click(); return; }
       }
-      showPlayerUi(false);
+      if (isPlayerUiVisible()) showPlayerUi(false);
       if (state.playerLive && (key === 427 || key === 428)) {
         event.preventDefault();
         switchLive(key === 427 ? 1 : -1, 0, false);
         return;
       }
-      if (key === 10009 || key === 27 || key === 8 || key === 413) { event.preventDefault(); closePlayer(); return; }
+      if (key === 413) { event.preventDefault(); closePlayer(); return; }
+      if (key === 10009 || key === 27 || key === 8) {
+        event.preventDefault();
+        if (isPlayerUiVisible()) hidePlayerUi(); else closePlayer();
+        return;
+      }
       if (key === 412) { event.preventDefault(); seek(-10); return; }
       if (key === 417) { event.preventDefault(); seek(10); return; }
       if (key === 415 || key === 19 || key === 10252) { event.preventDefault(); togglePlayback(); return; }
       if (key === 37 || key === 38 || key === 39 || key === 40) {
         event.preventDefault();
-        if (document.getElementById('player-ui').className.indexOf('hidden') >= 0) showPlayerUi(true);
+        if (!isPlayerUiVisible()) showPlayerUi(true);
         else movePlayerFocus(key);
         return;
       }
       if (key === 13) {
         event.preventDefault();
+        if (!isPlayerUiVisible()) { showPlayerUi(true); return; }
         active = document.activeElement;
-        if (active && active.getAttribute('data-zone') === 'player') active.click(); else togglePlayback();
+        if (active && /^player-/.test(active.getAttribute('data-zone') || '')) active.click(); else togglePlayback();
       }
       return;
     }
@@ -4252,7 +5811,11 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     document.getElementById('player-rewind').onclick = function () { seek(-10); };
     document.getElementById('player-toggle').onclick = togglePlayback;
     document.getElementById('player-forward').onclick = function () { seek(10); };
-    document.getElementById('player-exit').onclick = closePlayer;
+    document.getElementById('player-exit').onclick = function () { closePlayer(false); };
+    document.getElementById('player-scrubber').onclick = function () { showPlayerUi(true, 'player-scrubber'); };
+    document.getElementById('player-episodes').onclick = openPlayerEpisodes;
+    document.getElementById('player-tracks').onclick = cyclePlayerTracks;
+    document.getElementById('player-next').onclick = switchToNextEpisode;
     document.getElementById('up-next-play').onclick = switchToNextEpisode;
     document.getElementById('up-next-cancel').onclick = function () { hideUpNext(true); showPlayerUi(true); };
     openPage('home');

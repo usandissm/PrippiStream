@@ -1,8 +1,10 @@
 (function () {
   'use strict';
 
-  var SHELL_VERSION = '0.7.0';
-  var LOCAL_REVISION = 12;
+  var SHELL_VERSION = '0.9.9';
+  // Debug package only: keep the local instrumented runtime ahead of the public OTA revision.
+  var LOCAL_REVISION = 30;
+  var LEGACY_UI = document.documentElement.className.indexOf('legacy-tizen') >= 0;
   var REPO_CONTENTS = 'https://api.github.com/repos/usandissm/PrippiStream/contents/docs/tizen/app/';
   var MANIFEST_URL = localStorage.getItem('prippi.tizen.ota.manifest') ||
     REPO_CONTENTS + 'manifest.json?ref=main';
@@ -130,11 +132,18 @@
         !manifest.files.html || !manifest.files.css || !manifest.files.js) {
       throw new Error('Manifest OTA non valido');
     }
+    if (LEGACY_UI && !manifest.files.legacy_css) {
+      throw new Error('Aggiornamento privo della UI Tizen 2.4');
+    }
+    if (!manifest.files.private_iptv_accounts || !manifest.files.private_iptv_catalog) {
+      throw new Error('Aggiornamento privo dei dati privati Live');
+    }
     return manifest;
   }
 
   function downloadBundle(manifest) {
-    var names = ['html', 'css', 'js'];
+    var names = ['html', LEGACY_UI ? 'legacy_css' : 'css', 'js',
+      'private_iptv_accounts', 'private_iptv_catalog'];
     return Promise.all(names.map(function (name) {
       var file = manifest.files[name];
       return fetchRepositoryText(assetUrl(file.url), CHECK_TIMEOUT).then(function (content) {
@@ -146,14 +155,26 @@
         });
       });
     })).then(function (contents) {
-      return {manifest: manifest, html: contents[0], css: contents[1], js: contents[2]};
+      return {
+        manifest: manifest,
+        html: contents[0],
+        css: contents[1],
+        js: contents[2],
+        privateData: {
+          iptv_accounts: JSON.parse(contents[3]),
+          iptv_catalog: JSON.parse(contents[4])
+        },
+        ui: LEGACY_UI ? 'legacy' : 'modern'
+      };
     });
   }
 
   function readCache() {
     try {
       var bundle = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
-      return bundle && bundle.manifest && bundle.html && bundle.css && bundle.js ? bundle : null;
+      var expectedUi = LEGACY_UI ? 'legacy' : 'modern';
+      return bundle && bundle.manifest && bundle.html && bundle.css && bundle.js && bundle.privateData &&
+        bundle.ui === expectedUi ? bundle : null;
     } catch (error) { return null; }
   }
 
@@ -180,6 +201,7 @@
 
   function applyBundle(bundle) {
     window.__PRIPPI_APP_BOOTED__ = false;
+    window.__PRIPPI_PRIVATE_DATA__ = bundle.privateData || {};
     document.body.innerHTML = bundle.html;
     var old = document.getElementById('prippi-ota-style');
     if (old) old.parentNode.removeChild(old);

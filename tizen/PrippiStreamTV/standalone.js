@@ -4,6 +4,7 @@
   var TMDB_KEY = 'a1ab8b8669da03637a4b98fa39c39228';
   var TMDB = 'https://api.themoviedb.org/3';
   var SC_FALLBACKS = [
+    'https://streamingcommunityz.tools',
     'https://streamingcommunityz.support',
     'https://streamingcommunityz.pizza',
     'https://streamingcommunityz.run'
@@ -11,6 +12,8 @@
   var HOST_KEY = 'prippi.tizen.sc.host';
   var HOME_KEY = 'prippi.tizen.standalone.home.v3';
   var SEARCH_CACHE_PREFIX = 'prippi.tizen.search.v3.';
+  var ARTWORK_CACHE_PREFIX = 'prippi.tizen.artwork.v1.';
+  var ARTWORK_CACHE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
   var MEDIASET_GRAPH_URL = 'https://mediasetplay.api-graph.mediaset.it';
   var MEDIASET_GRAPH_HASH = '0cbec614877306e7f2814d2c16163d510c8fc87f1677bc34f95f4f55dc027dce';
   var LIVE_BACKEND = 'https://test34344.herokuapp.com/filter.php';
@@ -95,7 +98,40 @@
   }
 
   function absoluteUrl(value, base) {
-    try { return new URL(value || '', base).href; } catch (error) { return value || ''; }
+    value = String(value || '').trim();
+    base = String(base || '').trim();
+    if (/^https?:\/\//i.test(value)) return value;
+    if (/^\/\//.test(value)) return (base.match(/^https?:/i) || ['https:'])[0] + value;
+    var origin = originOf(base);
+    if (value.charAt(0) === '/') return origin + value;
+    var cleanBase = base.split(/[?#]/)[0];
+    return cleanBase.slice(0, cleanBase.lastIndexOf('/') + 1) + value;
+  }
+
+  function originOf(value) {
+    var match = String(value || '').match(/^https?:\/\/[^\/?#]+/i);
+    return match ? match[0] : '';
+  }
+
+  function hostOf(value) {
+    return originOf(value).replace(/^https?:\/\//i, '');
+  }
+
+  function pathOf(value) {
+    return String(value || '').replace(/^https?:\/\/[^/]+/i, '').split(/[?#]/)[0] || '/';
+  }
+
+  function queryValue(value, key) {
+    var match = String(value || '').match(new RegExp('[?&]' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^&#]*)'));
+    return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+  }
+
+  function setQueryValue(value, key, content) {
+    var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var result = String(value || '').replace(new RegExp('([?&])' + escaped + '=[^&#]*&?'), function (_, prefix) {
+      return prefix === '?' ? '?' : '';
+    }).replace(/[?&]$/, '');
+    return result + (result.indexOf('?') >= 0 ? '&' : '?') + encodeURIComponent(key) + '=' + encodeURIComponent(content);
   }
 
   function queryString(values) {
@@ -109,9 +145,23 @@
     return parts.join('&');
   }
 
+  function parseHtml(html) {
+    var parsed = null;
+    try { parsed = new DOMParser().parseFromString(html, 'text/html'); } catch (error) {}
+    if (parsed && parsed.querySelector) return parsed;
+    var container = document.createElement('div');
+    container.innerHTML = String(html || '');
+    return container;
+  }
+
   function parsePage(html) {
-    var doc = new DOMParser().parseFromString(html, 'text/html');
-    var node = doc.querySelector('[data-page]');
+    var source = String(html || ''), match = source.match(/\sdata-page=(['"])([\s\S]*?)\1/i);
+    if (match) {
+      var decoder = document.createElement('textarea');
+      decoder.innerHTML = match[2];
+      return JSON.parse(decoder.value || decoder.textContent || '{}');
+    }
+    var doc = parseHtml(source), node = doc.querySelector('[data-page]');
     if (!node) throw new Error('Pagina provider non riconosciuta');
     return JSON.parse(node.getAttribute('data-page') || '{}');
   }
@@ -148,8 +198,7 @@
     return text(candidate + '/it/movies', {cache: 'no-store', credentials: 'include'}, 7000)
       .then(function (response) {
         parsePage(response.body);
-        var parsed = new URL(response.url);
-        var resolved = parsed.protocol + '//' + parsed.host;
+        var resolved = originOf(response.url || candidate) || candidate;
         localStorage.setItem(HOST_KEY, resolved);
         return resolved;
       }).catch(function () { return probe(candidates, index + 1); });
@@ -159,17 +208,17 @@
     if (force) hostPromise = null;
     if (hostPromise) return hostPromise;
     hostPromise = registryHost().then(function (remote) {
-      return probe(unique([localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS)), 0);
+      return probe(unique([SC_FALLBACKS[0], localStorage.getItem(HOST_KEY), remote].concat(SC_FALLBACKS.slice(1))), 0);
     }).catch(function (error) { hostPromise = null; throw error; });
     return hostPromise;
   }
 
   function rewriteHost(url, host) {
-    try {
-      var parsed = new URL(url, host);
-      if (/streamingcommunity/i.test(parsed.host)) return host + parsed.pathname + parsed.search;
-      return parsed.href;
-    } catch (error) { return url; }
+    url = String(url || '');
+    host = String(host || '').replace(/\/$/, '');
+    if (/^https?:\/\/[^/]*streamingcommunity/i.test(url)) return host + pathOf(url) + (url.match(/\?[^#]*/) || [''])[0];
+    if (url.charAt(0) === '/') return host + url;
+    return absoluteUrl(url, host + '/');
   }
 
   function dataPage(url, retry) {
@@ -268,7 +317,7 @@
 
   function rowsFromPage(page, suffix) {
     var props = page.props || {}, host = props.app_url || localStorage.getItem(HOST_KEY) || SC_FALLBACKS[0];
-    var cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+    var cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
     return (props.sliders || []).map(function (slider, index) {
       var name = slider.name || slider.label || ('Riga ' + (index + 1));
       return {
@@ -322,11 +371,13 @@
       }
       function pump() {
         if (completeIfReady()) return;
-        while (!finished && active < 4 && next < entries.length && collected.length < target) {
+        if (window.__PRIPPI_PLAYBACK_ACTIVE__) { setTimeout(pump, 600); return; }
+        var concurrency = document.documentElement.className.indexOf('legacy-tizen') >= 0 ? 1 : 4;
+        while (!finished && active < concurrency && next < entries.length && collected.length < target) {
           (function (entry, index) {
             active += 1;
             deadline(dataPage(host + entry[1]), 8500, 'Riga lenta').then(function (page) {
-              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+              var props = page.props || {}, titles = props.titles || [], cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
               if (!Array.isArray(titles)) titles = titles.data || [];
               var items = flatten(titles).slice(0, 20).map(function (raw) { return itemFromRaw(raw, host, cdn); });
               var key = String(entry[0] || '').toLowerCase();
@@ -459,7 +510,7 @@
   function searchAnimeUnity(query, registry, homeMode) {
     var host = (registry.direct || {}).animeunity || 'https://www.animeunity.so';
     return text(host.replace(/\/$/, '') + '/archivio', {cache: 'no-store', credentials: 'include'}, 8500).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html');
+      var doc = parseHtml(response.body);
       var tokenNode = doc.querySelector('meta[name="csrf-token"]');
       var token = tokenNode && tokenNode.getAttribute('content');
       if (!token) throw new Error('AnimeUnity CSRF non disponibile');
@@ -490,12 +541,12 @@
     var finder = (registry.findhost || {})[name];
     if (!finder) return Promise.reject(new Error('Host ' + name + ' non configurato'));
     return text(finder, {cache: 'no-store'}, 6500).then(function (response) {
-      return new URL(response.url || finder).origin;
+      return originOf(response.url || finder);
     });
   }
 
   function parseHtmlSearch(source, host, html, query) {
-    var doc = new DOMParser().parseFromString(html, 'text/html'), output = [];
+    var doc = parseHtml(html), output = [];
     if (source === 'streamingita') {
       Array.prototype.forEach.call(doc.querySelectorAll('.result-item'), function (node) {
         var link = node.querySelector('a[href]'), image = node.querySelector('img'), year = node.querySelector('.year');
@@ -741,7 +792,7 @@
 
   function mediasetHtmlPage(url, type) {
     return text(url, {cache: 'no-store', headers: {'Accept': 'text/html'}}, 12000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
+      var doc = parseHtml(response.body), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[data-testid="poster-card-link"][href]'), function (link) {
         var item = mediasetHtmlItem(link, type);
         var key = item && (item.seriesid || item.video_id || item.url);
@@ -801,13 +852,13 @@
   function la7Search(query) {
     return text('https://www.la7.it/ricerca?query=' + encodeURIComponent(query) + '&page=0', {cache: 'no-store'}, 9000)
       .then(function (response) {
-        var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {}, grouped = {};
+        var doc = parseHtml(response.body), output = [], seen = {}, grouped = {};
         Array.prototype.forEach.call(doc.querySelectorAll('.view-content a[href]'), function (link) {
           var holder = link.querySelector('.holder-bg'), titleNode = link.querySelector('.title');
           if (!holder || !titleNode) return;
           var href = absoluteUrl(link.getAttribute('href'), 'https://www.la7.it'), style = holder.getAttribute('data-background-image') || holder.style.backgroundImage || '';
           var thumb = style.replace(/^.*url\(['"]?/, '').replace(/['"]?\).*$/, '');
-          var path = new URL(href).pathname.split('?')[0].replace(/^\/+|\/+$/g, '').split('/');
+          var path = pathOf(href).replace(/^\/+|\/+$/g, '').split('/');
           var isProgramVideo = path.length >= 3 && ['video', 'rivedila7', 'articolo'].indexOf(path[1]) >= 0 &&
             ['la7-cinema-tutti-i-film', 'film'].indexOf(path[0]) < 0;
           var itemTitle = titleNode.textContent.trim(), type = 'movie';
@@ -943,12 +994,15 @@
       expandedHomeRows = uniqueRows(mainRows.concat(archive, anime ? [anime] : [], official));
       if (expandedHomeRows.length) saveStandaloneHome(expandedHomeRows, false);
     }
+    var legacy = document.documentElement.className.indexOf('legacy-tizen') >= 0;
     var archiveTask = archiveRows(host, homepage, mainRows.length, function (partial) {
       archive = partial;
       publish();
     }).then(function (rows) { archive = rows || []; publish(); return rows; });
-    var animeTask = animeHomeRow().then(function (row) { anime = row; publish(); return row; });
-    var officialTask = officialHomeRows().then(function (rows) { official = rows || []; publish(); return rows; });
+    var animeTask = (legacy ? archiveTask : Promise.resolve()).then(function () { return animeHomeRow(); })
+      .then(function (row) { anime = row; publish(); return row; });
+    var officialTask = (legacy ? animeTask : Promise.resolve()).then(function () { return officialHomeRows(); })
+      .then(function (rows) { official = rows || []; publish(); return rows; });
     return Promise.all([archiveTask, animeTask, officialTask]).then(function () {
       publish();
       if (generation === expandedHomeGeneration) expandedHomeDone = true;
@@ -1007,7 +1061,7 @@
     if (cached) return Promise.resolve({items: cached, aggregated: true, cached: true});
     var scSearch = ensureHost(false).then(function (host) {
       return dataPage(host + '/it/search?q=' + encodeURIComponent(query)).then(function (page) {
-        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + new URL(resolvedHost).host);
+        var props = page.props || {}, resolvedHost = props.app_url || host, cdn = props.cdn_url || ('https://cdn.' + hostOf(resolvedHost));
         return flatten(props.titles || []).slice(0, 100).map(function (raw) {
           var item = itemFromRaw(raw, resolvedHost, cdn);
           item.source = 'streamingcommunity';
@@ -1048,6 +1102,15 @@
 
   function tmdbDetails(item) {
     var info = item.infoLabels || {}, type = tmdbType(item), id = info.tmdb_id || item.tmdb_id;
+    var cacheKey = ARTWORK_CACHE_PREFIX + type + '.' + encodeURIComponent(String(id || item.fulltitle || item.title || '').toLowerCase());
+    try {
+      var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached && cached.saved_at && Date.now() - cached.saved_at < ARTWORK_CACHE_MAX_AGE && cached.item) {
+        return Promise.resolve(Object.assign({}, item, cached.item, {
+          infoLabels: Object.assign({}, info, cached.item.infoLabels || {})
+        }));
+      }
+    } catch (error) {}
     var locate = id ? Promise.resolve(id) : json(TMDB + '/search/' + type + '?api_key=' + TMDB_KEY + '&language=it-IT&include_adult=false&query=' + encodeURIComponent(item.fulltitle || item.title || ''))
       .then(function (data) { return data.results && data.results[0] && data.results[0].id; });
     return locate.then(function (tmdbId) {
@@ -1062,8 +1125,13 @@
         labels.genre = (data.genres || []).map(function (genre) { return genre.name; }).join(', ');
         result.infoLabels = labels;
         result.plot = labels.plot;
-        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w500' + data.poster_path;
+        if (data.poster_path) result.thumbnail = 'https://image.tmdb.org/t/p/w780' + data.poster_path;
         if (data.backdrop_path) result.fanart = 'https://image.tmdb.org/t/p/w1280' + data.backdrop_path;
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({saved_at: Date.now(), item: {
+            thumbnail: result.thumbnail || '', fanart: result.fanart || '', plot: result.plot || '', infoLabels: result.infoLabels || {}
+          }}));
+        } catch (error) {}
         return result;
       }).catch(function () { return item; });
     });
@@ -1073,7 +1141,7 @@
     if (item.channel === 'raiplay' || item.channel === 'mediasetplay' || item.channel === 'la7') return tmdbDetails(item);
     if (item.tmdbOnly) return tmdbDetails(item);
     return dataPage(item.url).then(function (page) {
-      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host);
+      var props = page.props || {}, raw = props.title || {}, host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host));
       var merged = Object.assign({}, item, itemFromRaw(raw, host, cdn));
       if (item.url) merged.url = rewriteHost(item.url, host);
       return tmdbDetails(merged);
@@ -1159,7 +1227,7 @@
   function mediasetSeasonPageEpisodes(seasonUrl, seasonNumber, parent) {
     if (!seasonUrl) return Promise.resolve([]);
     return text(seasonUrl, {cache: 'no-store', credentials: 'include'}, 12000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), fullIds = {}, fullOrder = [], output = [], seen = {};
+      var doc = parseHtml(response.body), fullIds = {}, fullOrder = [], output = [], seen = {};
       var patterns = [
         /editorialType\\?"\s*:\\?"Full Episode\\?"\s*,\\?"guid\\?"\s*:\\?"(F[A-Z0-9]+)/ig,
         /"editorialType"\s*:\s*"Full Episode"\s*,\s*"guid"\s*:\s*"(F[A-Z0-9]+)/ig
@@ -1255,7 +1323,7 @@
       });
     }
     return text(item.url, {cache: 'no-store', credentials: 'include'}, 11000).then(function (response) {
-      var doc = new DOMParser().parseFromString(response.body, 'text/html'), output = [], seen = {};
+      var doc = parseHtml(response.body), output = [], seen = {};
       Array.prototype.forEach.call(doc.querySelectorAll('a[href]'), function (link) {
         var art = link.querySelector('[data-background-image]'), titleNode = link.querySelector('.title, .occhiello, h3, h4');
         if (!art || !titleNode) return;
@@ -1293,7 +1361,7 @@
     }
     return dataPage(item.url).then(function (page) {
       var props = page.props || {}, titleData = props.title || {}, seasons = titleData.seasons || [];
-      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + new URL(host).host), output = [];
+      var host = props.app_url || localStorage.getItem(HOST_KEY), cdn = props.cdn_url || ('https://cdn.' + hostOf(host)), output = [];
       var chain = Promise.resolve();
       seasons.forEach(function (season) {
         chain = chain.then(function () {
@@ -1331,7 +1399,7 @@
       });
     return iframePromise.then(function (iframeUrl) {
       return text(iframeUrl, {cache: 'no-store', credentials: 'include'}, 10000).then(function (response) {
-        var doc = new DOMParser().parseFromString(response.body, 'text/html'), frame = doc.querySelector('iframe');
+        var doc = parseHtml(response.body), frame = doc.querySelector('iframe');
         var embedUrl = frame && frame.getAttribute('src');
         if (!embedUrl) throw new Error('Player VixCloud non disponibile');
         return text(embedUrl, {cache: 'no-store', credentials: 'include', referrer: iframeUrl, referrerPolicy: 'unsafe-url'}, 10000)
@@ -1346,15 +1414,13 @@
       var token = (data.body.match(/['"]token['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       var expires = (data.body.match(/['"]expires['"]\s*:\s*['"]([^'"]+)/i) || [])[1];
       if (!base || !token || !expires) throw new Error('Token VixCloud non disponibile');
-      var playlist = new URL(base), embed = new URL(data.embedUrl);
-      playlist.searchParams.set('token', token);
-      playlist.searchParams.set('expires', expires);
-      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist.searchParams.set('h', '1');
-      ['b', 'scz'].forEach(function (key) { if (embed.searchParams.get(key)) playlist.searchParams.set(key, embed.searchParams.get(key)); });
-      return text(playlist.href, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
+      var playlist = setQueryValue(setQueryValue(base, 'token', token), 'expires', expires);
+      if (/canPlayFHD\s*=\s*true/i.test(data.body)) playlist = setQueryValue(playlist, 'h', '1');
+      ['b', 'scz'].forEach(function (key) { var value = queryValue(data.embedUrl, key); if (value) playlist = setQueryValue(playlist, key, value); });
+      return text(playlist, {cache: 'no-store', credentials: 'include', referrer: data.embedUrl, referrerPolicy: 'unsafe-url'}, 10000)
         .then(function (response) {
           if (response.body.indexOf('#EXTM3U') !== 0) throw new Error('Playlist HLS non valida');
-          return {url: playlist.href, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
+          return {url: playlist, manifest_type: 'hls', headers: {}, drm_type: '', subtitles: [], server: 'streamingcommunityws'};
         });
     });
   }
@@ -1365,31 +1431,240 @@
     return (window.__PRIPPI_LIVE_LOGO_BASE__ || 'assets/tv_logos/') + item.logo;
   }
 
-  function live() {
-    var source = window.__PRIPPI_LIVE_CHANNELS__;
-    var catalog = source && source.length ? Promise.resolve(source) :
-      json('data/live_channels.json', {cache: 'no-store'}, 5000).catch(function () { return []; });
-    return catalog.then(function (values) {
-      var channels = values.map(function (entry) {
-        var item = Object.assign({}, entry);
-        item.thumbnail = liveLogo(item);
-        item.fanart = item.thumbnail;
-        item.isLive = true;
-        return item;
+  /*
+   * Endpoint Live autorizzati, caricati esclusivamente dal bundle locale.
+   * Il file non fa parte dell'OTA e contiene soltanto manifest HLS/DASH/MP4
+   * consegnati dal titolare del servizio, senza alcun resolver o scraping.
+   */
+  function authorizedLiveConfig() {
+    var injected = window.__PRIPPI_AUTHORIZED_LIVE_CHANNELS__;
+    if (injected && injected.length) return Promise.resolve(injected);
+    return json('data/authorized_live.json', {cache: 'no-store'}, 3500).then(function (payload) {
+      return payload && (payload.channels || payload.items) || [];
+    }).catch(function () { return []; });
+  }
+
+  function liveIdentity(row, titleValue) {
+    return String(row || 'tv').toLowerCase() + ':' + String(titleValue || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  function directAuthorizedSource(source) {
+    if (!source || !/^(?:https?):\/\//i.test(String(source.url || ''))) return null;
+    var type = String(source.manifest_type || source.type || '').toLowerCase();
+    if (!type) {
+      if (/\.mpd(?:\?|$)/i.test(source.url)) type = 'mpd';
+      else if (/\.m3u8(?:\?|$)/i.test(source.url)) type = 'hls';
+      else if (/\.(?:mp4|webm)(?:\?|$)/i.test(source.url)) type = 'progressive';
+    }
+    if (type !== 'hls' && type !== 'mpd' && type !== 'progressive') return null;
+    return {
+      url: String(source.url), manifest_type: type, headers: source.headers || {},
+      drm_type: String(source.drm_type || source.drm || ''),
+      license_key: String(source.license_key || ''), license_url: String(source.license_url || ''),
+      license_headers: source.license_headers || {}, subtitles: source.subtitles || []
+    };
+  }
+
+  function mergeAuthorizedLive(catalog, configured) {
+    var byIdentity = {}, output = (catalog || []).map(function (entry) { return Object.assign({}, entry); });
+    output.forEach(function (item, index) { byIdentity[liveIdentity(item.live_row, item.title)] = index; });
+    (configured || []).forEach(function (entry) {
+      var row = String(entry.row || entry.live_row || 'tv').toLowerCase();
+      var titleValue = String(entry.title || entry.fulltitle || '').trim();
+      var sources = (entry.sources || [entry]).map(directAuthorizedSource).filter(function (source) { return !!source; });
+      if (!titleValue || !sources.length) return;
+      var identity = liveIdentity(row, titleValue), existing = byIdentity[identity];
+      var item = existing === undefined ? {
+        channel: 'authorized-live', title: titleValue, fulltitle: titleValue, contentType: 'video',
+        live_row: row, is_live_channel: true, isLive: true
+      } : output[existing];
+      item.action = 'authorized_live';
+      item.catalog_only = false;
+      item.authorized_sources = sources;
+      item.url = sources[0].url;
+      item.headers = sources[0].headers;
+      item.logo = entry.logo || item.logo || '';
+      item.thumbnail = entry.thumbnail || item.thumbnail || '';
+      item.plot = entry.plot || item.plot || 'Canale Live autorizzato.';
+      if (existing === undefined) { byIdentity[identity] = output.length; output.push(item); }
+    });
+    return output;
+  }
+
+  // Stessa composizione visibile di sportchannels.build_items() dell'APK:
+  // SKY = native + cinema/intrattenimento/documentari; Sport = native +
+  // sport/calcio; DAZN = solo iptv_dazn. I URL del catalogo restano nel pool
+  // e non vengono copiati nelle card.
+  function poolVisualRow(category) {
+    category = String(category || '').toLowerCase();
+    if (category === 'cinema' || category === 'intrattenimento' || category === 'documentari') return 'sky';
+    if (category === 'sport' || category === 'calcio') return 'sport';
+    if (category === 'dazn') return 'iptv_dazn';
+    return '';
+  }
+
+  function poolTitleKey(value, row) {
+    var key = String(value || '').toLowerCase()
+      .replace(/\s*\(buffering\)\s*/ig, ' ')
+      .replace(/\s*\[(?:flh|fhd|hd)\]\s*/ig, ' ')
+      .replace(/\s+(?:fhd|full hd|hd)$/ig, '')
+      .replace(/\s*\+\s*24\b/g, ' +24')
+      .replace(/\s*\+\s*1\b/g, ' +1')
+      .replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    if (row === 'sport') {
+      key = key.replace(/^sky\s+/, '');
+      if (key === 'sport nba' || key === 'nba') key = 'sport basket';
+    }
+    return key;
+  }
+
+  // Ordine e sinonimi sono quelli di sportchannels.py dell'APK.  La sorgente
+  // puo' cambiare ordine, ma la riga SKY deve restare riconoscibile e stabile.
+  var SKY_VISUAL_ORDER = [
+    'sky cinema uno', 'sky cinema uno +1', 'sky cinema uno +24',
+    'sky cinema stories', 'sky cinema collection', 'sky cinema family',
+    'sky cinema action', 'sky cinema suspense', 'sky cinema comedy',
+    'sky cinema romance', 'sky cinema drama', 'sky cinema due',
+    'sky cinema due +24',
+    'sky tg24', 'sky uno', 'sky uno +1', 'sky atlantic', 'sky atlantic +1',
+    'sky serie', 'sky collection', 'sky investigation', 'sky crime',
+    'sky adventure', 'sky documentaries', 'sky nature', 'history',
+    'comedy central', 'sky arte', 'mtv',
+    'discovery', 'discovery giallo italia', 'sky comedy central',
+    'crime + inv'
+  ];
+  var SKY_VISUAL_RANK = {};
+  SKY_VISUAL_ORDER.forEach(function (title, index) { SKY_VISUAL_RANK[title] = index; });
+  var SKY_VISUAL_ALIASES = {
+    'tg 24': 'sky tg24', 'sky tg 24': 'sky tg24',
+    'uno': 'sky uno', 'sky uno hd': 'sky uno', 'sky uno +1 hd': 'sky uno +1',
+    'atlantic': 'sky atlantic', 'sky atlantic hd': 'sky atlantic',
+    'sky atlantic +1 hd': 'sky atlantic +1', 'serie': 'sky serie',
+    'collection': 'sky collection', 'investigation': 'sky investigation',
+    'crime': 'sky crime', 'adventure': 'sky adventure',
+    'documentaries': 'sky documentaries', 'nature': 'sky nature',
+    'history channel': 'history', 'comedy central': 'comedy central',
+    'arte': 'sky arte', 'mtv italia': 'mtv'
+  };
+
+  function apkSkyCanonicalTitle(value) {
+    var title = String(value || '').toLowerCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    title = title.replace(/\s*\[(?:flh|fhd|hd)\]\s*/ig, ' ')
+      .replace(/\s+(?:fhd|hd)$/ig, '').replace(/^\s+|\s+$/g, '')
+      .replace(/\s*\+\s*24\b/g, ' +24').replace(/\s*\+\s*1\b/g, ' +1');
+    return SKY_VISUAL_ALIASES[title] || title;
+  }
+
+  function apkSkySortKey(item) {
+    var title = apkSkyCanonicalTitle(item.fulltitle || item.title), suffix = 0, base = title;
+    if (/ \+24$/.test(title)) { base = title.slice(0, -4).replace(/\s+$/g, ''); suffix = 2; }
+    else if (/ \+1$/.test(title)) { base = title.slice(0, -3).replace(/\s+$/g, ''); suffix = 1; }
+    return [Object.prototype.hasOwnProperty.call(SKY_VISUAL_RANK, base) ? SKY_VISUAL_RANK[base] : 10000, suffix, title];
+  }
+
+  function compareApkSkyOrder(left, right) {
+    var a = apkSkySortKey(left), b = apkSkySortKey(right);
+    for (var index = 0; index < a.length; index += 1) {
+      if (a[index] < b[index]) return -1;
+      if (a[index] > b[index]) return 1;
+    }
+    return 0;
+  }
+
+  function poolLiveCards(catalog) {
+    var categoryOrder = ['cinema', 'intrattenimento', 'documentari', 'sport', 'calcio', 'dazn'];
+    var output = [];
+    categoryOrder.forEach(function (category) {
+      (catalog || []).forEach(function (entry) {
+        if (String(entry.category || '').toLowerCase() !== category) return;
+        var row = poolVisualRow(category), titleValue = String(entry.title || '').trim();
+        if (!row || !titleValue || titleValue.toLowerCase() === 'netflix live') return;
+        output.push({
+          channel: 'catalog', title: titleValue, fulltitle: titleValue,
+          contentType: 'video', action: 'live_channel', live_row: row,
+          is_live_channel: true, isLive: true, logo: entry.logo || '',
+          thumbnail: entry.logo || '', plot: titleValue
+        });
       });
-      var definitions = [
-        {key: 'tv', id: 'live_tv', title: 'TV'},
-        {key: 'sky', id: 'live_sky', title: 'SKY'},
-        {key: 'sport', id: 'live_sport', title: 'Sport Live'}
-      ];
-      var rows = definitions.map(function (definition) {
-        return {
-          id: definition.id,
-          title: definition.title,
-          items: channels.filter(function (item) { return (item.live_row || 'tv') === definition.key; })
-        };
-      }).filter(function (row) { return row.items.length; });
-      return {rows: rows};
+    });
+    return output;
+  }
+
+  function apkLiveOrder(items, row) {
+    var seen = {}, output = [];
+    (items || []).forEach(function (item) {
+      var key = row === 'sky' ? apkSkyCanonicalTitle(item.fulltitle || item.title) :
+        poolTitleKey(item.fulltitle || item.title, row);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      output.push(item);
+    });
+    // APK: SKY ha un ranking esplicito; DAZN sposta solo Champions in coda.
+    // Sport e TV non vengono ordinati: conservano la sequenza della sorgente.
+    if (row === 'sky') {
+      output.sort(compareApkSkyOrder);
+    } else if (row === 'iptv_dazn') {
+      output.sort(function (left, right) {
+        return (/champions/i.test(left.title || '') ? 1 : 0) - (/champions/i.test(right.title || '') ? 1 : 0);
+      });
+    }
+    return output;
+  }
+
+  function buildLiveRows(catalog, authorized, iptvCatalog) {
+    // Le card locali sono già risolvibili dal motore Tizen: tenerle anche nel
+    // primo paint garantisce sempre le quattro righe visive, incluso DAZN.
+    var values = mergeAuthorizedLive(catalog, authorized);
+    values = values.concat(poolLiveCards(iptvCatalog || []));
+    var channels = values.map(function (entry) {
+      var item = Object.assign({}, entry);
+      // Anche le voci locali native possono usare le categorie tecniche del
+      // catalogo IPTV: normalizzale prima del primo paint, non solo nel merge.
+      item.live_row = poolVisualRow(item.live_row) || item.live_row;
+      item.thumbnail = liveLogo(item);
+      item.fanart = item.thumbnail;
+      item.isLive = true;
+      return item;
+    });
+    function visualLiveRow(value) {
+      value = String(value || 'tv').toLowerCase();
+      return value === 'dazn' ? 'iptv_dazn' : value;
+    }
+    var definitions = [
+      {key: 'sky', id: 'live_sky', title: 'SKY'},
+      {key: 'sport', id: 'live_sport', title: 'Sport Live'},
+      {key: 'iptv_dazn', id: 'live_iptv_dazn', title: 'DAZN'},
+      {key: 'tv', id: 'live_tv', title: 'TV'}
+    ];
+    return definitions.map(function (definition) {
+      return {
+        id: definition.id,
+        title: definition.title,
+        items: apkLiveOrder(channels.filter(function (item) {
+          return visualLiveRow(item.live_row) === definition.key;
+        }), definition.key)
+      };
+    }).filter(function (row) { return row.items.length; });
+  }
+
+  function liveBaseCatalog() {
+    var source = window.__PRIPPI_LIVE_CHANNELS__;
+    return source && source.length ? Promise.resolve(source) :
+      json('data/live_channels.json', {cache: 'no-store'}, 5000).catch(function () { return []; });
+  }
+
+  function live() {
+    // Le quattro righe native compaiono appena il bundle locale e' letto.
+    // Il catalogo IPTV, piu' pesante, completa la stessa struttura dopo.
+    return liveBaseCatalog().then(function (catalog) {
+      return {rows: buildLiveRows(catalog, [], []), expanding: true};
+    });
+  }
+
+  function liveExpanded() {
+    return Promise.all([liveBaseCatalog(), authorizedLiveConfig(), loadIptvCatalog()]).then(function (loaded) {
+      return {rows: buildLiveRows(loaded[0], loaded[1], loaded[2]), expanding: false};
     });
   }
 
@@ -1512,7 +1787,7 @@
       if (index >= seeds.length) throw new Error('Dominio Daddy non raggiungibile');
       var seed = seeds[index++];
       return text(seed.replace(/\/$/, '') + '/', {cache: 'no-store'}, 8000).then(function (response) {
-        var base = new URL(response.url || seed).origin;
+        var base = originOf(response.url || seed);
         try { localStorage.setItem('prippi.tizen.daddy.domain', base); } catch (error) {}
         return base;
       }).catch(next);
@@ -1525,26 +1800,34 @@
     var code = String(item.daddy_code || (item.sport_kind === 'daddy' ? item.sport_par : '') || '');
     if (!code) return Promise.reject(new Error('Fallback Daddy non disponibile'));
     return daddyDomain().then(function (base) {
-      return text(base + '/stream/stream-' + encodeURIComponent(code) + '.php', {
+      var pageUrl = base + '/stream/stream-' + encodeURIComponent(code) + '.php';
+      return text(pageUrl, {
         cache: 'no-store', headers: {'Referer': base + '/'}
-      }, 10000).then(function (response) { return {base: base, body: response.body}; });
+      }, 10000).then(function (response) {
+        return {base: base, pageUrl: pageUrl, body: response.body};
+      });
     }).then(function (page) {
       var iframe = (page.body.match(/<iframe[^>]+src=["']([^"']+)/i) || [])[1];
       if (!iframe) throw new Error('Player Daddy non disponibile');
       iframe = absoluteUrl(iframe, page.base + '/');
       return text(iframe, {cache: 'no-store', headers: {'Referer': page.base + '/'}}, 10000)
-        .then(function (response) { return {iframe: iframe, body: response.body}; });
+        .then(function (response) {
+          return {iframe: iframe, pageUrl: page.pageUrl, body: response.body};
+        });
     }).then(function (player) {
       var encoded = (player.body.match(/atob\(['"]([^'"]+)/i) || [])[1];
       var url = encoded ? cleanUrl(atob(encoded)) : '';
       if (!/^https?:/i.test(url)) throw new Error('Stream Daddy non disponibile');
-      var origin = new URL(player.iframe).origin;
+      var origin = originOf(player.iframe);
       return {
         url: url,
         manifest_type: 'hls',
         drm_type: '',
         headers: {'User-Agent': NOWTV_UA, 'Referer': origin + '/', 'Origin': origin},
-        live_source: 'daddy'
+        live_source: 'daddy',
+        // The outer stream page must create the inner iframe itself: opening the
+        // inner player directly loses Daddy's expected referrer and is denied.
+        embed_url: player.pageUrl
       };
     });
   }
@@ -1568,7 +1851,8 @@
       if (!token) throw new Error('Token live non disponibile');
       return {
         url: 'https://lovely.lovetier.bz/' + encodeURIComponent(code) + '/tracks-v1a1/mono.m3u8?token=' + encodeURIComponent(token),
-        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')}
+        manifest_type: 'hls', drm_type: '', headers: {'Referer': FREESHOT_ORIGIN, 'Origin': FREESHOT_ORIGIN.replace(/\/$/, '')},
+        live_source: 'freeshot', embed_url: 'https://popcdn.day/player/' + encodeURIComponent(code)
       };
     });
   }
@@ -1598,11 +1882,20 @@
     return Promise.reject(new Error('Resolver live non supportato: ' + (kind || 'sconosciuto')));
   }
 
+  function resolveLiveFallback(item) {
+    var fallback = item.sport_fs ? resolveFreeshotLive(item) :
+      Promise.reject(new Error('Fallback Freeshot non disponibile'));
+    if (item.daddy_code) {
+      fallback = fallback.catch(function () { return resolveDaddyLive(item); });
+    }
+    return fallback;
+  }
+
   function resolveRai(item) {
     if (!item.video_url) return Promise.reject(new Error('Endpoint Rai non disponibile'));
     return json(item.video_url, {cache: 'no-store', credentials: 'include'}, 10000).then(function (data) {
       if (data.first_item_path) {
-        var nested = new URL(data.first_item_path, 'https://www.raiplay.it').href.replace(/\.html\?json/i, '.json');
+        var nested = absoluteUrl(data.first_item_path, 'https://www.raiplay.it/').replace(/\.html\?json/i, '.json');
         return json(nested, {cache: 'no-store', credentials: 'include'}, 10000);
       }
       return data;
@@ -1737,7 +2030,527 @@
     });
   }
 
+  function resolveAuthorizedLive(item) {
+    var candidates = (item.authorized_sources || []).map(directAuthorizedSource)
+      .filter(function (source) { return !!source; });
+    if (!candidates.length) {
+      var direct = directAuthorizedSource(item);
+      if (direct) candidates.push(direct);
+    }
+    if (!candidates.length) return Promise.reject(new Error('Endpoint autorizzato non configurato'));
+    // Il primo endpoint e' quello preferito; gli altri restano nell'oggetto
+    // per il player e per future verifiche di salute, senza reti nascoste.
+    var selected = candidates[0];
+    selected.fallback_sources = candidates.slice(1);
+    return Promise.resolve(selected);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pool IPTV Group-E (Xtream Codes) — port JS di iptv_pool.py dell'APK.
+  // Carica account e catalogo dai file privati in data/ e alloca localmente uno
+  // slot libero leggendo lo stato remoto del pannello provider. I client non si
+  // parlano tra loro: ogni installazione consulta active_cons/max_connections.
+  // ---------------------------------------------------------------------------
+  var IPTV_ACCOUNT_TTL = 30 * 60 * 1000;   // 30 minuti (come _ACCOUNT_TTL)
+  var IPTV_CATALOG_TTL = 6 * 3600 * 1000;  // 6 ore (come _TTL)
+  // Lasciamo spazio al fallback e al player: il timeout visibile e' 18 s,
+  // dunque il pool non puo' occupare l'intera finestra da solo.
+  var IPTV_POOL_RESOLVE_BUDGET = 6500;
+  var iptvAccountsCache = null;
+  var iptvAccountsLoadedAt = 0;
+  var iptvCatalogCache = null;
+  var iptvCatalogLoadedAt = 0;
+
+  // --- 2e1: lease locali (port di _leases / release) ------------------------
+  // url -> {exp, leaseId}. Uno slot e' trattenuto da un solo lease attivo; lo
+  // stesso leaseId puo' rinnovare il proprio slot senza riprovare la rete.
+  // Solo RAM: al riavvio si riparte puliti (come in Python).
+  var iptvLeases = {};
+
+  // Scarta i lease scaduti (come la pulizia all'inizio di acquire).
+  function iptvPruneLeases() {
+    var now = Date.now();
+    Object.keys(iptvLeases).forEach(function (url) {
+      if (iptvLeases[url].exp <= now) delete iptvLeases[url];
+    });
+  }
+
+  // Rilascio esplicito di uno slot (port di release()).
+  function iptvRelease(url) {
+    if (!url) return;
+    delete iptvLeases[url];
+  }
+
+  // Registra o rinnova il lease su uno slot. Ritorna false se lo slot e' gia'
+  // trattenuto da un altro leaseId non scaduto; altrimenti fissa la scadenza
+  // (minimo 60s, come max(60, ttl) in Python). Il check di raggiungibilita'
+  // resta a carico del chiamante: qui si gestisce solo l'allocazione.
+  function iptvHoldLease(url, leaseId, ttlMs) {
+    var now = Date.now();
+    var active = iptvLeases[url];
+    if (active && active.exp > now && active.leaseId !== leaseId) return false;
+    iptvLeases[url] = {exp: now + Math.max(60 * 1000, ttlMs || 900 * 1000), leaseId: leaseId};
+    return true;
+  }
+
+  function loadIptvAccounts() {
+    if (iptvAccountsCache && Date.now() - iptvAccountsLoadedAt < IPTV_ACCOUNT_TTL) {
+      return Promise.resolve(iptvAccountsCache);
+    }
+    var otaPrivate = window.__PRIPPI_PRIVATE_DATA__ || {};
+    if (otaPrivate.iptv_accounts) {
+      var otaRows = Array.isArray(otaPrivate.iptv_accounts.accounts) ? otaPrivate.iptv_accounts.accounts : [];
+      iptvAccountsCache = otaRows.filter(function (x) { return x && x.host && x.username && x.password; });
+      iptvAccountsLoadedAt = Date.now();
+      return Promise.resolve(iptvAccountsCache);
+    }
+    return json('data/iptv_accounts.json', {cache: 'no-store'}, 8000).then(function (blob) {
+      var rows = blob && Array.isArray(blob.accounts) ? blob.accounts : [];
+      iptvAccountsCache = rows.filter(function (x) {
+        return x && x.host && x.username && x.password;
+      });
+    }).catch(function () { iptvAccountsCache = []; })
+      .then(function () { iptvAccountsLoadedAt = Date.now(); return iptvAccountsCache; });
+  }
+
+  function loadIptvCatalog() {
+    if (iptvCatalogCache && Date.now() - iptvCatalogLoadedAt < IPTV_CATALOG_TTL) {
+      return Promise.resolve(iptvCatalogCache);
+    }
+    var otaPrivate = window.__PRIPPI_PRIVATE_DATA__ || {};
+    if (otaPrivate.iptv_catalog) {
+      iptvCatalogCache = Array.isArray(otaPrivate.iptv_catalog.items) ? otaPrivate.iptv_catalog.items : [];
+      iptvCatalogLoadedAt = Date.now();
+      return Promise.resolve(iptvCatalogCache);
+    }
+    return json('data/iptv_catalog.json', {cache: 'no-store'}, 8000).then(function (blob) {
+      iptvCatalogCache = blob && Array.isArray(blob.items) ? blob.items : [];
+    }).catch(function () { iptvCatalogCache = []; })
+      .then(function () { iptvCatalogLoadedAt = Date.now(); return iptvCatalogCache; });
+  }
+
+  // Identificativo stabile dell'account (come l'aid Python: scheme://host/user).
+  function iptvAccountId(account) {
+    return (account.scheme || 'http') + '://' + account.host + '/' + account.username;
+  }
+
+  // Chiamata al pannello Xtream (player_api.php). Come _account_api: timeout
+  // breve e header fissi; un errore HTTP o di rete diventa reject.
+  function iptvAccountApi(account, action, timeoutMs) {
+    var base = (account.scheme || 'http') + '://' + account.host + '/player_api.php?username=' +
+      encodeURIComponent(account.username) + '&password=' + encodeURIComponent(account.password);
+    if (action) base += '&action=' + action;
+    return json(base, {headers: {'User-Agent': 'PrippiStream/2.x', 'Accept': 'application/json'}}, timeoutMs || 4000);
+  }
+
+  // Slot libero? Come _account_free: legge active_cons/max_connections dal
+  // pannello remoto. Ritorna {active, maximum} oppure null (pannello morto,
+  // account disattivato o pieno). I client non si parlano tra loro.
+  function iptvAccountFree(account) {
+    return iptvAccountApi(account, '', 3000).then(function (data) {
+      var info = data && typeof data === 'object' ? (data.user_info || {}) : {};
+      var active = parseInt(info.active_cons || 0, 10);
+      var maximum = parseInt(info.max_connections || 0, 10);
+      var enabled = String(info.auth !== undefined ? info.auth : '1') === '1' &&
+        String(info.status !== undefined ? info.status : 'Active').toLowerCase() === 'active';
+      if (!enabled || maximum <= 0 || active >= maximum) return null;
+      return {active: active, maximum: maximum};
+    }).catch(function () { return null; });
+  }
+
+  // --- 2c: lineup (get_live_streams) e match del canale ---------------------
+  var IPTV_STREAM_MAP_TTL = 6 * 3600 * 1000;  // 6 ore, come _STREAM_MAP_TTL Python
+  var iptvStreamMapCache = {};
+
+  // Titolo normalizzato per i confronti (casefold + strip, come in Python).
+  function iptvNormTitle(value) {
+    return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // ES5: WebKit non ha .endsWith.
+  function iptvEndsWith(haystack, suffix) {
+    var n = haystack.length - suffix.length;
+    return n >= 0 && haystack.slice(n) === suffix;
+  }
+
+  // Match del canale nel lineup: prima exact sul nome normalizzato, poi
+  // suffisso/prefisso a confine di parola (es. "Sky Sport Uno HD" per
+  // "Sky Sport Uno"). Con piu' varianti vince FHD su HD/SD, poi il nome
+  // piu' corto (piu' vicino al titolo richiesto). Ritorna stream_id o null.
+  function iptvMatchChannel(streamMap, title) {
+    var wanted = iptvNormTitle(title);
+    if (!wanted || !streamMap) return null;
+    if (streamMap[wanted] !== undefined) return streamMap[wanted];
+    var hits = [];
+    Object.keys(streamMap).forEach(function (name) {
+      var n = iptvNormTitle(name);
+      if (!n || n === wanted) return;
+      if (iptvEndsWith(n, ' ' + wanted) || n.indexOf(wanted + ' ') === 0) {
+        hits.push({name: n, id: streamMap[name]});
+      }
+    });
+    if (!hits.length) return null;
+    hits.sort(function (a, b) {
+      var fa = a.name.indexOf('fhd') >= 0 ? 0 : 1;
+      var fb = b.name.indexOf('fhd') >= 0 ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return a.name.length - b.name.length;
+    });
+    return hits[0].id;
+  }
+
+  // stream_id del titolo su un account, con cache del lineup per account
+  // (6 ore). La mappa e' nome normalizzato -> stream_id da get_live_streams.
+  function iptvAccountChannel(account, title) {
+    var aid = iptvAccountId(account);
+    var cached = iptvStreamMapCache[aid];
+    if (cached && Date.now() - cached.at < IPTV_STREAM_MAP_TTL) {
+      return Promise.resolve(iptvMatchChannel(cached.map, title));
+    }
+    return iptvAccountApi(account, 'get_live_streams', 8000).then(function (rows) {
+      var map = {};
+      if (Array.isArray(rows)) rows.forEach(function (row) {
+        if (row && row.name !== undefined && row.stream_id !== undefined) {
+          map[iptvNormTitle(row.name)] = String(row.stream_id);
+        }
+      });
+      iptvStreamMapCache[aid] = {at: Date.now(), map: map};
+      return iptvMatchChannel(map, title);
+    }).catch(function () { return null; });
+  }
+
+  // --- 2d1: shuffle deterministico (port di hashlib.sha256 + random.Random) --
+  // Moltiplicazione a 32 bit come Math.imul (assente in WebKit Tizen).
+  function iptvImul(a, b) {
+    var ah = (a >>> 16) & 0xffff, al = a & 0xffff;
+    var bh = (b >>> 16) & 0xffff, bl = b & 0xffff;
+    return ((al * bl + (((ah * bl + al * bh) << 16) >>> 0)) | 0);
+  }
+
+  // Hash FNV-1a a 32 bit: stesso input -> sempre lo stesso seed. Sostituisce
+  // hashlib.sha256 solo per generare la semente (non serve collisione forte).
+  function iptvHashString(str) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = iptvImul(h, 0x01000193);
+    }
+    return h >>> 0;
+  }
+
+  // PRNG Mulberry32: deterministico dato il seed, buona distribuzione.
+  function iptvMulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      var t = iptvImul(a ^ (a >>> 15), 1 | a);
+      t = (t + iptvImul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // Fisher-Yates in-place con il PRNG fornito.
+  function iptvShuffle(arr, seed) {
+    var rnd = iptvMulberry32(seed);
+    for (var i = arr.length - 1; i > 0; i--) {
+      var j = Math.floor(rnd() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // Seme del pool: title|leaseId|finestra di 20s. Stesso titolo+lease dentro
+  // la stessa finestra -> stesso ordine (tutti i client concordano); dopo 20s
+  // l'ordine cambia e si riprova da un'altra posizione.
+  function iptvPoolSeed(title, leaseId) {
+    return iptvHashString(String(title || '') + '|' + String(leaseId || '') + '|' + (Math.floor(Date.now() / 1000 / 20)));
+  }
+
+  // --- 2d2: batch probe concorrente (port di ThreadPoolExecutor) -----------
+  // Interroga in parallelo i pannelli degli account del lotto e restituisce
+  // le righe {free, account, aid} ordinate per carico: prima il rapporto
+  // active/maximum piu' basso, poi l'active assoluto (come checked.sort).
+  function iptvProbeBatch(batch) {
+    return Promise.all(batch.map(function (pair) {
+      return iptvAccountFree(pair.account).then(function (free) {
+        if (!free) return null;
+        return {free: free, account: pair.account, aid: pair.aid};
+      });
+    })).then(function (results) {
+      var checked = results.filter(Boolean);
+      checked.sort(function (a, b) {
+        var ra = a.free.active / Math.max(1, a.free.maximum);
+        var rb = b.free.active / Math.max(1, b.free.maximum);
+        if (ra !== rb) return ra - rb;
+        return a.free.active - b.free.active;
+      });
+      return checked;
+    });
+  }
+
+  // --- 2d3a: probe di raggiungibilita' (port di _reachable_url) ------------
+  // GET con header VLC e timeout di 5s. Con mode no-cors la risposta e'
+  // opaca (non si legge lo status), quindi "raggiungibile" = il server ha
+  // risposto; timeout o errore di rete -> false. Ritorna sempre una Promise
+  // che risolve con true/false, mai reject.
+  function iptvReachableUrl(url) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (!settled) { settled = true; resolve(false); }
+      }, 5000);
+      fetch(url, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        headers: {'User-Agent': 'VLC/3.0.21 LibVLC/3.0.21'}
+      }).then(function () {
+        if (!settled) { settled = true; clearTimeout(timer); resolve(true); }
+      }).catch(function () {
+        if (!settled) { settled = true; clearTimeout(timer); resolve(false); }
+      });
+    });
+  }
+
+  // --- 2d3b: orchestratore del pool (port di _pool_url) --------------------
+  var iptvWarmAccountIds = {};
+
+  function iptvPoolUrl(title, leaseId, excluded) {
+    return loadIptvAccounts().then(function (accounts) {
+      if (!accounts || !accounts.length) return null;
+      var excludedSet = {};
+      (excluded || []).forEach(function (aid) { excludedSet[aid] = true; });
+      // Copia: lo shuffle non deve alterare l'array in cache condiviso.
+      var pool = accounts.slice();
+      iptvShuffle(pool, iptvPoolSeed(title, leaseId));
+      // Sort stabile per warm: i pronti (0) precedono gli altri (1), e a parita'
+      // di classe WebKit conserva l'ordine casuale appena generato.
+      pool.sort(function (a, b) {
+        var wa = iptvWarmAccountIds[iptvAccountId(a)] ? 0 : 1;
+        var wb = iptvWarmAccountIds[iptvAccountId(b)] ? 0 : 1;
+        return wa - wb;
+      });
+      var candidates = [];
+      pool.forEach(function (account) {
+        var aid = iptvAccountId(account);
+        if (!excludedSet[aid]) candidates.push({account: account, aid: aid});
+      });
+
+      function probeBatch(offset) {
+        if (offset >= candidates.length) return Promise.resolve(null);
+        var batch = candidates.slice(offset, offset + 8);
+        return iptvProbeBatch(batch).then(function (checked) {
+          function walk(index) {
+            if (index >= checked.length) return probeBatch(offset + 8);
+            var row = checked[index];
+            return iptvAccountChannel(row.account, title).then(function (streamId) {
+              if (!streamId) return walk(index + 1);
+              var scheme = row.account.scheme || 'http';
+              var url = scheme + '://' + row.account.host + '/live/' +
+                row.account.username + '/' + row.account.password + '/' + streamId + '.ts';
+              return iptvReachableUrl(url).then(function (ok) {
+                if (!ok) return walk(index + 1);
+                return {url: url, aid: row.aid};
+              });
+            });
+          }
+          return walk(0);
+        });
+      }
+
+      return probeBatch(0);
+    }).catch(function () { return null; });
+  }
+
+  // --- 2e2: tentativi pool per titolo (port di _pool_attempts) -------------
+  // wanted -> [aid, aid, ...]. A attempt=0 si azzera la lista; agli attempt
+  // successivi restituisce gli aid gia' provati cosi' il pool li esclude.
+  var iptvPoolAttempts = {};
+
+  function iptvGetExcluded(wanted, attempt) {
+    if (parseInt(attempt || 0, 10) === 0) {
+      iptvPoolAttempts[wanted] = [];
+    }
+    return (iptvPoolAttempts[wanted] || []).slice();
+  }
+
+  function iptvRecordAttempt(wanted, aid) {
+    if (!iptvPoolAttempts[wanted]) iptvPoolAttempts[wanted] = [];
+    iptvPoolAttempts[wanted].push(aid);
+  }
+
+  // --- 2e3: candidati catalogo + mirror stexxino (port di _candidates) -----
+  // Per i link Peter-Pan (/live/4/987654321/<id>.ts) restituisce l'URL e il
+  // mirror sull'host stexxino; per gli altri solo l'URL stesso. L'ordine
+  // conta: si prova prima la sorgente originale, poi il mirror.
+  function iptvCatalogCandidates(cleanUrl) {
+    var out = [cleanUrl];
+    var m = String(cleanUrl || '').match(/^https?:\/\/[^/]+\/live\/4\/987654321\/(\d+\.ts)$/i);
+    if (m) {
+      out.push('http://9a9p78nt92.stexxino2020.xyz/live/ginevra86/a090922a/' + m[1]);
+    }
+    return out;
+  }
+
+  // --- 2e4: orchestratore finale acquire (port di acquire()) ---------------
+  // Fase 1: pool account (iptvPoolUrl) con esclusi dai tentativi precedenti.
+  // Fase 2: fallback catalogo locale — per ogni sorgente del titolo, strip
+  //         dei parametri '|', candidati + mirror stexxino, check lease e
+  //         raggiungibilita'. Ritorna l'URL o null.
+  function iptvAcquire(title, leaseId, ttlMs, attempt) {
+    var wanted = iptvNormTitle(title);
+    if (!wanted) return Promise.resolve(null);
+    var excluded = iptvGetExcluded(wanted, parseInt(attempt || 0, 10));
+
+    return deadline(iptvPoolUrl(title, leaseId + '#' + (attempt || 0), excluded),
+      IPTV_POOL_RESOLVE_BUDGET, 'Pool IPTV lento').catch(function () { return null; }).then(function (pooled) {
+      if (pooled) {
+        iptvRecordAttempt(wanted, pooled.aid);
+        iptvHoldLease(pooled.url, leaseId, ttlMs);
+        return pooled.url;
+      }
+
+      // Fase 2: fallback catalogo locale
+      iptvPruneLeases();
+      return loadIptvCatalog().then(function (catalog) {
+        function walkItem(index) {
+          if (index >= catalog.length) return null;
+          var item = catalog[index];
+          if (iptvNormTitle(item.title) !== wanted) return walkItem(index + 1);
+          var sources = item.sources || [];
+
+          function walkSource(sIdx) {
+            if (sIdx >= sources.length) return walkItem(index + 1);
+            var cleanUrl = String(sources[sIdx]).split('|')[0].trim();
+            if (!cleanUrl) return walkSource(sIdx + 1);
+            var candidates = iptvCatalogCandidates(cleanUrl);
+
+            function walkCandidate(cIdx) {
+              if (cIdx >= candidates.length) return walkSource(sIdx + 1);
+              var candidate = candidates[cIdx];
+              var active = iptvLeases[candidate];
+              // Lease gia' nostro: rinnova e ritorna.
+              if (active && active.exp > Date.now()) {
+                if (active.leaseId === leaseId) {
+                  iptvHoldLease(candidate, leaseId, ttlMs);
+                  return candidate;
+                }
+                // Trattenuto da un altro: prossimo candidato.
+                return walkCandidate(cIdx + 1);
+              }
+              // Slot libero: verifica raggiungibilita' poi prendi il lease.
+              return iptvReachableUrl(candidate).then(function (ok) {
+                if (!ok) return walkCandidate(cIdx + 1);
+                iptvHoldLease(candidate, leaseId, ttlMs);
+                return candidate;
+              });
+            }
+
+            return walkCandidate(0);
+          }
+
+          return walkSource(0);
+        }
+
+        return walkItem(0);
+      });
+    }).catch(function () { return null; });
+  }
+
+  // --- 2e5: warmup in background (port di warmup()) ------------------------
+  var iptvWarmupDoneAt = 0;
+
+  function iptvWarmup(limit) {
+    limit = parseInt(limit || 12, 10);
+    var now = Date.now();
+    // Cooldown 30 min: se abbiamo gia' account warm e non e' passato abbastanza tempo.
+    if (Object.keys(iptvWarmAccountIds).length > 0 && now - iptvWarmupDoneAt < 30 * 60 * 1000) {
+      return Promise.resolve(Object.keys(iptvWarmAccountIds).length);
+    }
+    return loadIptvAccounts().then(function (accounts) {
+      if (!accounts || !accounts.length) return 0;
+      // Shuffle casuale (non deterministico: serve solo a variare l'ordine di probe).
+      var pool = accounts.slice();
+      for (var i = pool.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+
+      // Batch da 12: trova gli account con slot liberi, fino a limit.
+      function probeFree(offset) {
+        // Il warmup e' un'ottimizzazione, non deve trasformarsi in una
+        // scansione completa di account: prova al massimo i primi due batch.
+        if (offset >= Math.min(pool.length, 24)) return Promise.resolve([]);
+        var batch = pool.slice(offset, offset + 12).map(function (account) {
+          return {account: account, aid: iptvAccountId(account)};
+        });
+        return iptvProbeBatch(batch).then(function (checked) {
+          if (checked.length >= limit) return checked.slice(0, limit);
+          return probeFree(offset + 12).then(function (more) {
+            return checked.concat(more).slice(0, limit);
+          });
+        });
+      }
+
+      var freeAccounts = [];
+      return probeFree(0).then(function (free) {
+        freeAccounts = free;
+        // Precarica il lineup per ogni account free: popola iptvStreamMapCache
+        // cosi' i lookup successivi sono istantanei (6h di cache).
+        return Promise.all(free.map(function (row) {
+          return iptvAccountChannel(row.account, '__prippi_warmup__');
+        }));
+      }).then(function () {
+        freeAccounts.forEach(function (row) {
+          iptvWarmAccountIds[row.aid] = true;
+        });
+        iptvWarmupDoneAt = Date.now();
+        return Object.keys(iptvWarmAccountIds).length;
+      }).catch(function () {
+        // Errore non critico: registra comunque gli account trovati.
+        freeAccounts.forEach(function (row) {
+          iptvWarmAccountIds[row.aid] = true;
+        });
+        iptvWarmupDoneAt = Date.now();
+        return Object.keys(iptvWarmAccountIds).length;
+      });
+    }).catch(function () { return 0; });
+  }
+
+  // --- Step 3a: risoluzione live tramite pool IPTV --------------------------
+  var iptvWarmupStarted = false;
+
+  function iptvLeaseIdForItem(item) {
+    // Stabile per canale (row+title): stesso lease tra play e zapping, cosi'
+    // il rinnovo dentro acquire() ritrova lo slot gia' preso.
+    return 'tizen:' + liveIdentity(item.live_row || item.channel || 'tv', item.title);
+  }
+
+  function resolveIptvPool(item) {
+    var title = String(item.fulltitle || item.title || '').trim();
+    if (!title) return Promise.reject(new Error('Canale IPTV senza titolo'));
+    var attempt = parseInt(item._iptvAttempt || 0, 10);
+    return iptvAcquire(title, iptvLeaseIdForItem(item), 900 * 1000, attempt).then(function (url) {
+      if (!url) throw new Error('Nessuno slot IPTV disponibile per ' + title);
+      // Il primo canale ha priorita' assoluta: il warmup parte soltanto dopo
+      // aver trovato una sorgente e con un numero limitato di candidati.
+      if (!iptvWarmupStarted) {
+        iptvWarmupStarted = true;
+        setTimeout(function () { try { iptvWarmup(4); } catch (error) {} }, 2500);
+      }
+      // .ts Xtream: il player deve mandare l'User-Agent VLC (come in Python).
+      return {
+        url: url,
+        manifest_type: 'hls',
+        drm_type: '',
+        headers: {'User-Agent': 'VLC/3.0.21 LibVLC/3.0.21'},
+        live_source: 'iptv_pool'
+      };
+    });
+  }
+
   function resolve(item) {
+    if (item.action === 'authorized_live' || item.authorized_sources) return resolveAuthorizedLive(item);
     if (item.channel === 'sportchannels' || item.sport_kind) return resolveSportLive(item);
     if (item.channel === 'raiplay') return withDaddyFallback(resolveRai(item), item);
     if (item.channel === 'mediasetplay') return withDaddyFallback(resolveMediaset(item), item);
@@ -1751,6 +2564,10 @@
     }
     if (item.channel === 'streamingcommunity' || /streamingcommunity/i.test(item.url || '')) return resolveStreamingCommunity(item);
     if (item.channel === 'discoveryplus') return resolveDiscovery(item);
+    // Canali sincronizzati dal catalogo IPTV Group-E: nessun URL diretto,
+    // la sorgente viene acquisita dal pool (account + lineup) o dai source
+    // locali del catalogo con lease.
+    if (item.channel === 'catalog') return resolveIptvPool(item);
     if (/\.(m3u8|mpd|mp4)(\?|$)/i.test(item.url || '')) {
       return Promise.resolve({url: item.url, manifest_type: /\.mpd/i.test(item.url) ? 'mpd' : /\.m3u8/i.test(item.url) ? 'hls' : 'progressive', headers: item.headers || {}, drm_type: ''});
     }
@@ -1763,9 +2580,12 @@
     if (route === '/home-expanded') return expandedHome();
     if (route === '/search') return search(decodeURIComponent((String(path).split('q=')[1] || '').replace(/\+/g, ' ')));
     if (route === '/detail') return detail((body || {}).item || {});
+    if (route === '/artwork') return tmdbDetails((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});
+    if (route === '/resolve-live-fallback') return resolveLiveFallback((body || {}).item || {});
     if (route === '/live') return live();
+    if (route === '/live-expanded') return liveExpanded();
     if (route === '/live-epg') return skyEpg((body || {}).rows || []);
     if (route === '/browse-macros') return Promise.resolve({items: []});
     if (route === '/settings') return Promise.resolve({items: [

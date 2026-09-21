@@ -11,6 +11,12 @@ bin/
 lib/abi
 tests/home/
 reports/
+# Private IPTV extraction output (never commit credentials or playlist URLs)
+private_iptv/
+# Endpoint Live autorizzati per build Tizen locale: mai inviarli nell'OTA GitHub.
+tizen/PrippiStreamTV/data/authorized_live.json
+tizen/PrippiStreamTV/data/iptv_accounts.json
+tizen/PrippiStreamTV/data/iptv_catalog.json
 # one-shot dev/debug scripts
 _fix_wraplist_bars.py
 _patch_upnext.py

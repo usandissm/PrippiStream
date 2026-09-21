@@ -2,14 +2,38 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=1920,height=1080,initial-scale=1">
+  <meta name="viewport" content="width=1920,initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>PrippiStream</title>
-  <link rel="stylesheet" href="css/style.css">
+  <script>
+    (function () {
+      var supportsModernCss = false;
+      var forceLegacy = /(?:\?|&)legacy=1(?:&|$)/.test(window.location.search || '');
+      try {
+        supportsModernCss = !!(window.CSS && window.CSS.supports &&
+          window.CSS.supports('--prippi-ui-test', '0'));
+      } catch (error) {}
+      if (forceLegacy) supportsModernCss = false;
+      document.documentElement.className = supportsModernCss ? 'modern-tizen' : 'legacy-tizen';
+      document.write('<link rel="stylesheet" href="css/' +
+        (supportsModernCss ? 'style.css' : 'style-legacy.css') + '">');
+      if (!supportsModernCss) {
+        document.write('<link rel="stylesheet" href="css/legacy-layout.css">');
+      }
+    }());
+  </script>
   <script src="$WEBAPIS/webapis/webapis.js"></script>
-  <script defer src="vendor/hls.light.min.js"></script>
+  <script src="fetch-polyfill.js"></script>
+  <script>
+    document.write('<script src="vendor/' +
+      (document.documentElement.className.indexOf('legacy-tizen') >= 0 ? 'hls.legacy.min.js' : 'hls.light.min.js') +
+      '"><\/script>');
+  </script>
+  <script src="legacy-clearkey-eme.js"></script>
   <script defer src="vendor/shaka-player.compiled.js"></script>
-  <script defer src="standalone.js"></script>
-  <script defer src="bootstrap.js"></script>
+  <script defer src="standalone.js?v=0.9.8.3"></script>
+  <script defer src="cw-flow.js"></script>
+  <script defer src="media-prefs.js"></script>
+  <script defer src="bootstrap.js?v=0.9.9"></script>
 </head>
 <body>
   <div id="shell" class="app-shell">
@@ -48,32 +72,58 @@
 
   <section id="detail" class="overlay hidden" aria-label="Dettaglio contenuto"></section>
 
-  <section id="player" class="player hidden" aria-label="Player">
+  <section id="player" class="player hidden" aria-label="Player" tabindex="-1">
     <video id="html-player" playsinline></video>
     <object id="avplay" type="application/avplayer"></object>
-    <div class="player-shade"></div>
     <div id="player-ui" class="player-ui">
+      <div class="player-shade"></div>
       <div class="player-top">
-        <span id="player-kind" class="player-kind">PRIPPISTREAM</span>
-        <button id="player-exit" class="player-exit" data-focusable data-zone="player">Indietro</button>
-      </div>
-      <div class="player-controls">
+        <button id="player-exit" class="player-exit player-icon-button" data-focusable data-zone="player-top" aria-label="Esci dal player">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M29 10 15 24l14 14M16 24h24"/></svg>
+        </button>
         <div class="player-heading">
-          <p id="player-subtitle"></p>
           <h2 id="player-title"></h2>
+          <p id="player-subtitle"></p>
         </div>
-        <div class="timeline-wrap">
-          <span id="player-current">00:00</span>
-          <div class="timeline"><span id="player-progress"></span></div>
-          <span id="player-duration">LIVE</span>
+        <div id="player-status" class="player-status" aria-live="polite"></div>
+      </div>
+
+      <div class="player-center" aria-label="Controlli di riproduzione">
+        <button id="player-rewind" class="player-seek-button" data-focusable data-zone="player-center" aria-label="Indietro di 10 secondi">
+          <span class="seek-arrow" aria-hidden="true">↶</span><strong>10</strong>
+        </button>
+        <button id="player-toggle" class="player-toggle" data-focusable data-zone="player-center" aria-label="Pausa">
+          <svg class="icon-pause" viewBox="0 0 48 48" aria-hidden="true"><path d="M14 9h7v30h-7zM27 9h7v30h-7z"/></svg>
+          <svg class="icon-play" viewBox="0 0 48 48" aria-hidden="true"><path d="m16 9 25 15-25 15z"/></svg>
+        </button>
+        <button id="player-forward" class="player-seek-button" data-focusable data-zone="player-center" aria-label="Avanti di 10 secondi">
+          <span class="seek-arrow" aria-hidden="true">↷</span><strong>10</strong>
+        </button>
+      </div>
+
+      <div class="player-bottom">
+        <div id="player-timeline-wrap" class="timeline-wrap">
+          <span id="player-current">0:00</span>
+          <button id="player-scrubber" class="timeline" data-focusable data-zone="player-timeline" role="slider" aria-label="Posizione video" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="player-progress"></span><i id="player-thumb"></i>
+          </button>
+          <span id="player-duration">0:00</span>
         </div>
-        <div class="player-bottom">
-          <div class="player-buttons">
-            <button id="player-rewind" data-focusable data-zone="player" aria-label="Indietro di 10 secondi">-10</button>
-            <button id="player-toggle" class="player-toggle" data-focusable data-zone="player" aria-label="Pausa">Pausa</button>
-            <button id="player-forward" data-focusable data-zone="player" aria-label="Avanti di 10 secondi">+10</button>
-          </div>
-          <span class="player-hint">OK seleziona &nbsp; Frecce navigano &nbsp; Return esce</span>
+        <div id="player-live-info" class="player-live-info" aria-live="polite">
+          <span class="live-dot"></span>
+          <div><strong>IN DIRETTA</strong><small id="player-live-program"></small></div>
+          <span class="player-zap-hint">CH + / CH − cambia canale</span>
+        </div>
+        <div id="player-actions" class="player-actions" aria-label="Azioni player">
+          <button id="player-episodes" class="hidden" data-focusable data-zone="player-actions">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 15h34v25H7zM12 8h24v7M17 3h14v5"/></svg><span>Episodi</span>
+          </button>
+          <button id="player-tracks" class="hidden" data-focusable data-zone="player-actions">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M5 12h38v25H5zM11 20h10M11 27h16M31 20h6M31 27h6"/></svg><span>Audio e sottotitoli</span>
+          </button>
+          <button id="player-next" class="hidden" data-focusable data-zone="player-actions">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path d="m9 9 24 15L9 39zM37 9v30"/></svg><span>Episodio successivo</span>
+          </button>
         </div>
       </div>
     </div>

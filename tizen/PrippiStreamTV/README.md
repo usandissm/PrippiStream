@@ -2,22 +2,8 @@
 
 Applicazione Samsung Tizen per la TV `QE55Q60AAUXZT`.
 
-## Compatibilità del pacchetto
-
-Ogni prossimo rilascio sarà un unico `.wgt` Web TV, con requisito minimo
-**Tizen 2.0** (`required_version="2.0"`). Il pacchetto Web non incorpora
-codice nativo ARM/x86: lo stesso WGT è quindi già multi-arch e installabile su
-entrambe le architetture supportate da Tizen Studio. Non creare pacchetti
-separati per architettura.
-
-Per la futura variante nativa `.tpk`, il piano versionato
-[`tpk-build-targets.json`](tpk-build-targets.json) richiede già Tizen 2.0 e i
-target `armv7l` e `i586`. Quando verrà aggiunto il progetto nativo, la pipeline
-dovrà compilare entrambi prima del packaging multi-arch; il relativo
-`tizen-manifest.xml` sarà creato insieme al progetto nativo, non nella Web app.
-
 La UI Web TV usa focus D-pad, firma Samsung, pacchetto `.wgt` e player nativo
-AVPlay. Il pacchetto `0.7.0` contiene inoltre il bootstrap OTA: all'avvio
+AVPlay. Il pacchetto `0.9.6` contiene inoltre il bootstrap OTA: all'avvio
 controlla il canale GitHub, verifica gli SHA-256, conserva l'ultima versione
 valida in cache e usa il bundle locale se la rete o il canale non rispondono.
 
@@ -71,6 +57,16 @@ ridimensionata dal runtime Samsung. Comprende:
   schermata vuota quando StreamingCommunity cambia dominio;
 - Continue Watching locale (massimo 30 contenuti) con avanzamento, ripresa e
   rimozione; i live sono sempre esclusi;
+- ripresa SC differita fino all'arrivo dei metadata: la posizione CW non viene
+  consumata prima che il seek sia realmente applicabile;
+- upgrade automatico seriale di poster e fanart TMDB in HD, senza attendere il
+  focus su ogni singola card;
+- sui Tizen 2.4 reali i canali TV HLS usano AVPlay per evitare loop audio e
+  desincronizzazione; i fallback Daddy/Freeshot protetti usano il player
+  incorporato, che conserva il Referer richiesto dalla CDN;
+- se una sessione SKY ClearKey viene risolta ma il DRM fallisce durante il
+  playback, il runtime passa automaticamente a Freeshot/Daddy; un timeout di
+  avvio evita di considerare riuscito un video rimasto fermo;
 - per le serie, proposta dell'episodio successivo nell'ultimo minuto con
   `Guarda subito`/`Annulla` e autoplay naturale a fine episodio.
 
@@ -123,3 +119,23 @@ permessi Tizen, bootstrap o asset locali del guscio.
 & 'C:\tizen-studio\tools\ide\bin\tizen.bat' package -t wgt -s MS -- .buildResult
 & 'C:\tizen-studio\tools\ide\bin\tizen.bat' install -n PrippiStreamTV.wgt -s 192.168.1.117:26101 -- .buildResult
 ```
+
+## Preferenze audio/sottotitoli per contenuto
+
+Il player salva in `localStorage` una preferenza indipendente per ciascun film
+e una preferenza condivisa da tutti gli episodi e stagioni della stessa serie.
+Sono supportati audio, sottotitoli e sottotitoli `OFF`; i live non vengono mai
+salvati. La scelta viene riapplicata dopo il caricamento tracce su HTML5,
+HLS.js, Shaka e AVPlay e non viene sovrascritta quando una traccia manca.
+
+Verifica locale: scenari media, CW/cross-season, ripresa HLS, qualità artwork,
+sintassi JS e WGT firmato superati. Artefatto corrente:
+`.buildResult/PrippiStreamTV.wgt`.
+Installazione runtime confermata sull'emulatore Tizen 10 il 5 agosto 2026;
+app avviata come `VV9ZtVcIVq.PrippiStreamTV` senza crash iniziali.
+
+L'Hero usa viewport ad altezza fluida, profili da 810×290 a 1920×1080, clamp
+del testo e fanart `cover`. Il focus non può più spostare i root non-scrollabili
+fuori dal viewport. La build corrente è installata nell'emulatore e avviata con
+PID 5078. La shell è **0.9.6 / OTA 24**, così una cache OTA precedente non può
+sostituire il nuovo Hero con il CSS precedente.

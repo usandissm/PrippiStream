@@ -1,0 +1,298 @@
+/*
+ * Equivalente Tizen 2.4 del layout moderno. Il browser Samsung 2016 non
+ * interpreta CSS Grid, custom properties, flex-gap e inset.
+ */
+
+html, body {
+  min-width: 1920px;
+  min-height: 1080px;
+  color: #f7fbff;
+  background-color: #07101d;
+}
+
+.app-shell,
+.overlay,
+.player,
+#html-player,
+#avplay,
+#embed-player,
+.player-ui,
+.player-shade {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.rail {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
+}
+
+.rail-nav { display: block; }
+.rail-nav button { width: 100%; margin-bottom: 12px; }
+.rail button {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+}
+.rail button svg { margin-right: 19px; }
+.rail-settings { margin-top: auto; }
+
+.main {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 236px;
+}
+
+.header {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+}
+.connection { margin-left: auto; }
+
+.content { height: 944px; }
+.home-layout { position: relative; display: block; height: 100%; }
+.home-scroll {
+  position: absolute;
+  top: 375px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+}
+
+.hero-art,
+.hero-art:after,
+.overlay:before {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.hero-copy {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-direction: column;
+  flex-direction: column;
+  -webkit-align-items: flex-start;
+  align-items: flex-start;
+  -webkit-justify-content: center;
+  justify-content: center;
+}
+
+.row-header,
+.cards,
+.section-intro,
+.browse-filters,
+.search-box,
+.setting,
+.detail-layout,
+.detail-meta,
+.actions,
+.episodes-titlebar,
+.season-picker,
+.episode-row,
+.player-top,
+.player-center,
+.timeline-wrap,
+.player-live-info,
+.player-actions,
+.up-next-actions {
+  display: -webkit-flex;
+  display: flex;
+}
+
+.row-header,
+.section-intro,
+.setting {
+  -webkit-justify-content: space-between;
+  justify-content: space-between;
+}
+
+.row-header,
+.setting,
+.detail-layout,
+.episodes-titlebar,
+.episode-row,
+.player-top,
+.player-center,
+.timeline-wrap,
+.player-live-info,
+.player-actions {
+  -webkit-align-items: center;
+  align-items: center;
+}
+
+.cards > .card + .card { margin-left: 20px; }
+
+.card.live {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+}
+.card.live .poster { -webkit-flex: none; flex: none; margin-right: 18px; }
+.card.live .card-copy { -webkit-flex: 1; flex: 1; }
+
+.catalog {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+  margin-right: -24px;
+}
+.catalog .card {
+  width: calc(20% - 20px);
+  min-width: calc(20% - 20px);
+  margin: 0 24px 28px 0;
+}
+
+.browse-filters > button + button { margin-left: 14px; }
+.search-box input { -webkit-flex: 1; flex: 1; min-width: 0; }
+.search-box .action { width: 170px; margin-left: 18px; }
+
+.empty-state,
+.loading-state,
+.error-state {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+}
+.state-icon,
+.episode-play,
+.player-icon-button,
+.player-center button {
+  text-align: center;
+}
+.state-icon { line-height: 78px; }
+.episode-play { line-height: 52px; }
+
+.settings-grid {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-flex-wrap: wrap;
+  flex-wrap: wrap;
+  margin-right: -22px;
+}
+.setting {
+  width: calc(50% - 22px);
+  margin: 0 22px 22px 0;
+}
+.setting > div:first-child { -webkit-flex: 1; flex: 1; margin-right: 24px; }
+
+.detail-poster { margin-right: 70px; }
+.detail-meta > span + span { margin-left: 12px; }
+.actions > button + button { margin-left: 16px; }
+
+.episodes-header { position: relative; top: auto; }
+.episodes-back { margin-right: 25px; }
+.season-picker > button + button { margin-left: 13px; }
+.episode-list { display: block; }
+.episode-row { margin-bottom: 13px; }
+.episode-number { width: 52px; -webkit-flex: none; flex: none; margin-right: 22px; }
+.episode-thumb { -webkit-flex: none; flex: none; margin-right: 22px; }
+.episode-copy { display: block; -webkit-flex: 1; flex: 1; margin-right: 22px; }
+.episode-copy small { display: block; margin-top: 10px; }
+.episode-play { -webkit-flex: none; flex: none; }
+
+.player-top {
+  -webkit-align-items: flex-start;
+  align-items: flex-start;
+}
+.player-icon-button {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-flex: none;
+  flex: none;
+}
+.player-heading { -webkit-flex: 1; flex: 1; margin: 0 24px; }
+.player-status { -webkit-flex: none; flex: none; margin-left: auto; }
+
+.player-center > button + button { margin-left: 5.2vw; }
+.player-center button {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+}
+.player-seek-button .seek-arrow {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.timeline-wrap > span { width: 5.2vw; -webkit-flex: none; flex: none; }
+.timeline-wrap > span:last-child { text-align: right; }
+.timeline { -webkit-flex: 1; flex: 1; margin: 0 1.35vw; }
+.player-live-info > .live-dot { margin-right: 1.1vw; }
+.player-live-info > div { display: block; -webkit-flex: 1; flex: 1; }
+.player-live-info small { display: block; margin-top: 4px; }
+.player-zap-hint { margin-left: auto; }
+.player-actions { -webkit-justify-content: center; justify-content: center; }
+.player-actions > button + button { margin-left: 3vw; }
+.player-actions button {
+  display: -webkit-flex;
+  display: flex;
+  -webkit-align-items: center;
+  align-items: center;
+}
+.player-actions button svg { margin-right: .9vw; }
+
+.up-next-actions > button + button { margin-left: 13px; }
+
+[data-focusable]:focus {
+  border-color: #45dfbf !important;
+  box-shadow: 0 0 0 5px #ffffff, 0 0 0 11px rgba(69, 223, 191, .82), 0 20px 48px rgba(0, 0, 0, .58) !important;
+}
+
+.rail button.active,
+.eyebrow,
+.row-count,
+.card-meta,
+.section-intro p,
+.search-status,
+.state-panel p,
+.setting small,
+.detail-chip,
+.episode-copy small,
+.connection {
+  color: #aebed2;
+}
+.rail button.active,
+.eyebrow,
+.setting-value,
+.up-next > span { color: #45dfbf; }
+.connection.ok { color: #bcf8e8; }
+.hero-action,
+.filter-chip.selected,
+.action,
+.state-action,
+.setting-toggle,
+.actions .play,
+.episode-play,
+.card-progress i,
+.episode-progress i,
+.up-next-bar i,
+.up-next-actions button:first-child { background-color: #45dfbf; }
