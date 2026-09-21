@@ -65,7 +65,7 @@ class WatchProgressStore(context: Context) {
             return
         }
         val canonicalKey = ContinueWatchingPolicy.keyFor(key, rawJson)
-        if (durationMs > 0 && positionMs >= durationMs * COMPLETE_PERCENT / 100) {
+        if (ContinueWatchingPolicy.isCompleted(positionMs, durationMs)) {
             remove(canonicalKey)
             return
         }
@@ -85,7 +85,7 @@ class WatchProgressStore(context: Context) {
 
     /** Move CW to a newly selected/autoplayed episode before it has 10 seconds of progress. */
     @Synchronized
-    fun advanceTo(item: ContentItem) {
+    fun advanceTo(item: ContentItem, synchronous: Boolean = false) {
         if (item.isLive || !item.isEpisode) return
         val all = readAll().toMutableMap()
         all[item.continueWatchingKey] = WatchProgress(
@@ -95,7 +95,10 @@ class WatchProgressStore(context: Context) {
             durationMs = 0L,
             updatedAt = System.currentTimeMillis(),
         )
-        writeAll(all.values.sortedByDescending { it.updatedAt }.take(MAX_ITEMS))
+        writeAll(
+            all.values.sortedByDescending { it.updatedAt }.take(MAX_ITEMS),
+            synchronous = synchronous,
+        )
     }
 
     @Synchronized
@@ -238,6 +241,5 @@ class WatchProgressStore(context: Context) {
         const val SCHEMA_VERSION = 2
         const val MAX_ITEMS = 30
         const val MIN_PROGRESS_MS = 10_000L
-        const val COMPLETE_PERCENT = 92
     }
 }

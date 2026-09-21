@@ -6,6 +6,11 @@ import java.util.Locale
 
 /** One CW identity per movie or series, independently from the current episode. */
 internal object ContinueWatchingPolicy {
+    const val COMPLETE_PERCENT = 97
+
+    fun isCompleted(positionMs: Long, durationMs: Long): Boolean =
+        durationMs > 0L && positionMs >= durationMs * COMPLETE_PERCENT / 100L
+
     fun keyFor(item: ContentItem): String = keyFor(item.stableKey, item.rawJson)
 
     fun keyFor(fallbackKey: String, rawJson: String): String {

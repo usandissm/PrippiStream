@@ -108,6 +108,38 @@ data class ContentItem(
     val progressMs: Long = 0,
     val durationMs: Long = 0,
 ) {
+    /** Labels used only by Continue Watching cards; playback keeps the original item untouched. */
+    val continueWatchingTitle: String
+        get() {
+            if (!isEpisode) return title
+            val payload = toJson()
+            val labels = payload.optJSONObject("infoLabels") ?: JSONObject()
+            val parent = payload.optJSONObject("_app_series_parent")
+            return sequenceOf(
+                labels.optString("tvshowtitle"),
+                payload.optString("contentSerieName"),
+                payload.optString("serieName"),
+                payload.optString("show"),
+                parent?.optString("fulltitle").orEmpty(),
+                parent?.optString("title").orEmpty(),
+                parent?.optString("contentSerieName").orEmpty(),
+            ).map(::cleanKodiText).firstOrNull(String::isNotBlank) ?: title
+        }
+
+    val continueWatchingSubtitle: String
+        get() {
+            if (!isEpisode) return ""
+            val episodeLabel = buildString {
+                if (season > 0) append("S").append(season.toString().padStart(2, '0'))
+                if (episode > 0) append("E").append(episode.toString().padStart(2, '0'))
+            }
+            val episodeTitle = title.takeUnless {
+                it.equals(continueWatchingTitle, ignoreCase = true) ||
+                    Regex("^(?:S\\d+E\\d+|episodio\\s+\\d+)$", RegexOption.IGNORE_CASE).matches(it.trim())
+            }.orEmpty()
+            return listOf(episodeLabel, episodeTitle).filter(String::isNotBlank).joinToString(" · ")
+        }
+
     val opensEpisodes: Boolean
         get() = action in setOf("episodios", "epmenu", "epMenu", "seasons", "get_seasons")
 

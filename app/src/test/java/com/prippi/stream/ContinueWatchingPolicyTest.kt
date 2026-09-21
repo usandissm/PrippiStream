@@ -9,6 +9,12 @@ import org.junit.Test
 
 class ContinueWatchingPolicyTest {
     @Test
+    fun `completion uses the same 97 percent threshold as Kodi`() {
+        assertFalse(ContinueWatchingPolicy.isCompleted(96_999, 100_000))
+        assertTrue(ContinueWatchingPolicy.isCompleted(97_000, 100_000))
+    }
+
+    @Test
     fun `episodes from the same series share one canonical key`() {
         val first = episode(1, 2, "ep-12")
         val second = episode(2, 1, "ep-21")

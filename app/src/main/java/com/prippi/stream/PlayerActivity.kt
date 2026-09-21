@@ -3226,6 +3226,17 @@ open class PlayerActivity : ComponentActivity() {
         if (progressKey.isBlank() || contentJson.isBlank()) return
         val duration = current.duration.takeUnless { it == C.TIME_UNSET || it < 0 } ?: 0L
         val position = current.currentPosition.coerceAtLeast(0L)
+        val completedEpisode = ContinueWatchingPolicy.isCompleted(position, duration) &&
+            runCatching { ContentItem.fromJson(JSONObject(contentJson)).isEpisode }
+                .getOrDefault(false)
+        val nextEpisode = if (completedEpisode) nextEpisodeItem() else null
+        if (nextEpisode != null) {
+            // La voce CW identifica la serie, non il singolo file: raggiunto
+            // il 97% conserva il prossimo episodio anche se l'utente esce
+            // prima che Media3 emetta STATE_ENDED. Vale per TV e mobile.
+            progressStore.advanceTo(nextEpisode, synchronous = synchronous)
+            return
+        }
         if (synchronous) {
             progressStore.saveNow(progressKey, contentJson, position, duration)
         } else {

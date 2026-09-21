@@ -1010,7 +1010,11 @@ private fun TelevisionApp(
                 }
                 state.error?.let { ErrorState(it, model::loadHome) }
                 if (searchOpen && state.page != AppPage.SEARCH) {
-                    TelevisionSearchLanding()
+                    TelevisionSearchLanding(
+                        values = state.searchHistory,
+                        onSelect = model::searchFromHistory,
+                        onClear = model::clearSearchHistory,
+                    )
                 } else when (state.page) {
                     AppPage.HOME -> TelevisionHome(
                         rows = state.homeRows,
@@ -1389,6 +1393,7 @@ private fun TelevisionHome(
                             ) { itemIndex, item ->
                                 TelevisionMediaCard(
                                     item = item,
+                                    isContinueWatching = row.id == "continue_watching",
                                     modifier = if (
                                         rowIndex == targetRow &&
                                         itemIndex == targetItem
@@ -1524,6 +1529,7 @@ private fun TelevisionHero(
 @Composable
 private fun TelevisionMediaCard(
     item: ContentItem,
+    isContinueWatching: Boolean = false,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit,
     onClick: () -> Unit,
@@ -1576,13 +1582,15 @@ private fun TelevisionMediaCard(
             verticalArrangement = Arrangement.spacedBy((2f * scale).dp),
         ) {
             Text(
-                item.title,
+                if (isContinueWatching) item.continueWatchingTitle else item.title,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
-            val metadata = listOfNotNull(
+            val metadata = if (isContinueWatching && item.continueWatchingSubtitle.isNotBlank()) {
+                item.continueWatchingSubtitle
+            } else listOfNotNull(
                 item.year.takeIf { it > 0 }?.toString(),
                 item.mediaType.takeIf { it.isNotBlank() }?.replaceFirstChar {
                     it.uppercase()
@@ -1780,7 +1788,11 @@ private fun TelevisionLiveCard(
 }
 
 @Composable
-private fun TelevisionSearchLanding() {
+private fun TelevisionSearchLanding(
+    values: List<String>,
+    onSelect: (String) -> Unit,
+    onClear: () -> Unit,
+) {
     val scale = LocalPrippiDimensions.current.uiScale
     Box(
         Modifier.fillMaxSize()
@@ -1791,7 +1803,10 @@ private fun TelevisionSearchLanding() {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Icon(
                 Icons.Default.Search,
                 contentDescription = null,
@@ -1810,6 +1825,41 @@ private fun TelevisionSearchLanding() {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = (8f * scale).dp),
             )
+            if (values.isNotEmpty()) {
+                Spacer(Modifier.height((34f * scale).dp))
+                Text(
+                    "Ricerche recenti",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = (14f * scale).dp),
+                    contentPadding = PaddingValues(horizontal = (56f * scale).dp),
+                    horizontalArrangement = Arrangement.spacedBy((12f * scale).dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(values, key = { "tv-history:${it.lowercase(Locale.ROOT)}" }) { query ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { onSelect(query) },
+                            label = { Text(query) },
+                            modifier = Modifier.tvFocusableFrame(
+                                true,
+                                RoundedCornerShape((22f * scale).dp),
+                            ),
+                        )
+                    }
+                    item(key = "tv-history:clear") {
+                        TextButton(
+                            onClick = onClear,
+                            modifier = Modifier.tvFocusableFrame(
+                                true,
+                                RoundedCornerShape((22f * scale).dp),
+                            ),
+                        ) { Text("Cancella cronologia") }
+                    }
+                }
+            }
         }
     }
 }
@@ -3478,6 +3528,7 @@ private fun HomePage(
                         ) { itemIndex, item ->
                             PosterCard(
                                 item = item,
+                                isContinueWatching = row.id == "continue_watching",
                                 onClick = { onClick(item) },
                                 isTelevision = isTelevision,
                                 onFocused = { onItemFocused(row.id, item.stableKey) },
@@ -3703,6 +3754,7 @@ private fun PosterCard(
     item: ContentItem,
     onClick: () -> Unit,
     isTelevision: Boolean = false,
+    isContinueWatching: Boolean = false,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
 ) {
@@ -3738,7 +3790,7 @@ private fun PosterCard(
                 }
             }
             Text(
-                item.title,
+                if (isContinueWatching) item.continueWatchingTitle else item.title,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
@@ -3750,11 +3802,15 @@ private fun PosterCard(
                 item.isSeries -> "Serie"
                 else -> "Film"
             }
-            val metadata = listOfNotNull(
-                type,
-                item.year.takeIf { it > 0 }?.toString(),
-                item.rating.takeIf { it > 0 }?.let { "★ ${String.format(Locale.US, "%.1f", it)}" },
-            ).joinToString(" · ")
+            val metadata = if (isContinueWatching && item.continueWatchingSubtitle.isNotBlank()) {
+                item.continueWatchingSubtitle
+            } else {
+                listOfNotNull(
+                    type,
+                    item.year.takeIf { it > 0 }?.toString(),
+                    item.rating.takeIf { it > 0 }?.let { "★ ${String.format(Locale.US, "%.1f", it)}" },
+                ).joinToString(" · ")
+            }
             Text(
                 metadata,
                 maxLines = 1,
