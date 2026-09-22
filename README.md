@@ -5,7 +5,7 @@ Google TV e box. Riusa il motore Python dell'addon via **Chaquopy**, con UI
 **Compose** adattiva e player **Media3/ExoPlayer**. Distribuzione tramite
 sideload e aggiornamento firmato in-place.
 
-## Stato: 0.9.36 adattiva ARM32+ARM64
+## Stato: 0.9.37 adattiva ARM32+ARM64
 
 La stessa app include Home, Sfoglia, ricerca globale, dettaglio, episodi,
 player, SKY/Sport/TV, zapping, download e aggiornamento su telefono, tablet e
@@ -79,7 +79,7 @@ asset gestiti. Bridge Android, shim Kodi e UI nativa non vengono toccati.
 2. Serve un JDK 17 e l'NDK (Chaquopy lo richiede).
 3. `Run` sull'A16 (sideload) oppure `./gradlew assembleDebug` → APK in `app/build/outputs/apk/`.
 
-La release 0.9.36 è firmata
+La release 0.9.37 è firmata
 e include `armeabi-v7a` e `arm64-v8a`, launcher Leanback dedicato, profilo
 low-power e selezione ABI nell'updater. Il gate ancora aperto è l'installazione
 e la matrice funzionale sulla box reale. Il controllo contro la v2 1.9.988
