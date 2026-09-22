@@ -3,6 +3,7 @@ package com.prippi.stream
 import android.content.pm.PackageManager
 import android.os.Build
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -39,5 +40,23 @@ class AppUpdateManagerTest {
             listOf("modern-cert"),
             preferSigningCertificates(listOf("modern-cert"), listOf("legacy-cert")),
         )
+    }
+
+    @Test
+    fun updateProgressReportsRealFraction() {
+        val progress = AppUpdateProgress(
+            downloadedBytes = 25L,
+            totalBytes = 100L,
+            bytesPerSecond = 10L,
+            remainingSeconds = 7L,
+        )
+
+        assertEquals(0.25f, progress.fraction!!, 0.0001f)
+    }
+
+    @Test
+    fun updateProgressHandlesUnknownLengthAndClampsOverflow() {
+        assertNull(AppUpdateProgress(25L, -1L, 0L, null).fraction)
+        assertEquals(1f, AppUpdateProgress(125L, 100L, 0L, 0L).fraction!!, 0f)
     }
 }

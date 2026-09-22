@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -3159,6 +3160,7 @@ private fun AppUpdatePanel() {
     var checking by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Controllo GitHub Releases…") }
     var update by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var downloadProgress by remember { mutableStateOf<AppUpdateProgress?>(null) }
 
     fun check() {
         checking = true
@@ -3190,10 +3192,15 @@ private fun AppUpdatePanel() {
                         enabled = !checking,
                         onClick = {
                             checking = true
+                            downloadProgress = null
                             status = "Download di PrippiStream ${info.version}…"
                             scope.launch {
                                 try {
-                                    val apk = AppUpdateManager.download(context, info)
+                                    val apk = AppUpdateManager.download(context, info) { progress ->
+                                        withContext(Dispatchers.Main.immediate) {
+                                            downloadProgress = progress
+                                        }
+                                    }
                                     val launched = AppUpdateManager.requestInstall(context, apk)
                                     status = if (launched) {
                                         "APK scaricato: completa l'installazione nella schermata Android."
@@ -3209,6 +3216,9 @@ private fun AppUpdatePanel() {
                         },
                     ) { Text("Aggiorna") }
                 }
+            }
+            if (checking && update != null) {
+                UpdateDownloadProgress(downloadProgress)
             }
             if (BuildConfig.DEBUG) {
                 TextButton(
@@ -3261,6 +3271,10 @@ private fun UpdateReminderDialog() {
     var update by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var installing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var downloadProgress by remember { mutableStateOf<AppUpdateProgress?>(null) }
+    var updateFocused by remember { mutableStateOf(false) }
+    var laterFocused by remember { mutableStateOf(false) }
+    val updateFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         try {
@@ -3273,6 +3287,12 @@ private fun UpdateReminderDialog() {
     }
 
     val info = update ?: return
+    LaunchedEffect(info.version, installing) {
+        if (!installing) {
+            withFrameNanos { }
+            runCatching { updateFocusRequester.requestFocus() }
+        }
+    }
     AlertDialog(
         onDismissRequest = { if (!installing) update = null },
         title = { Text("Nuovo aggiornamento disponibile") },
@@ -3280,19 +3300,46 @@ private fun UpdateReminderDialog() {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("È disponibile PrippiStream ${info.version}.")
                 Text("Aggiorna l'app per ricevere le ultime correzioni e migliorie.")
+                if (installing) {
+                    UpdateDownloadProgress(downloadProgress)
+                }
                 if (errorMessage != null) {
-                    Text(errorMessage!!, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        errorMessage!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 enabled = !installing,
+                modifier = Modifier
+                    .focusRequester(updateFocusRequester)
+                    .onFocusChanged { updateFocused = it.isFocused }
+                    .border(
+                        width = if (updateFocused) 3.dp else 1.dp,
+                        color = if (updateFocused) Color.White else Color(0xFF62B5F5),
+                        shape = RoundedCornerShape(10.dp),
+                    ),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (updateFocused) Color(0xFFFFD54F) else Color(0xFF006CB7),
+                    contentColor = if (updateFocused) Color.Black else Color.White,
+                    disabledContainerColor = Color(0xFF384754),
+                    disabledContentColor = Color(0xFFB9C5CE),
+                ),
                 onClick = {
                     installing = true
+                    errorMessage = null
+                    downloadProgress = null
                     scope.launch {
                         try {
-                            val apk = AppUpdateManager.download(context, info)
+                            val apk = AppUpdateManager.download(context, info) { progress ->
+                                withContext(Dispatchers.Main.immediate) {
+                                    downloadProgress = progress
+                                }
+                            }
                             AppUpdateManager.requestInstall(context, apk)
                         } catch (error: Exception) {
                             errorMessage = "Aggiornamento non riuscito: ${error.message ?: "errore"}"
@@ -3303,11 +3350,86 @@ private fun UpdateReminderDialog() {
             ) { Text(if (installing) "Download…" else "Aggiorna") }
         },
         dismissButton = {
-            TextButton(enabled = !installing, onClick = { update = null }) {
+            Button(
+                enabled = !installing,
+                modifier = Modifier
+                    .onFocusChanged { laterFocused = it.isFocused }
+                    .border(
+                        width = if (laterFocused) 3.dp else 1.dp,
+                        color = if (laterFocused) Color.White else Color(0xFF707B85),
+                        shape = RoundedCornerShape(10.dp),
+                    ),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (laterFocused) Color(0xFFFFD54F) else Color(0xFF343B43),
+                    contentColor = if (laterFocused) Color.Black else Color.White,
+                    disabledContainerColor = Color(0xFF252A2F),
+                    disabledContentColor = Color(0xFF7D878F),
+                ),
+                onClick = { update = null },
+            ) {
                 Text("Più tardi")
             }
         },
     )
+}
+
+@Composable
+private fun UpdateDownloadProgress(progress: AppUpdateProgress?) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val fraction = progress?.fraction
+        if (fraction != null) {
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                color = Color(0xFFFFD54F),
+                trackColor = Color(0xFF34414C),
+            )
+        } else {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                color = Color(0xFFFFD54F),
+                trackColor = Color(0xFF34414C),
+            )
+        }
+        if (progress == null) {
+            Text("Connessione al server…", style = MaterialTheme.typography.bodySmall)
+        } else {
+            val percent = fraction?.let { (it * 100f).toInt().coerceIn(0, 100) }
+            val amount = if (progress.totalBytes > 0L) {
+                "${formatBytes(progress.downloadedBytes)} / ${formatBytes(progress.totalBytes)}"
+            } else {
+                formatBytes(progress.downloadedBytes)
+            }
+            Text(
+                listOfNotNull(percent?.let { "$it%" }, amount).joinToString(" · "),
+                fontWeight = FontWeight.SemiBold,
+            )
+            val speed = progress.bytesPerSecond.takeIf { it > 0L }
+                ?.let { "${formatBytes(it)}/s" }
+            val remaining = progress.remainingSeconds
+                ?.takeIf { it > 0L }
+                ?.let { "${formatUpdateRemaining(it)} rimanenti" }
+            val detail = listOfNotNull(speed, remaining).joinToString(" · ")
+            Text(
+                when {
+                    fraction != null && fraction >= 1f -> "Download completato, verifica dell'APK…"
+                    detail.isNotBlank() -> detail
+                    else -> "Download in corso…"
+                },
+                color = Color(0xFFB9D9F2),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+private fun formatUpdateRemaining(seconds: Long): String = when {
+    seconds < 60L -> "${seconds}s"
+    seconds < 3_600L -> "${seconds / 60L}min ${seconds % 60L}s"
+    else -> "${seconds / 3_600L}h ${(seconds % 3_600L) / 60L}min"
 }
 
 @Composable

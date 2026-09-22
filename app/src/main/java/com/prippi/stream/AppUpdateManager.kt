@@ -26,6 +26,17 @@ data class AppUpdateInfo(
 
 data class AppUpdateCheck(val info: AppUpdateInfo?, val message: String)
 
+data class AppUpdateProgress(
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+    val bytesPerSecond: Long,
+    val remainingSeconds: Long?,
+) {
+    val fraction: Float?
+        get() = totalBytes.takeIf { it > 0L }
+            ?.let { (downloadedBytes.toDouble() / it.toDouble()).coerceIn(0.0, 1.0).toFloat() }
+}
+
 object AppUpdateManager {
     private const val LATEST_RELEASE =
         "https://api.github.com/repos/usandissm/PrippiStream/releases/latest"
@@ -76,7 +87,11 @@ object AppUpdateManager {
         AppUpdateCheck(info, "Nuova versione $remote disponibile.")
     }
 
-    suspend fun download(context: Context, info: AppUpdateInfo): File = withContext(Dispatchers.IO) {
+    suspend fun download(
+        context: Context,
+        info: AppUpdateInfo,
+        onProgress: suspend (AppUpdateProgress) -> Unit = {},
+    ): File = withContext(Dispatchers.IO) {
         val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: File(context.cacheDir, "updates")
         directory.mkdirs()
@@ -85,6 +100,14 @@ object AppUpdateManager {
         val partial = File(directory, "$safeName.part")
         if (target.isFile) {
             if (runCatching { verifyArchive(context, target) }.isSuccess) {
+                onProgress(
+                    AppUpdateProgress(
+                        downloadedBytes = target.length(),
+                        totalBytes = target.length(),
+                        bytesPerSecond = 0L,
+                        remainingSeconds = 0L,
+                    ),
+                )
                 return@withContext target
             }
             target.delete()
@@ -105,10 +128,14 @@ object AppUpdateManager {
             ) {
                 "Spazio insufficiente per scaricare e verificare l'aggiornamento"
             }
+            onProgress(AppUpdateProgress(0L, declaredBytes, 0L, null))
             connection.inputStream.use { input ->
                 partial.outputStream().use { output ->
                     val buffer = ByteArray(128 * 1024)
                     var received = 0L
+                    var lastReportedBytes = 0L
+                    var lastReportNanos = System.nanoTime()
+                    var smoothedBytesPerSecond = 0.0
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
@@ -117,7 +144,35 @@ object AppUpdateManager {
                             "APK oltre il limite di sicurezza"
                         }
                         output.write(buffer, 0, count)
+                        val now = System.nanoTime()
+                        val elapsedNanos = now - lastReportNanos
+                        if (elapsedNanos >= 250_000_000L) {
+                            val intervalBytes = received - lastReportedBytes
+                            val instantSpeed = intervalBytes.toDouble() * 1_000_000_000.0 / elapsedNanos
+                            smoothedBytesPerSecond = if (smoothedBytesPerSecond <= 0.0) {
+                                instantSpeed
+                            } else {
+                                smoothedBytesPerSecond * 0.72 + instantSpeed * 0.28
+                            }
+                            val speed = smoothedBytesPerSecond.toLong().coerceAtLeast(0L)
+                            val remaining = if (declaredBytes > 0L && speed > 0L) {
+                                ((declaredBytes - received).coerceAtLeast(0L) / speed).coerceAtLeast(0L)
+                            } else {
+                                null
+                            }
+                            onProgress(AppUpdateProgress(received, declaredBytes, speed, remaining))
+                            lastReportedBytes = received
+                            lastReportNanos = now
+                        }
                     }
+                    onProgress(
+                        AppUpdateProgress(
+                            downloadedBytes = received,
+                            totalBytes = declaredBytes.takeIf { it > 0L } ?: received,
+                            bytesPerSecond = smoothedBytesPerSecond.toLong().coerceAtLeast(0L),
+                            remainingSeconds = 0L,
+                        ),
+                    )
                 }
             }
             require(partial.length() > 0) { "APK scaricato vuoto" }
