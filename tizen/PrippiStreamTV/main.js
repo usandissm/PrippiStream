@@ -29,6 +29,7 @@
     live: [],
     liveLoading: false,
     liveError: '',
+    liveEpgTimer: null,
     searchItems: [],
     searchQuery: '',
     searchFilter: 'all',
@@ -78,6 +79,7 @@
     liveSwitchAt: 0,
     trackCycleIndex: -1,
     trackPreferenceTimer: null,
+    resumeAfterVisibility: false,
     playRequestId: 0
   };
 
@@ -185,15 +187,22 @@
 
   function continueWatchingSeriesTitle(item) {
     var labels = info(item);
-    return String(labels.tvshowtitle || item.contentSerieName || item.serieName || item.show || '').trim();
+    var explicit = String(labels.tvshowtitle || item.contentSerieName || item.serieName || item.show || '').trim();
+    if (explicit) return explicit;
+    return String(item.fulltitle || item.title || labels.title || '')
+      .replace(/\s+(?:s?\d+\s*[xe]\s*\d+|\d+x\d+)(?:\s*[-.:\u2014].*)?$/i, '').trim();
+  }
+
+  function episodeCode(item) {
+    var labels = info(item), season = Number(labels.season || item.contentSeason || item.season || 0);
+    var episode = Number(labels.episode || item.contentEpisodeNumber || item.episode || 0);
+    return (season > 0 ? 'S' + ('0' + season).slice(-2) : '') +
+      (episode > 0 ? 'E' + ('0' + episode).slice(-2) : '');
   }
 
   function continueWatchingEpisodeNote(item) {
     if (!isEpisode(item)) return '';
-    var labels = info(item), season = Number(labels.season || item.contentSeason || item.season || 0);
-    var episode = Number(labels.episode || item.contentEpisodeNumber || item.episode || 0);
-    var code = (season > 0 ? 'S' + ('0' + season).slice(-2) : '') +
-      (episode > 0 ? 'E' + ('0' + episode).slice(-2) : '');
+    var labels = info(item), code = episodeCode(item);
     var episodeName = String(item.contentTitle || item.title || labels.title || '').trim();
     var seriesName = continueWatchingSeriesTitle(item);
     if (episodeName.toLowerCase() === seriesName.toLowerCase() || /^(s\d+e\d+|episodio\s+\d+)$/i.test(episodeName)) {
@@ -726,16 +735,15 @@
       state.liveError = '';
       renderPage(true);
       status(true, 'Canali aggiornati');
-      request('/live-expanded', {rows: state.live}).then(function (expanded) {
-        if (!expanded || !expanded.rows || !expanded.rows.length) return;
-        state.live = expanded.rows;
-        if (state.page === 'live') renderPage(true);
-      }).catch(function () {});
-      request('/live-epg', {rows: state.live}).then(function (epgResponse) {
+      request('/live-expanded', {rows: state.live}).catch(function () { return {rows: state.live}; }).then(function (expanded) {
+        var finalRows = expanded && expanded.rows && expanded.rows.length ? expanded.rows : state.live;
+        return request('/live-epg', {rows: finalRows});
+      }).then(function (epgResponse) {
         if (!epgResponse || !epgResponse.rows) return;
         state.live = epgResponse.rows;
         if (state.page === 'live') renderPage(true);
-      }).catch(function () {});
+        scheduleLiveEpgRefresh();
+      }).catch(function () { scheduleLiveEpgRefresh(); });
     }).catch(function (error) {
       state.liveLoading = false;
       state.liveError = error.message || 'Canali non disponibili';
@@ -744,8 +752,23 @@
     });
   }
 
+  function scheduleLiveEpgRefresh() {
+    clearTimeout(state.liveEpgTimer);
+    state.liveEpgTimer = setTimeout(function () {
+      if (state.page !== 'live' || !state.live.length) return;
+      request('/live-epg', {rows: state.live}).then(function (response) {
+        if (response && response.rows) {
+          state.live = response.rows;
+          if (state.page === 'live') renderPage(true);
+        }
+        scheduleLiveEpgRefresh();
+      }).catch(scheduleLiveEpgRefresh);
+    }, 4 * 60 * 1000);
+  }
+
   function openPage(page) {
     if (!page) return;
+    if (page !== 'live') { clearTimeout(state.liveEpgTimer); state.liveEpgTimer = null; }
     state.focusMemory[state.page] = currentFocusKey();
     state.page = page;
     renderPage(false);
@@ -758,7 +781,9 @@
     var input = document.getElementById('query'), button = document.getElementById('search-go');
     if (!input || !button) return;
     button.onclick = runSearch;
-    input.onkeydown = function (event) { if (event.keyCode === 13) runSearch(); };
+    input.onkeydown = function (event) {
+      if (event.keyCode === 13) { event.preventDefault(); event.stopPropagation(); runSearch(); }
+    };
     Array.prototype.forEach.call(document.querySelectorAll('[data-search-history]'), function (historyButton) {
       historyButton.onclick = function () {
         input.value = historyButton.getAttribute('data-search-history') || '';
@@ -778,6 +803,8 @@
     var input = document.getElementById('query'), query = input ? input.value.replace(/^\s+|\s+$/g, '') : '';
     var statusElement = document.getElementById('search-status'), results = document.getElementById('search-results');
     if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) focusElement(input); return; }
+    if (input) input.blur();
+    focusElement(document.getElementById('search-go'));
     statusElement.textContent = 'Ricerca in corso...';
     results.innerHTML = '';
     request('/search?q=' + encodeURIComponent(query)).then(function (response) {
@@ -890,7 +917,12 @@
       element.onclick = function () {
         var item = state.items[element.getAttribute('data-item')];
         if (!item) return;
-        if (element.getAttribute('data-action') === 'play') play(item);
+        if (state.page === 'home' && item._cwEntry) {
+          state.detailOrigin = currentFocusKey();
+          state.detail = item;
+          play(item, {resume: true});
+        }
+        else if (element.getAttribute('data-action') === 'play') play(item);
         else showDetail(item);
       };
       element.onfocus = function () {
@@ -1003,17 +1035,39 @@
     }).catch(function () {});
   }
 
+  function playTrailer(item) {
+    toast('Caricamento trailer...');
+    request('/trailer', {item: item}).then(function (response) {
+      if (!response || !response.url) throw new Error('Trailer non disponibile');
+      var trailerItem = Object.assign({}, item, {
+        fulltitle: 'Trailer · ' + title(item),
+        contentType: 'live',
+        isLive: true,
+        _app_trailer: true
+      });
+      openEmbed(response.url, trailerItem);
+      var status = document.getElementById('player-status');
+      if (status) { status.textContent = 'TRAILER'; status.className = 'player-status'; }
+      setPlayerText(title(trailerItem), response.title || 'Trailer ufficiale');
+    }).catch(function (error) {
+      toast(error.message || 'Trailer non disponibile', true);
+    });
+  }
+
   function renderDetail(item) {
     var series = isSeries(item), live = isLiveMedia(item), cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
     var catalogOnly = item.catalog_only === true;
+    var hasContinue = !!(cw && cw.item);
     var hasResume = !!(cw && cw.position >= CW_MIN_PROGRESS_MS);
     var resumeItem = series && cw ? Object.assign({}, item, {_cwEntry: cw, _cwResumeItem: cw.item}) :
       cw ? Object.assign({}, item, {_cwEntry: cw}) : item;
+    var continueLabel = hasResume ? 'Riprendi' :
+      (series && cw && isEpisode(cw.item) && episodeCode(cw.item) ? 'Continua ' + episodeCode(cw.item) : 'Continua');
     var actions = [], actionIndex = 0, overlay = document.getElementById('detail');
     if (!catalogOnly) {
-      if (hasResume) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Riprendi</button>');
-      if (series) actions.push('<button id="detail-episodes"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
-      else actions.push('<button id="detail-primary"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasResume ? 'Dall\'inizio' : 'Riproduci') + '</button>');
+      if (hasContinue) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + esc(continueLabel) + '</button>');
+      if (series) actions.push('<button id="detail-episodes"' + (!hasContinue ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
+      else actions.push('<button id="detail-primary"' + (!hasContinue ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasContinue ? 'Dall\'inizio' : 'Riproduci') + '</button>');
       if (!live) actions.push('<button id="detail-trailer" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Trailer</button>');
       if (cw) actions.push('<button id="detail-remove-cw" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Rimuovi da Continua a guardare</button>');
     } else actions.push('<span class="detail-chip">Catalogo Live</span>');
@@ -1026,17 +1080,17 @@
       '<h2>' + esc(title(item)) + '</h2><div class="detail-meta">' + detailMeta(item) + '</div>' +
       '<p>' + esc(item.plot || 'Caricamento informazioni...') + '</p><div class="actions">' +
       actions.join('') + '</div></div></div>';
-    if (!catalogOnly && hasResume) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
+    if (!catalogOnly && hasContinue) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
     if (!catalogOnly && series) document.getElementById('detail-episodes').onclick = function () { showEpisodes(item); };
     else if (!catalogOnly) document.getElementById('detail-primary').onclick = function () { play(item, {fromStart: hasResume}); };
-    if (!catalogOnly && !live) document.getElementById('detail-trailer').onclick = function () { toast('Trailer non ancora disponibile per questo contenuto.'); };
+    if (!catalogOnly && !live) document.getElementById('detail-trailer').onclick = function () { playTrailer(item); };
     if (!catalogOnly && cw) document.getElementById('detail-remove-cw').onclick = function () {
       removeContinueWatching(cw.item || item._cwResumeItem || item, cw.parent || (series ? item : null));
       closeDetail();
       toast('Rimosso da Continua a guardare');
     };
     document.getElementById('detail-close').onclick = closeDetail;
-    focusElement(document.getElementById(catalogOnly ? 'detail-close' : hasResume ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
+    focusElement(document.getElementById(catalogOnly ? 'detail-close' : hasContinue ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
   }
 
   function showEpisodes(item) {
@@ -1067,7 +1121,10 @@
       state.episodeIndex = -1;
       state.episodeQueueComplete = true;
       seasons.sort(function (a, b) { return a - b; });
-      renderEpisodeSeason(item, state.episodeQueue, seasons, seasons[0]);
+      var saved = findContinueWatching(item, item);
+      var savedSeason = saved && saved.item ? Number(saved.item.season || saved.item.contentSeason || info(saved.item).season || 0) : 0;
+      renderEpisodeSeason(item, state.episodeQueue, seasons,
+        seasons.indexOf(savedSeason) >= 0 ? savedSeason : seasons[0]);
     }).catch(function (error) {
       var content = document.getElementById('episode-content');
       if (content) content.innerHTML = errorMarkup(error.message, 'episodes');
@@ -1299,6 +1356,7 @@
     document.getElementById('player-rewind').disabled = state.playerLive;
     document.getElementById('player-forward').disabled = state.playerLive;
     state.playerItem = item;
+    setPlaybackScreenSaver(false);
     state.lastProgressSave = 0;
     state.upNextVisible = false;
     state.upNextCancelled = false;
@@ -2003,6 +2061,7 @@
       return;
     }
     if (state.playerItem && !completedNext) removeContinueWatching(state.playerItem, state.episodeParent);
+    setPlaybackScreenSaver(true);
     hideUpNext(false);
     setPlayerText(playbackTitle(state.playerItem || {}), 'Riproduzione completata');
     showPlayerUi(true);
@@ -2042,6 +2101,61 @@
     } catch (error) { return {current: 0, duration: 0}; }
   }
 
+  function setPlaybackScreenSaver(enabled) {
+    try {
+      var appcommon = window.webapis && window.webapis.appcommon;
+      if (!appcommon || !appcommon.setScreenSaver || !appcommon.AppCommonScreenSaverState) return false;
+      var screenState = enabled ? appcommon.AppCommonScreenSaverState.SCREEN_SAVER_ON :
+        appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF;
+      appcommon.setScreenSaver(screenState, function () {}, function () {});
+      return true;
+    } catch (error) { return false; }
+  }
+
+  function persistActivePlayback(reason) {
+    if (!state.playerOpen || state.playerLive || !state.playerItem || state.pendingResumeMs >= CW_MIN_PROGRESS_MS) return false;
+    var times = currentPlayerTimes();
+    saveContinueWatching(state.playerItem, times.current, times.duration, false);
+    diagnostic('CW salvato', String(reason || 'lifecycle') + ' · ' + Math.round(times.current / 1000) + 's');
+    return true;
+  }
+
+  function suspendPlaybackForVisibility() {
+    persistActivePlayback('app in background');
+    state.resumeAfterVisibility = !!(state.playerOpen && state.playing);
+    if (state.resumeAfterVisibility) {
+      var paused = false;
+      try {
+        var video = document.getElementById('html-player');
+        if (isHtmlPlayerEngine()) { video.pause(); paused = true; }
+        else if (state.playerEngine === 'avplay' && avplay) { avplay.pause(); paused = true; }
+      } catch (error) {}
+      state.resumeAfterVisibility = paused;
+      if (paused) { state.playing = false; updatePlayButton(); }
+    }
+    setPlaybackScreenSaver(true);
+  }
+
+  function resumePlaybackFromVisibility() {
+    if (!state.playerOpen) { state.resumeAfterVisibility = false; return; }
+    setPlaybackScreenSaver(false);
+    if (!state.resumeAfterVisibility) return;
+    state.resumeAfterVisibility = false;
+    try {
+      var video = document.getElementById('html-player'), started;
+      if (isHtmlPlayerEngine()) started = video.play();
+      else if (state.playerEngine === 'avplay' && avplay) avplay.play();
+      state.playing = true;
+      updatePlayButton();
+      showPlayerUi(false);
+      if (started && started.catch) started.catch(function () {});
+    } catch (error) {
+      state.playing = false;
+      updatePlayButton();
+      showPlayerUi(true);
+    }
+  }
+
   function stopPlayerMedia() {
     var frame = document.getElementById('embed-player'), video = document.getElementById('html-player');
     clearTimeout(state.trackPreferenceTimer);
@@ -2066,10 +2180,12 @@
   function closePlayer(skipRestore) {
     if (!state.playerOpen && document.getElementById('player').className.indexOf('hidden') >= 0) return;
     var times = currentPlayerTimes();
+    var lastItem = state.playerItem && !state.playerLive ? state.playerItem : null;
     if (state.playerItem && !state.playerLive && state.pendingResumeMs < CW_MIN_PROGRESS_MS) {
       saveContinueWatching(state.playerItem, times.current, times.duration, false);
     }
     stopPlayerMedia();
+    setPlaybackScreenSaver(true);
     state.playerOpen = false;
     window.__PRIPPI_PLAYBACK_ACTIVE__ = false;
     state.playing = false;
@@ -2088,13 +2204,19 @@
     state.liveRowTitle = '';
     state.liveSwitchBusy = false;
     state.trackCycleIndex = -1;
+    state.resumeAfterVisibility = false;
     state.playRequestId += 1;
     hideUpNext(false);
     clearTimeout(state.playerUiTimer);
     state.playerUiVisible = true;
     document.getElementById('player').className = 'player hidden';
     document.getElementById('player-ui').className = 'player-ui';
-    if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
+    if (!skipRestore && lastItem) {
+      state.detail = Object.assign({}, lastItem);
+      state.detailParent = null;
+      if (state.page === 'home') renderPage(false);
+      renderDetail(state.detail);
+    } else if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
   }
 
   function updatePlayButton() {
@@ -2233,10 +2355,13 @@
   }
 
   function firstContentFocus() {
+    if (state.page === 'home') return document.querySelector('#content [data-zone="row"][data-col="0"]');
     return document.querySelector('#content [data-focusable]');
   }
 
   function restoreFocus(preserve) {
+    var overlay = document.getElementById('detail');
+    if (state.playerOpen || (overlay && overlay.className.indexOf('hidden') < 0)) return;
     if (preserve && restoreFocusByKey(state.focusMemory[state.page])) return;
     var first = firstContentFocus();
     if (!focusElement(first)) focusActiveNav();
@@ -2302,8 +2427,8 @@
       var row = Number(active.getAttribute('data-row')), column = Number(active.getAttribute('data-col'));
       if (key === 37) return column > 0 ? focusRow(row, column - 1) : focusActiveNav();
       if (key === 39) return focusRow(row, column + 1);
-      if (key === 38) return row > 0 ? focusRow(row - 1, column) : focusElement(document.querySelector('.hero-action'));
-      if (key === 40) return focusRow(row + 1, column);
+      if (key === 38) return row > 0 ? focusRow(row - 1, 0) : focusElement(document.querySelector('.hero-action'));
+      if (key === 40) return focusRow(row + 1, 0);
     }
     if (zone === 'grid') return moveGrid(active, key);
     if (zone === 'form') {
@@ -2394,6 +2519,13 @@
     rememberFocus(event.target);
     if (event.target && /^player-/.test(event.target.id || '') && event.target.hasAttribute('data-focusable')) state.playerFocusId = event.target.id;
   });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) suspendPlaybackForVisibility();
+    else resumePlaybackFromVisibility();
+  });
+  window.addEventListener('pagehide', function () { persistActivePlayback('pagehide'); });
+  window.addEventListener('beforeunload', function () { persistActivePlayback('beforeunload'); });
 
   document.addEventListener('keydown', function (event) {
     var key = event.keyCode, active;

@@ -1137,6 +1137,35 @@
     });
   }
 
+  function tmdbTrailer(item) {
+    return tmdbDetails(item).then(function (enriched) {
+      var labels = enriched.infoLabels || {}, type = tmdbType(enriched);
+      var id = labels.tmdb_id || enriched.tmdb_id;
+      if (!id) throw new Error('Trailer non trovato');
+      function videos(language) {
+        return json(TMDB + '/' + type + '/' + id + '/videos?api_key=' + TMDB_KEY +
+          '&language=' + language, {cache: 'no-store'}, 8000).then(function (data) {
+            return (data.results || []).filter(function (video) {
+              return String(video.site || '').toLowerCase() === 'youtube' && video.key;
+            });
+          });
+      }
+      return videos('it-IT').then(function (italian) {
+        return italian.length ? italian : videos('en-US');
+      }).then(function (results) {
+        var selected = results.filter(function (video) { return video.official === true; })[0] ||
+          results.filter(function (video) { return /trailer/i.test(video.type || '') || /trailer/i.test(video.name || ''); })[0] ||
+          results[0];
+        if (!selected) throw new Error('Trailer non disponibile per questo contenuto');
+        return {
+          url: 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(selected.key) +
+            '?autoplay=1&rel=0&modestbranding=1',
+          title: selected.name || 'Trailer ufficiale'
+        };
+      });
+    });
+  }
+
   function detail(item) {
     if (item.channel === 'raiplay' || item.channel === 'mediasetplay' || item.channel === 'la7') return tmdbDetails(item);
     if (item.tmdbOnly) return tmdbDetails(item);
@@ -1686,12 +1715,177 @@
     });
   }
 
-  function skyEpg(rows) {
-    var premium = [];
-    (rows || []).forEach(function (row) {
-      if (row.id === 'live_sky' || row.id === 'live_sport') premium = premium.concat(row.items || []);
+  var superGuideCache = null, superGuideCacheAt = 0;
+  var SUPERGUIDE_URLS = [
+    'https://www.superguidatv.it/ora-in-onda/',
+    'https://www.superguidatv.it/ora-in-onda/sky-cinema/',
+    'https://www.superguidatv.it/ora-in-onda/sky-intrattenimento/',
+    'https://www.superguidatv.it/ora-in-onda/sky-doc-e-lifestyle/',
+    'https://www.superguidatv.it/ora-in-onda/sky-sport/',
+    'https://www.superguidatv.it/ora-in-onda/sky-news/',
+    'https://www.superguidatv.it/ora-in-onda/dazn/'
+  ];
+  var TVEPG_URLS = [
+    'https://tvepg.eu/it/italia/c/eurosport-1',
+    'https://tvepg.eu/it/italia/c/eurosport-2'
+  ];
+  var RAIPLAY_NOW_URL = 'https://www.raiplay.it/palinsesto/onAir.json';
+  var MEDIASET_NOW_URL = 'https://static3.mediasetplay.mediaset.it/apigw/nownext/nownext.json';
+
+  function decodeGuideText(value) {
+    var area = document.createElement('textarea');
+    area.innerHTML = String(value || '').replace(/<[^>]+>/g, '');
+    return String(area.value || area.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function parseSuperGuide(html) {
+    var result = {}, channelPattern = /<a[^>]+href="\/programmazione-canale\/[^"]+\/[^/]+\/(\d+)\/"[^>]*>([\s\S]*?)<\/a>([\s\S]*?)(?=<a[^>]+href="\/programmazione-canale\/|$)/gi;
+    var namePattern = /<img[^>]+alt="([^"]+)"/i, itemPattern = /<p[^>]*class="[^"]*font-bold[^"]*"[^>]*>\s*(\d{1,2}:\d{2})\s*<\/p>[\s\S]*?<p[^>]*class="[^"]*truncate[^"]*text-(?:lg|base)[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+    var channel;
+    while ((channel = channelPattern.exec(String(html || '')))) {
+      var name = namePattern.exec(channel[2]), programmes = [], event;
+      if (!name) continue;
+      itemPattern.lastIndex = 0;
+      while ((event = itemPattern.exec(channel[3]))) programmes.push({time: event[1], title: decodeGuideText(event[2])});
+      if (!programmes.length) continue;
+      var next = programmes[1] && programmes[1].time !== programmes[0].time ? programmes[1] : null;
+      result[skyEpgNorm(decodeGuideText(name[1]))] = {
+        program: programmes[0].title, start: programmes[0].time,
+        end: next ? next.time : '',
+        nextProgram: next ? next.title : '',
+        nextStart: next ? next.time : ''
+      };
+    }
+    return result;
+  }
+
+  function parseTvEpg(html) {
+    var name = /<h3[^>]*>([\s\S]*?)<\/h3>/i.exec(String(html || ''));
+    var rows = [], rowPattern = /<tr>([\s\S]*?)<\/tr>/gi, row;
+    while ((row = rowPattern.exec(String(html || '')))) rows.push(row[1]);
+    if (!name || !rows.length) return {};
+    var index = -1, at;
+    for (at = 0; at < rows.length; at += 1) if (rows[at].indexOf('progress-bar') >= 0) { index = at; break; }
+    if (index < 0) for (at = 0; at < rows.length; at += 1) if (rows[at].indexOf('id="now"') >= 0) { index = at; break; }
+    if (index < 0) return {};
+    var pattern = /<a[^>]+title="(\d{1,2}:\d{2})\s+([^"]+)"/i;
+    var current = pattern.exec(rows[index]), following = index + 1 < rows.length ? pattern.exec(rows[index + 1]) : null;
+    if (!current) return {};
+    var entry = {program: decodeGuideText(current[2]), start: current[1], end: '', nextProgram: '', nextStart: '', source: 'tvepg'};
+    if (following && following[1] !== current[1]) {
+      entry.end = following[1]; entry.nextStart = following[1]; entry.nextProgram = decodeGuideText(following[2]);
+    }
+    var result = {}; result[skyEpgNorm(decodeGuideText(name[1]))] = entry; return result;
+  }
+
+  function officialGuideClock(milliseconds) {
+    if (!milliseconds) return '';
+    var date = new Date(Number(milliseconds));
+    if (isNaN(date.getTime())) return '';
+    return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+  }
+
+  function officialFreeEntries() {
+    var rai = json(RAIPLAY_NOW_URL, {cache: 'no-store'}, 10000).catch(function () { return {}; });
+    var mediaset = json(MEDIASET_NOW_URL, {cache: 'no-store'}, 10000).catch(function () { return {}; });
+    return Promise.all([rai, mediaset]).then(function (loaded) {
+      var result = {};
+      (loaded[0].on_air || []).forEach(function (channel) {
+        var current = channel.currentItem || {}, following = channel.nextItem || {};
+        var name = channel.channel || current.channel;
+        if (!name || !current.name) return;
+        result[skyEpgNorm(name)] = {
+          program: current.name, start: current.hour || '', end: following.hour || '',
+          nextProgram: following.name || '', nextStart: following.hour || '',
+          synopsis: current.description || '', source: 'raiplay'
+        };
+      });
+      var response = loaded[1].response || {}, listings = response.listings || {};
+      Object.keys(response.stations || {}).forEach(function (stationId) {
+        var station = response.stations[stationId] || {}, guide = listings[station.callSign] || {};
+        var current = guide.currentListing || {}, following = guide.nextListing || {};
+        var title = current['mediasetlisting$epgTitle'] || (current.program || {}).title;
+        var key = skyEpgNorm(station.title || '');
+        if (!key || !title || result[key]) return;
+        result[key] = {
+          program: title, start: officialGuideClock(current.startTime), end: officialGuideClock(current.endTime),
+          nextProgram: following['mediasetlisting$epgTitle'] || (following.program || {}).title || '',
+          nextStart: officialGuideClock(following.startTime), synopsis: current.description || '', source: 'mediaset'
+        };
+      });
+      return result;
     });
-    if (!premium.length) return Promise.resolve({rows: rows || []});
+  }
+
+  function superGuideEntries() {
+    if (superGuideCache && Date.now() - superGuideCacheAt < 3 * 60 * 1000) return Promise.resolve(superGuideCache);
+    var guideUrls = SUPERGUIDE_URLS.concat(TVEPG_URLS);
+    return Promise.all([officialFreeEntries(), Promise.all(guideUrls.map(function (url, index) {
+      return text(url, {cache: 'no-store'}, 10000).then(function (response) {
+        return index < SUPERGUIDE_URLS.length ? parseSuperGuide(response.body) : parseTvEpg(response.body);
+      })
+        .catch(function () { return {}; });
+    }))]).then(function (loaded) {
+      var merged = loaded[0] || {}, groups = loaded[1];
+      groups.forEach(function (group) {
+        Object.keys(group).forEach(function (key) { if (!merged[key]) merged[key] = group[key]; });
+      });
+      if (Object.keys(merged).length) { superGuideCache = merged; superGuideCacheAt = Date.now(); }
+      return superGuideCache || {};
+    });
+  }
+
+  function superGuideFor(item, guide) {
+    var aliases = {raiuno:'rai1', raidue:'rai2', raitre:'rai3', retequattro:'rete4', italiauno:'italia1',
+      discoverygialloitalia:'giallo', discoverygiallo:'giallo', skycomedycentral:'comedycentral',
+      crimeinv:'crimeinvestigation', skynba:'skysportbasket', skybasket:'skysportbasket', dazn1:'dazn',
+      rmc:'radiomontecarlo', tgcom:'tgcom24', la7d:'la7cinema', motortrend:'discoveryturbo',
+      homeandgardentv:'hgtvhomegarden', hgtv:'hgtvhomegarden', warnertv:'discovery'};
+    var keys = [skyEpgNorm(item.sport_par || ''), skyEpgNorm(item.title || item.fulltitle || '')], index;
+    for (index = 0; index < keys.length; index += 1) {
+      var key = keys[index], exact = guide[key] || guide[aliases[key]];
+      if (exact) return exact;
+    }
+    var wanted = keys[1] || keys[0], wantedDigits = wanted.match(/\d+/g) || [], best = null, score = 999;
+    if (wanted.length < 5) return null;
+    Object.keys(guide).forEach(function (key) {
+      var digits = key.match(/\d+/g) || [];
+      if (digits.join(',') === wantedDigits.join(',') && (key.indexOf(wanted) >= 0 || wanted.indexOf(key) >= 0) && Math.abs(key.length - wanted.length) < score) {
+        best = guide[key]; score = Math.abs(key.length - wanted.length);
+      }
+    });
+    return best;
+  }
+
+  function guideClock(epoch) {
+    var date = new Date(epoch);
+    return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+  }
+
+  function guideTitle(event) {
+    var epg = String(event.epgEventTitle || '').trim(), normal = String(event.eventTitle || '').trim();
+    var episode = epg.match(/^(S\d+\s*Ep\.?\s*\d+)\s*-\s*(.+)$/i);
+    return episode ? episode[2] : (normal || epg);
+  }
+
+  function fetchSkyEvents(ids) {
+    var now = Date.now(), windows = [6, 3, 2, 1];
+    function attempt(index) {
+      var from = new Date(now - windows[index] * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
+      var to = new Date(now + 5 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
+      return json('https://apid.sky.it/gtv/v1/events?' + queryString({
+        from: from, to: to, pageSize: 400, pageNum: 0, env: 'DTH', channels: ids.join(',')
+      }), {cache: 'no-store'}, 10000).then(function (payload) { return payload.events || []; }).catch(function () {
+        return index + 1 < windows.length ? attempt(index + 1) : [];
+      });
+    }
+    return ids.length ? attempt(0) : Promise.resolve([]);
+  }
+
+  function skyEpg(rows) {
+    var liveItems = [];
+    (rows || []).forEach(function (row) { liveItems = liveItems.concat(row.items || []); });
+    if (!liveItems.length) return Promise.resolve({rows: rows || []});
     return skyEpgChannels().then(function (channels) {
       var byName = {}, byNumber = {}, aliases = {mtv: 'mtvhd', zonadazn: 'dazn1'};
       channels.forEach(function (channel) {
@@ -1700,24 +1894,23 @@
         if (channel.number != null && byNumber[channel.number] == null) byNumber[channel.number] = channel.id;
       });
       var ids = [], idByItem = [];
-      premium.forEach(function (item) {
-        var norm = skyEpgNorm(item.sport_par || item.title), id = byName[norm];
+      liveItems.forEach(function (item) {
+        var raw = String(item.sport_par || item.title || ''), norm = skyEpgNorm(raw), offset = 0, id;
+        if (/plus1$/.test(norm) || /plus$/.test(norm) || /\+1/.test(raw)) {
+          norm = norm.replace(/plus1?$/, ''); offset = -60 * 60 * 1000;
+        }
+        id = byName[norm];
         if (id == null && aliases[norm]) id = byName[aliases[norm]];
         if (id == null) {
           var number = String(item.sport_par || item.title || '').match(/(2\d\d)/);
           if (number) id = byNumber[Number(number[1])];
         }
-        if (id != null) { idByItem.push({item: item, id: String(id)}); if (ids.indexOf(String(id)) < 0) ids.push(String(id)); }
+        if (id != null) { idByItem.push({item: item, id: String(id), offset: offset}); if (ids.indexOf(String(id)) < 0) ids.push(String(id)); }
       });
-      var now = Date.now(), from = new Date(now - 3 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
-      var to = new Date(now + 5 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z', batches = [];
+      var now = Date.now(), batches = [];
       for (var at = 0; at < ids.length; at += 15) batches.push(ids.slice(at, at + 15));
-      return Promise.all(batches.map(function (batch) {
-        var endpoint = 'https://apid.sky.it/gtv/v1/events?' + queryString({
-          from: from, to: to, pageSize: 400, pageNum: 0, env: 'DTH', channels: batch.join(',')
-        });
-        return json(endpoint, {cache: 'no-store'}, 10000).then(function (payload) { return payload.events || []; }).catch(function () { return []; });
-      })).then(function (groups) {
+      return Promise.all([Promise.all(batches.map(fetchSkyEvents)), superGuideEntries()]).then(function (loaded) {
+        var groups = loaded[0], fallbackGuide = loaded[1];
         var eventsByChannel = {};
         [].concat.apply([], groups).forEach(function (event) {
           var id = String(event.channel && event.channel.id != null ? event.channel.id : event.channel || '');
@@ -1726,21 +1919,43 @@
         });
         idByItem.forEach(function (mapping) {
           var events = (eventsByChannel[mapping.id] || []).sort(function (a, b) { return Date.parse(a.starttime) - Date.parse(b.starttime); });
-          var currentIndex = -1;
-          events.some(function (event, index) {
-            if (Date.parse(event.starttime) <= now && Date.parse(event.endtime) > now) { currentIndex = index; return true; }
-            return false;
+          var effectiveNow = now + mapping.offset, currentIndex = -1;
+          events.forEach(function (event, index) {
+            if (Date.parse(event.starttime) <= effectiveNow && Date.parse(event.endtime) > effectiveNow &&
+                (currentIndex < 0 || Date.parse(event.starttime) > Date.parse(events[currentIndex].starttime))) currentIndex = index;
           });
           if (currentIndex < 0) return;
-          var current = events[currentIndex], next = events[currentIndex + 1], start = new Date(current.starttime), end = new Date(current.endtime);
-          var hhmm = function (date) { return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2); };
-          mapping.item.program = current.eventTitle || current.epgEventTitle || '';
-          mapping.item.epg = hhmm(start) + '-' + hhmm(end) + '  ' + mapping.item.program;
-          mapping.item.plot = [mapping.item.epg, current.eventSynopsis || '', next ? 'A seguire ' + hhmm(new Date(next.starttime)) + '  ' + (next.eventTitle || next.epgEventTitle || '') : ''].filter(Boolean).join('\n');
+          var current = events[currentIndex], currentEnd = Date.parse(current.endtime), next = null;
+          events.some(function (event) { if (Date.parse(event.starttime) >= currentEnd) { next = event; return true; } return false; });
+          mapping.item.program = guideTitle(current);
+          mapping.item.epg = guideClock(Date.parse(current.starttime) - mapping.offset) + '-' + guideClock(currentEnd - mapping.offset) + '  ' + mapping.item.program;
+          mapping.item.plot = [mapping.item.epg, current.eventSynopsis || '', next ? 'A seguire ' + guideClock(Date.parse(next.starttime) - mapping.offset) + '  ' + guideTitle(next) : ''].filter(Boolean).join('\n');
+          mapping.item._epgFresh = true;
+        });
+        liveItems.forEach(function (item) {
+          var fallback = superGuideFor(item, fallbackGuide);
+          var broadcasterGuide = fallback && (fallback.source === 'raiplay' || fallback.source === 'mediaset');
+          if ((!item._epgFresh || broadcasterGuide) && fallback) {
+            item.program = fallback.program;
+            item.epg = [fallback.start + (fallback.end ? '-' + fallback.end : ''), fallback.program].filter(Boolean).join('  ');
+            item.plot = [item.epg, fallback.synopsis || '', fallback.nextProgram ? 'A seguire ' + fallback.nextStart + '  ' + fallback.nextProgram : ''].filter(Boolean).join('\n');
+          }
+          delete item._epgFresh;
         });
         return {rows: rows || []};
       });
-    }).catch(function () { return {rows: rows || []}; });
+    }).catch(function () {
+      return superGuideEntries().then(function (guide) {
+        liveItems.forEach(function (item) {
+          var fallback = superGuideFor(item, guide);
+          if (!fallback) return;
+          item.program = fallback.program;
+          item.epg = [fallback.start + (fallback.end ? '-' + fallback.end : ''), fallback.program].filter(Boolean).join('  ');
+          item.plot = [item.epg, fallback.synopsis || '', fallback.nextProgram ? 'A seguire ' + fallback.nextStart + '  ' + fallback.nextProgram : ''].filter(Boolean).join('\n');
+        });
+        return {rows: rows || []};
+      }).catch(function () { return {rows: rows || []}; });
+    });
   }
 
   function xorDecodedJson(value) {
@@ -2580,6 +2795,7 @@
     if (route === '/home-expanded') return expandedHome();
     if (route === '/search') return search(decodeURIComponent((String(path).split('q=')[1] || '').replace(/\+/g, ' ')));
     if (route === '/detail') return detail((body || {}).item || {});
+    if (route === '/trailer') return tmdbTrailer((body || {}).item || {});
     if (route === '/artwork') return tmdbDetails((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});

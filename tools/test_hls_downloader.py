@@ -204,6 +204,46 @@ def test_segment_metadata():
     print("  segment metadata resume-fallback OK")
 
 
+def test_corrupt_encrypted_segment_is_retried():
+    """An HTTP-200 truncated AES body must retry, not kill the whole job."""
+    key = b'aaaabbbbccccdddd'
+    iv_hex = "00000000000000000000000000000001"
+    playlist, store, expected = _build_fake_stream(1, key, iv_hex)
+    media_url = "https://cdn.example.com/v/index.m3u8"
+    seg_url = "https://cdn.example.com/v/seg0.ts"
+    store[media_url] = playlist.encode()
+    calls = {'segment': 0}
+
+    def http_get(url, headers=None, timeout=20):
+        if url == seg_url:
+            calls['segment'] += 1
+            if calls['segment'] == 1:
+                return store[url][:-1]  # invalid AES-CBC block length
+        return store[url]
+
+    old_delay = H._retry_delay
+    H._retry_delay = lambda attempt, idx: 0
+    try:
+        tmp = tempfile.mkdtemp()
+        out = os.path.join(tmp, "retry.ts")
+        H.download_stream(media_url, {}, out, http_get=http_get, max_workers=1)
+        with open(out, 'rb') as f:
+            got = f.read()
+    finally:
+        H._retry_delay = old_delay
+
+    assert got == expected
+    assert calls['segment'] == 2, calls
+    print("  corrupt encrypted segment retry OK")
+
+
+def test_retry_backoff_increases():
+    delays = [H._retry_delay(i, 7) for i in range(1, 5)]
+    assert delays == sorted(delays), delays
+    assert delays[0] >= 0.5 and delays[-1] >= 4.0, delays
+    print("  retry exponential backoff OK")
+
+
 if __name__ == '__main__':
     print("Testing core/hls_downloader ...")
     test_parse_master()
@@ -211,4 +251,6 @@ if __name__ == '__main__':
     test_aes_roundtrip()
     test_full_download_and_resume()
     test_segment_metadata()
+    test_corrupt_encrypted_segment_is_retried()
+    test_retry_backoff_increases()
     print("ALL TESTS PASSED")

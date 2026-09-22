@@ -22,6 +22,8 @@ out = os.path.join(docs_dir, f'{addon_id}-{version}.zip')
 
 exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.vscode',
                  '.codex-log-analysis', '.pytest_cache', 'reports',
+                 '.codex-artifacts', '.codex_spreadsheet_work', '.continue',
+                 'outputs', 'release-output', 'tmp', 'workspace', 'tizen',
                  'build', 'release.ps1',
                  '.gitignore', '.gitattributes', '.gitmodules',
                  'PROJECT_STATUS.md', 'ROADMAP_V2.md',
@@ -29,6 +31,14 @@ exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.v
                  '_write_xml.py', '_write_xml.py.bak', '_write_xml2.py', '_write_xml2_v6.py',
                  '_patch_xml_gen.py', '_fix_wraplist_bars.py', '_patch_upnext.py',
                  '_scale_1080i.py', 'PrippiHome_v7.xml', 'StreamingUnityHome_v7.py',
+                 'PRIPPISTREAM_MEMORIA_COMPLETA.md',
+                 'PrippiStream_Partner_Program.pptx',
+                 'PrippiStream_Partner_Program.pptx.inspect.ndjson',
+                 'PrippiStream_Partner_Program',
+                 'PrippiStream_Partner_Program_Dettagliato.pptx',
+                 'PrippiStream_Partner_Program_Dettagliato.pptx.inspect.ndjson',
+                 'PrippiStream_Partner_Program_Dettagliato',
+                 'skyepg_channels.json',
                  # screenshot dello store: il repo GitHub li legge dal git, non
                  # servono nello zip installato (~1,5MB risparmiati)
                  'screenshot-1.png', 'screenshot-2.png', 'screenshot-3.png'}

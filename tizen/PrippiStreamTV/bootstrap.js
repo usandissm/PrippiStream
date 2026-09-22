@@ -1,9 +1,9 @@
 (function () {
   'use strict';
 
-  var SHELL_VERSION = '0.9.9';
+  var SHELL_VERSION = '0.9.10';
   // Debug package only: keep the local instrumented runtime ahead of the public OTA revision.
-  var LOCAL_REVISION = 30;
+  var LOCAL_REVISION = 31;
   var LEGACY_UI = document.documentElement.className.indexOf('legacy-tizen') >= 0;
   var REPO_CONTENTS = 'https://api.github.com/repos/usandissm/PrippiStream/contents/docs/tizen/app/';
   var MANIFEST_URL = localStorage.getItem('prippi.tizen.ota.manifest') ||

@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "channel": "stable",
-  "version": "0.9.9",
-  "revision": 30,
-  "published_at": "2026-09-21T13:27:06.830319Z",
+  "version": "0.9.11",
+  "revision": 32,
+  "published_at": "2026-09-22T15:10:17.893617Z",
   "files": {
     "html": {
       "url": "app.html",
@@ -19,7 +19,7 @@
     },
     "js": {
       "url": "app.js",
-      "sha256": "9b1d8866a199c414354dcb3baeb89f95cb4647baf1233566141a5868157193d2"
+      "sha256": "cdd1e14e1d04490614cd1ae97cc2e6bf8cc39f77def3f49874b720702dc4c244"
     },
     "private_iptv_accounts": {
       "url": "data/iptv_accounts.json",

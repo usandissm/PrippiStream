@@ -1882,6 +1882,35 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     });
   }
 
+  function tmdbTrailer(item) {
+    return tmdbDetails(item).then(function (enriched) {
+      var labels = enriched.infoLabels || {}, type = tmdbType(enriched);
+      var id = labels.tmdb_id || enriched.tmdb_id;
+      if (!id) throw new Error('Trailer non trovato');
+      function videos(language) {
+        return json(TMDB + '/' + type + '/' + id + '/videos?api_key=' + TMDB_KEY +
+          '&language=' + language, {cache: 'no-store'}, 8000).then(function (data) {
+            return (data.results || []).filter(function (video) {
+              return String(video.site || '').toLowerCase() === 'youtube' && video.key;
+            });
+          });
+      }
+      return videos('it-IT').then(function (italian) {
+        return italian.length ? italian : videos('en-US');
+      }).then(function (results) {
+        var selected = results.filter(function (video) { return video.official === true; })[0] ||
+          results.filter(function (video) { return /trailer/i.test(video.type || '') || /trailer/i.test(video.name || ''); })[0] ||
+          results[0];
+        if (!selected) throw new Error('Trailer non disponibile per questo contenuto');
+        return {
+          url: 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(selected.key) +
+            '?autoplay=1&rel=0&modestbranding=1',
+          title: selected.name || 'Trailer ufficiale'
+        };
+      });
+    });
+  }
+
   function detail(item) {
     if (item.channel === 'raiplay' || item.channel === 'mediasetplay' || item.channel === 'la7') return tmdbDetails(item);
     if (item.tmdbOnly) return tmdbDetails(item);
@@ -2431,12 +2460,177 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     });
   }
 
-  function skyEpg(rows) {
-    var premium = [];
-    (rows || []).forEach(function (row) {
-      if (row.id === 'live_sky' || row.id === 'live_sport') premium = premium.concat(row.items || []);
+  var superGuideCache = null, superGuideCacheAt = 0;
+  var SUPERGUIDE_URLS = [
+    'https://www.superguidatv.it/ora-in-onda/',
+    'https://www.superguidatv.it/ora-in-onda/sky-cinema/',
+    'https://www.superguidatv.it/ora-in-onda/sky-intrattenimento/',
+    'https://www.superguidatv.it/ora-in-onda/sky-doc-e-lifestyle/',
+    'https://www.superguidatv.it/ora-in-onda/sky-sport/',
+    'https://www.superguidatv.it/ora-in-onda/sky-news/',
+    'https://www.superguidatv.it/ora-in-onda/dazn/'
+  ];
+  var TVEPG_URLS = [
+    'https://tvepg.eu/it/italia/c/eurosport-1',
+    'https://tvepg.eu/it/italia/c/eurosport-2'
+  ];
+  var RAIPLAY_NOW_URL = 'https://www.raiplay.it/palinsesto/onAir.json';
+  var MEDIASET_NOW_URL = 'https://static3.mediasetplay.mediaset.it/apigw/nownext/nownext.json';
+
+  function decodeGuideText(value) {
+    var area = document.createElement('textarea');
+    area.innerHTML = String(value || '').replace(/<[^>]+>/g, '');
+    return String(area.value || area.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function parseSuperGuide(html) {
+    var result = {}, channelPattern = /<a[^>]+href="\/programmazione-canale\/[^"]+\/[^/]+\/(\d+)\/"[^>]*>([\s\S]*?)<\/a>([\s\S]*?)(?=<a[^>]+href="\/programmazione-canale\/|$)/gi;
+    var namePattern = /<img[^>]+alt="([^"]+)"/i, itemPattern = /<p[^>]*class="[^"]*font-bold[^"]*"[^>]*>\s*(\d{1,2}:\d{2})\s*<\/p>[\s\S]*?<p[^>]*class="[^"]*truncate[^"]*text-(?:lg|base)[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+    var channel;
+    while ((channel = channelPattern.exec(String(html || '')))) {
+      var name = namePattern.exec(channel[2]), programmes = [], event;
+      if (!name) continue;
+      itemPattern.lastIndex = 0;
+      while ((event = itemPattern.exec(channel[3]))) programmes.push({time: event[1], title: decodeGuideText(event[2])});
+      if (!programmes.length) continue;
+      var next = programmes[1] && programmes[1].time !== programmes[0].time ? programmes[1] : null;
+      result[skyEpgNorm(decodeGuideText(name[1]))] = {
+        program: programmes[0].title, start: programmes[0].time,
+        end: next ? next.time : '',
+        nextProgram: next ? next.title : '',
+        nextStart: next ? next.time : ''
+      };
+    }
+    return result;
+  }
+
+  function parseTvEpg(html) {
+    var name = /<h3[^>]*>([\s\S]*?)<\/h3>/i.exec(String(html || ''));
+    var rows = [], rowPattern = /<tr>([\s\S]*?)<\/tr>/gi, row;
+    while ((row = rowPattern.exec(String(html || '')))) rows.push(row[1]);
+    if (!name || !rows.length) return {};
+    var index = -1, at;
+    for (at = 0; at < rows.length; at += 1) if (rows[at].indexOf('progress-bar') >= 0) { index = at; break; }
+    if (index < 0) for (at = 0; at < rows.length; at += 1) if (rows[at].indexOf('id="now"') >= 0) { index = at; break; }
+    if (index < 0) return {};
+    var pattern = /<a[^>]+title="(\d{1,2}:\d{2})\s+([^"]+)"/i;
+    var current = pattern.exec(rows[index]), following = index + 1 < rows.length ? pattern.exec(rows[index + 1]) : null;
+    if (!current) return {};
+    var entry = {program: decodeGuideText(current[2]), start: current[1], end: '', nextProgram: '', nextStart: '', source: 'tvepg'};
+    if (following && following[1] !== current[1]) {
+      entry.end = following[1]; entry.nextStart = following[1]; entry.nextProgram = decodeGuideText(following[2]);
+    }
+    var result = {}; result[skyEpgNorm(decodeGuideText(name[1]))] = entry; return result;
+  }
+
+  function officialGuideClock(milliseconds) {
+    if (!milliseconds) return '';
+    var date = new Date(Number(milliseconds));
+    if (isNaN(date.getTime())) return '';
+    return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+  }
+
+  function officialFreeEntries() {
+    var rai = json(RAIPLAY_NOW_URL, {cache: 'no-store'}, 10000).catch(function () { return {}; });
+    var mediaset = json(MEDIASET_NOW_URL, {cache: 'no-store'}, 10000).catch(function () { return {}; });
+    return Promise.all([rai, mediaset]).then(function (loaded) {
+      var result = {};
+      (loaded[0].on_air || []).forEach(function (channel) {
+        var current = channel.currentItem || {}, following = channel.nextItem || {};
+        var name = channel.channel || current.channel;
+        if (!name || !current.name) return;
+        result[skyEpgNorm(name)] = {
+          program: current.name, start: current.hour || '', end: following.hour || '',
+          nextProgram: following.name || '', nextStart: following.hour || '',
+          synopsis: current.description || '', source: 'raiplay'
+        };
+      });
+      var response = loaded[1].response || {}, listings = response.listings || {};
+      Object.keys(response.stations || {}).forEach(function (stationId) {
+        var station = response.stations[stationId] || {}, guide = listings[station.callSign] || {};
+        var current = guide.currentListing || {}, following = guide.nextListing || {};
+        var title = current['mediasetlisting$epgTitle'] || (current.program || {}).title;
+        var key = skyEpgNorm(station.title || '');
+        if (!key || !title || result[key]) return;
+        result[key] = {
+          program: title, start: officialGuideClock(current.startTime), end: officialGuideClock(current.endTime),
+          nextProgram: following['mediasetlisting$epgTitle'] || (following.program || {}).title || '',
+          nextStart: officialGuideClock(following.startTime), synopsis: current.description || '', source: 'mediaset'
+        };
+      });
+      return result;
     });
-    if (!premium.length) return Promise.resolve({rows: rows || []});
+  }
+
+  function superGuideEntries() {
+    if (superGuideCache && Date.now() - superGuideCacheAt < 3 * 60 * 1000) return Promise.resolve(superGuideCache);
+    var guideUrls = SUPERGUIDE_URLS.concat(TVEPG_URLS);
+    return Promise.all([officialFreeEntries(), Promise.all(guideUrls.map(function (url, index) {
+      return text(url, {cache: 'no-store'}, 10000).then(function (response) {
+        return index < SUPERGUIDE_URLS.length ? parseSuperGuide(response.body) : parseTvEpg(response.body);
+      })
+        .catch(function () { return {}; });
+    }))]).then(function (loaded) {
+      var merged = loaded[0] || {}, groups = loaded[1];
+      groups.forEach(function (group) {
+        Object.keys(group).forEach(function (key) { if (!merged[key]) merged[key] = group[key]; });
+      });
+      if (Object.keys(merged).length) { superGuideCache = merged; superGuideCacheAt = Date.now(); }
+      return superGuideCache || {};
+    });
+  }
+
+  function superGuideFor(item, guide) {
+    var aliases = {raiuno:'rai1', raidue:'rai2', raitre:'rai3', retequattro:'rete4', italiauno:'italia1',
+      discoverygialloitalia:'giallo', discoverygiallo:'giallo', skycomedycentral:'comedycentral',
+      crimeinv:'crimeinvestigation', skynba:'skysportbasket', skybasket:'skysportbasket', dazn1:'dazn',
+      rmc:'radiomontecarlo', tgcom:'tgcom24', la7d:'la7cinema', motortrend:'discoveryturbo',
+      homeandgardentv:'hgtvhomegarden', hgtv:'hgtvhomegarden', warnertv:'discovery'};
+    var keys = [skyEpgNorm(item.sport_par || ''), skyEpgNorm(item.title || item.fulltitle || '')], index;
+    for (index = 0; index < keys.length; index += 1) {
+      var key = keys[index], exact = guide[key] || guide[aliases[key]];
+      if (exact) return exact;
+    }
+    var wanted = keys[1] || keys[0], wantedDigits = wanted.match(/\d+/g) || [], best = null, score = 999;
+    if (wanted.length < 5) return null;
+    Object.keys(guide).forEach(function (key) {
+      var digits = key.match(/\d+/g) || [];
+      if (digits.join(',') === wantedDigits.join(',') && (key.indexOf(wanted) >= 0 || wanted.indexOf(key) >= 0) && Math.abs(key.length - wanted.length) < score) {
+        best = guide[key]; score = Math.abs(key.length - wanted.length);
+      }
+    });
+    return best;
+  }
+
+  function guideClock(epoch) {
+    var date = new Date(epoch);
+    return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2);
+  }
+
+  function guideTitle(event) {
+    var epg = String(event.epgEventTitle || '').trim(), normal = String(event.eventTitle || '').trim();
+    var episode = epg.match(/^(S\d+\s*Ep\.?\s*\d+)\s*-\s*(.+)$/i);
+    return episode ? episode[2] : (normal || epg);
+  }
+
+  function fetchSkyEvents(ids) {
+    var now = Date.now(), windows = [6, 3, 2, 1];
+    function attempt(index) {
+      var from = new Date(now - windows[index] * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
+      var to = new Date(now + 5 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
+      return json('https://apid.sky.it/gtv/v1/events?' + queryString({
+        from: from, to: to, pageSize: 400, pageNum: 0, env: 'DTH', channels: ids.join(',')
+      }), {cache: 'no-store'}, 10000).then(function (payload) { return payload.events || []; }).catch(function () {
+        return index + 1 < windows.length ? attempt(index + 1) : [];
+      });
+    }
+    return ids.length ? attempt(0) : Promise.resolve([]);
+  }
+
+  function skyEpg(rows) {
+    var liveItems = [];
+    (rows || []).forEach(function (row) { liveItems = liveItems.concat(row.items || []); });
+    if (!liveItems.length) return Promise.resolve({rows: rows || []});
     return skyEpgChannels().then(function (channels) {
       var byName = {}, byNumber = {}, aliases = {mtv: 'mtvhd', zonadazn: 'dazn1'};
       channels.forEach(function (channel) {
@@ -2445,24 +2639,23 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         if (channel.number != null && byNumber[channel.number] == null) byNumber[channel.number] = channel.id;
       });
       var ids = [], idByItem = [];
-      premium.forEach(function (item) {
-        var norm = skyEpgNorm(item.sport_par || item.title), id = byName[norm];
+      liveItems.forEach(function (item) {
+        var raw = String(item.sport_par || item.title || ''), norm = skyEpgNorm(raw), offset = 0, id;
+        if (/plus1$/.test(norm) || /plus$/.test(norm) || /\+1/.test(raw)) {
+          norm = norm.replace(/plus1?$/, ''); offset = -60 * 60 * 1000;
+        }
+        id = byName[norm];
         if (id == null && aliases[norm]) id = byName[aliases[norm]];
         if (id == null) {
           var number = String(item.sport_par || item.title || '').match(/(2\d\d)/);
           if (number) id = byNumber[Number(number[1])];
         }
-        if (id != null) { idByItem.push({item: item, id: String(id)}); if (ids.indexOf(String(id)) < 0) ids.push(String(id)); }
+        if (id != null) { idByItem.push({item: item, id: String(id), offset: offset}); if (ids.indexOf(String(id)) < 0) ids.push(String(id)); }
       });
-      var now = Date.now(), from = new Date(now - 3 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
-      var to = new Date(now + 5 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z', batches = [];
+      var now = Date.now(), batches = [];
       for (var at = 0; at < ids.length; at += 15) batches.push(ids.slice(at, at + 15));
-      return Promise.all(batches.map(function (batch) {
-        var endpoint = 'https://apid.sky.it/gtv/v1/events?' + queryString({
-          from: from, to: to, pageSize: 400, pageNum: 0, env: 'DTH', channels: batch.join(',')
-        });
-        return json(endpoint, {cache: 'no-store'}, 10000).then(function (payload) { return payload.events || []; }).catch(function () { return []; });
-      })).then(function (groups) {
+      return Promise.all([Promise.all(batches.map(fetchSkyEvents)), superGuideEntries()]).then(function (loaded) {
+        var groups = loaded[0], fallbackGuide = loaded[1];
         var eventsByChannel = {};
         [].concat.apply([], groups).forEach(function (event) {
           var id = String(event.channel && event.channel.id != null ? event.channel.id : event.channel || '');
@@ -2471,21 +2664,43 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
         });
         idByItem.forEach(function (mapping) {
           var events = (eventsByChannel[mapping.id] || []).sort(function (a, b) { return Date.parse(a.starttime) - Date.parse(b.starttime); });
-          var currentIndex = -1;
-          events.some(function (event, index) {
-            if (Date.parse(event.starttime) <= now && Date.parse(event.endtime) > now) { currentIndex = index; return true; }
-            return false;
+          var effectiveNow = now + mapping.offset, currentIndex = -1;
+          events.forEach(function (event, index) {
+            if (Date.parse(event.starttime) <= effectiveNow && Date.parse(event.endtime) > effectiveNow &&
+                (currentIndex < 0 || Date.parse(event.starttime) > Date.parse(events[currentIndex].starttime))) currentIndex = index;
           });
           if (currentIndex < 0) return;
-          var current = events[currentIndex], next = events[currentIndex + 1], start = new Date(current.starttime), end = new Date(current.endtime);
-          var hhmm = function (date) { return ('0' + date.getHours()).slice(-2) + ':' + ('0' + date.getMinutes()).slice(-2); };
-          mapping.item.program = current.eventTitle || current.epgEventTitle || '';
-          mapping.item.epg = hhmm(start) + '-' + hhmm(end) + '  ' + mapping.item.program;
-          mapping.item.plot = [mapping.item.epg, current.eventSynopsis || '', next ? 'A seguire ' + hhmm(new Date(next.starttime)) + '  ' + (next.eventTitle || next.epgEventTitle || '') : ''].filter(Boolean).join('\n');
+          var current = events[currentIndex], currentEnd = Date.parse(current.endtime), next = null;
+          events.some(function (event) { if (Date.parse(event.starttime) >= currentEnd) { next = event; return true; } return false; });
+          mapping.item.program = guideTitle(current);
+          mapping.item.epg = guideClock(Date.parse(current.starttime) - mapping.offset) + '-' + guideClock(currentEnd - mapping.offset) + '  ' + mapping.item.program;
+          mapping.item.plot = [mapping.item.epg, current.eventSynopsis || '', next ? 'A seguire ' + guideClock(Date.parse(next.starttime) - mapping.offset) + '  ' + guideTitle(next) : ''].filter(Boolean).join('\n');
+          mapping.item._epgFresh = true;
+        });
+        liveItems.forEach(function (item) {
+          var fallback = superGuideFor(item, fallbackGuide);
+          var broadcasterGuide = fallback && (fallback.source === 'raiplay' || fallback.source === 'mediaset');
+          if ((!item._epgFresh || broadcasterGuide) && fallback) {
+            item.program = fallback.program;
+            item.epg = [fallback.start + (fallback.end ? '-' + fallback.end : ''), fallback.program].filter(Boolean).join('  ');
+            item.plot = [item.epg, fallback.synopsis || '', fallback.nextProgram ? 'A seguire ' + fallback.nextStart + '  ' + fallback.nextProgram : ''].filter(Boolean).join('\n');
+          }
+          delete item._epgFresh;
         });
         return {rows: rows || []};
       });
-    }).catch(function () { return {rows: rows || []}; });
+    }).catch(function () {
+      return superGuideEntries().then(function (guide) {
+        liveItems.forEach(function (item) {
+          var fallback = superGuideFor(item, guide);
+          if (!fallback) return;
+          item.program = fallback.program;
+          item.epg = [fallback.start + (fallback.end ? '-' + fallback.end : ''), fallback.program].filter(Boolean).join('  ');
+          item.plot = [item.epg, fallback.synopsis || '', fallback.nextProgram ? 'A seguire ' + fallback.nextStart + '  ' + fallback.nextProgram : ''].filter(Boolean).join('\n');
+        });
+        return {rows: rows || []};
+      }).catch(function () { return {rows: rows || []}; });
+    });
   }
 
   function xorDecodedJson(value) {
@@ -3325,6 +3540,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     if (route === '/home-expanded') return expandedHome();
     if (route === '/search') return search(decodeURIComponent((String(path).split('q=')[1] || '').replace(/\+/g, ' ')));
     if (route === '/detail') return detail((body || {}).item || {});
+    if (route === '/trailer') return tmdbTrailer((body || {}).item || {});
     if (route === '/artwork') return tmdbDetails((body || {}).item || {});
     if (route === '/episodes') return episodes((body || {}).item || {});
     if (route === '/resolve') return resolve((body || {}).item || {});
@@ -3374,6 +3590,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     live: [],
     liveLoading: false,
     liveError: '',
+    liveEpgTimer: null,
     searchItems: [],
     searchQuery: '',
     searchFilter: 'all',
@@ -3423,6 +3640,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     liveSwitchAt: 0,
     trackCycleIndex: -1,
     trackPreferenceTimer: null,
+    resumeAfterVisibility: false,
     playRequestId: 0
   };
 
@@ -3530,15 +3748,22 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
 
   function continueWatchingSeriesTitle(item) {
     var labels = info(item);
-    return String(labels.tvshowtitle || item.contentSerieName || item.serieName || item.show || '').trim();
+    var explicit = String(labels.tvshowtitle || item.contentSerieName || item.serieName || item.show || '').trim();
+    if (explicit) return explicit;
+    return String(item.fulltitle || item.title || labels.title || '')
+      .replace(/\s+(?:s?\d+\s*[xe]\s*\d+|\d+x\d+)(?:\s*[-.:\u2014].*)?$/i, '').trim();
+  }
+
+  function episodeCode(item) {
+    var labels = info(item), season = Number(labels.season || item.contentSeason || item.season || 0);
+    var episode = Number(labels.episode || item.contentEpisodeNumber || item.episode || 0);
+    return (season > 0 ? 'S' + ('0' + season).slice(-2) : '') +
+      (episode > 0 ? 'E' + ('0' + episode).slice(-2) : '');
   }
 
   function continueWatchingEpisodeNote(item) {
     if (!isEpisode(item)) return '';
-    var labels = info(item), season = Number(labels.season || item.contentSeason || item.season || 0);
-    var episode = Number(labels.episode || item.contentEpisodeNumber || item.episode || 0);
-    var code = (season > 0 ? 'S' + ('0' + season).slice(-2) : '') +
-      (episode > 0 ? 'E' + ('0' + episode).slice(-2) : '');
+    var labels = info(item), code = episodeCode(item);
     var episodeName = String(item.contentTitle || item.title || labels.title || '').trim();
     var seriesName = continueWatchingSeriesTitle(item);
     if (episodeName.toLowerCase() === seriesName.toLowerCase() || /^(s\d+e\d+|episodio\s+\d+)$/i.test(episodeName)) {
@@ -4071,16 +4296,15 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.liveError = '';
       renderPage(true);
       status(true, 'Canali aggiornati');
-      request('/live-expanded', {rows: state.live}).then(function (expanded) {
-        if (!expanded || !expanded.rows || !expanded.rows.length) return;
-        state.live = expanded.rows;
-        if (state.page === 'live') renderPage(true);
-      }).catch(function () {});
-      request('/live-epg', {rows: state.live}).then(function (epgResponse) {
+      request('/live-expanded', {rows: state.live}).catch(function () { return {rows: state.live}; }).then(function (expanded) {
+        var finalRows = expanded && expanded.rows && expanded.rows.length ? expanded.rows : state.live;
+        return request('/live-epg', {rows: finalRows});
+      }).then(function (epgResponse) {
         if (!epgResponse || !epgResponse.rows) return;
         state.live = epgResponse.rows;
         if (state.page === 'live') renderPage(true);
-      }).catch(function () {});
+        scheduleLiveEpgRefresh();
+      }).catch(function () { scheduleLiveEpgRefresh(); });
     }).catch(function (error) {
       state.liveLoading = false;
       state.liveError = error.message || 'Canali non disponibili';
@@ -4089,8 +4313,23 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     });
   }
 
+  function scheduleLiveEpgRefresh() {
+    clearTimeout(state.liveEpgTimer);
+    state.liveEpgTimer = setTimeout(function () {
+      if (state.page !== 'live' || !state.live.length) return;
+      request('/live-epg', {rows: state.live}).then(function (response) {
+        if (response && response.rows) {
+          state.live = response.rows;
+          if (state.page === 'live') renderPage(true);
+        }
+        scheduleLiveEpgRefresh();
+      }).catch(scheduleLiveEpgRefresh);
+    }, 4 * 60 * 1000);
+  }
+
   function openPage(page) {
     if (!page) return;
+    if (page !== 'live') { clearTimeout(state.liveEpgTimer); state.liveEpgTimer = null; }
     state.focusMemory[state.page] = currentFocusKey();
     state.page = page;
     renderPage(false);
@@ -4103,7 +4342,9 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var input = document.getElementById('query'), button = document.getElementById('search-go');
     if (!input || !button) return;
     button.onclick = runSearch;
-    input.onkeydown = function (event) { if (event.keyCode === 13) runSearch(); };
+    input.onkeydown = function (event) {
+      if (event.keyCode === 13) { event.preventDefault(); event.stopPropagation(); runSearch(); }
+    };
     Array.prototype.forEach.call(document.querySelectorAll('[data-search-history]'), function (historyButton) {
       historyButton.onclick = function () {
         input.value = historyButton.getAttribute('data-search-history') || '';
@@ -4123,6 +4364,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     var input = document.getElementById('query'), query = input ? input.value.replace(/^\s+|\s+$/g, '') : '';
     var statusElement = document.getElementById('search-status'), results = document.getElementById('search-results');
     if (query.length < 2) { toast('Inserisci almeno due caratteri'); if (input) focusElement(input); return; }
+    if (input) input.blur();
+    focusElement(document.getElementById('search-go'));
     statusElement.textContent = 'Ricerca in corso...';
     results.innerHTML = '';
     request('/search?q=' + encodeURIComponent(query)).then(function (response) {
@@ -4235,7 +4478,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       element.onclick = function () {
         var item = state.items[element.getAttribute('data-item')];
         if (!item) return;
-        if (element.getAttribute('data-action') === 'play') play(item);
+        if (state.page === 'home' && item._cwEntry) {
+          state.detailOrigin = currentFocusKey();
+          state.detail = item;
+          play(item, {resume: true});
+        }
+        else if (element.getAttribute('data-action') === 'play') play(item);
         else showDetail(item);
       };
       element.onfocus = function () {
@@ -4348,17 +4596,39 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     }).catch(function () {});
   }
 
+  function playTrailer(item) {
+    toast('Caricamento trailer...');
+    request('/trailer', {item: item}).then(function (response) {
+      if (!response || !response.url) throw new Error('Trailer non disponibile');
+      var trailerItem = Object.assign({}, item, {
+        fulltitle: 'Trailer · ' + title(item),
+        contentType: 'live',
+        isLive: true,
+        _app_trailer: true
+      });
+      openEmbed(response.url, trailerItem);
+      var status = document.getElementById('player-status');
+      if (status) { status.textContent = 'TRAILER'; status.className = 'player-status'; }
+      setPlayerText(title(trailerItem), response.title || 'Trailer ufficiale');
+    }).catch(function (error) {
+      toast(error.message || 'Trailer non disponibile', true);
+    });
+  }
+
   function renderDetail(item) {
     var series = isSeries(item), live = isLiveMedia(item), cw = item._cwEntry || (!live && findContinueWatching(item, series ? item : null));
     var catalogOnly = item.catalog_only === true;
+    var hasContinue = !!(cw && cw.item);
     var hasResume = !!(cw && cw.position >= CW_MIN_PROGRESS_MS);
     var resumeItem = series && cw ? Object.assign({}, item, {_cwEntry: cw, _cwResumeItem: cw.item}) :
       cw ? Object.assign({}, item, {_cwEntry: cw}) : item;
+    var continueLabel = hasResume ? 'Riprendi' :
+      (series && cw && isEpisode(cw.item) && episodeCode(cw.item) ? 'Continua ' + episodeCode(cw.item) : 'Continua');
     var actions = [], actionIndex = 0, overlay = document.getElementById('detail');
     if (!catalogOnly) {
-      if (hasResume) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Riprendi</button>');
-      if (series) actions.push('<button id="detail-episodes"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
-      else actions.push('<button id="detail-primary"' + (!hasResume ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasResume ? 'Dall\'inizio' : 'Riproduci') + '</button>');
+      if (hasContinue) actions.push('<button id="detail-resume" class="play" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + esc(continueLabel) + '</button>');
+      if (series) actions.push('<button id="detail-episodes"' + (!hasContinue ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Episodi</button>');
+      else actions.push('<button id="detail-primary"' + (!hasContinue ? ' class="play"' : '') + ' data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">' + (hasContinue ? 'Dall\'inizio' : 'Riproduci') + '</button>');
       if (!live) actions.push('<button id="detail-trailer" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Trailer</button>');
       if (cw) actions.push('<button id="detail-remove-cw" data-focusable data-zone="detail" data-detail-index="' + (actionIndex++) + '">Rimuovi da Continua a guardare</button>');
     } else actions.push('<span class="detail-chip">Catalogo Live</span>');
@@ -4371,17 +4641,17 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       '<h2>' + esc(title(item)) + '</h2><div class="detail-meta">' + detailMeta(item) + '</div>' +
       '<p>' + esc(item.plot || 'Caricamento informazioni...') + '</p><div class="actions">' +
       actions.join('') + '</div></div></div>';
-    if (!catalogOnly && hasResume) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
+    if (!catalogOnly && hasContinue) document.getElementById('detail-resume').onclick = function () { play(resumeItem, {resume: true}); };
     if (!catalogOnly && series) document.getElementById('detail-episodes').onclick = function () { showEpisodes(item); };
     else if (!catalogOnly) document.getElementById('detail-primary').onclick = function () { play(item, {fromStart: hasResume}); };
-    if (!catalogOnly && !live) document.getElementById('detail-trailer').onclick = function () { toast('Trailer non ancora disponibile per questo contenuto.'); };
+    if (!catalogOnly && !live) document.getElementById('detail-trailer').onclick = function () { playTrailer(item); };
     if (!catalogOnly && cw) document.getElementById('detail-remove-cw').onclick = function () {
       removeContinueWatching(cw.item || item._cwResumeItem || item, cw.parent || (series ? item : null));
       closeDetail();
       toast('Rimosso da Continua a guardare');
     };
     document.getElementById('detail-close').onclick = closeDetail;
-    focusElement(document.getElementById(catalogOnly ? 'detail-close' : hasResume ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
+    focusElement(document.getElementById(catalogOnly ? 'detail-close' : hasContinue ? 'detail-resume' : series ? 'detail-episodes' : 'detail-primary'));
   }
 
   function showEpisodes(item) {
@@ -4412,7 +4682,10 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       state.episodeIndex = -1;
       state.episodeQueueComplete = true;
       seasons.sort(function (a, b) { return a - b; });
-      renderEpisodeSeason(item, state.episodeQueue, seasons, seasons[0]);
+      var saved = findContinueWatching(item, item);
+      var savedSeason = saved && saved.item ? Number(saved.item.season || saved.item.contentSeason || info(saved.item).season || 0) : 0;
+      renderEpisodeSeason(item, state.episodeQueue, seasons,
+        seasons.indexOf(savedSeason) >= 0 ? savedSeason : seasons[0]);
     }).catch(function (error) {
       var content = document.getElementById('episode-content');
       if (content) content.innerHTML = errorMarkup(error.message, 'episodes');
@@ -4644,6 +4917,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     document.getElementById('player-rewind').disabled = state.playerLive;
     document.getElementById('player-forward').disabled = state.playerLive;
     state.playerItem = item;
+    setPlaybackScreenSaver(false);
     state.lastProgressSave = 0;
     state.upNextVisible = false;
     state.upNextCancelled = false;
@@ -5348,6 +5622,7 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       return;
     }
     if (state.playerItem && !completedNext) removeContinueWatching(state.playerItem, state.episodeParent);
+    setPlaybackScreenSaver(true);
     hideUpNext(false);
     setPlayerText(playbackTitle(state.playerItem || {}), 'Riproduzione completata');
     showPlayerUi(true);
@@ -5387,6 +5662,61 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     } catch (error) { return {current: 0, duration: 0}; }
   }
 
+  function setPlaybackScreenSaver(enabled) {
+    try {
+      var appcommon = window.webapis && window.webapis.appcommon;
+      if (!appcommon || !appcommon.setScreenSaver || !appcommon.AppCommonScreenSaverState) return false;
+      var screenState = enabled ? appcommon.AppCommonScreenSaverState.SCREEN_SAVER_ON :
+        appcommon.AppCommonScreenSaverState.SCREEN_SAVER_OFF;
+      appcommon.setScreenSaver(screenState, function () {}, function () {});
+      return true;
+    } catch (error) { return false; }
+  }
+
+  function persistActivePlayback(reason) {
+    if (!state.playerOpen || state.playerLive || !state.playerItem || state.pendingResumeMs >= CW_MIN_PROGRESS_MS) return false;
+    var times = currentPlayerTimes();
+    saveContinueWatching(state.playerItem, times.current, times.duration, false);
+    diagnostic('CW salvato', String(reason || 'lifecycle') + ' · ' + Math.round(times.current / 1000) + 's');
+    return true;
+  }
+
+  function suspendPlaybackForVisibility() {
+    persistActivePlayback('app in background');
+    state.resumeAfterVisibility = !!(state.playerOpen && state.playing);
+    if (state.resumeAfterVisibility) {
+      var paused = false;
+      try {
+        var video = document.getElementById('html-player');
+        if (isHtmlPlayerEngine()) { video.pause(); paused = true; }
+        else if (state.playerEngine === 'avplay' && avplay) { avplay.pause(); paused = true; }
+      } catch (error) {}
+      state.resumeAfterVisibility = paused;
+      if (paused) { state.playing = false; updatePlayButton(); }
+    }
+    setPlaybackScreenSaver(true);
+  }
+
+  function resumePlaybackFromVisibility() {
+    if (!state.playerOpen) { state.resumeAfterVisibility = false; return; }
+    setPlaybackScreenSaver(false);
+    if (!state.resumeAfterVisibility) return;
+    state.resumeAfterVisibility = false;
+    try {
+      var video = document.getElementById('html-player'), started;
+      if (isHtmlPlayerEngine()) started = video.play();
+      else if (state.playerEngine === 'avplay' && avplay) avplay.play();
+      state.playing = true;
+      updatePlayButton();
+      showPlayerUi(false);
+      if (started && started.catch) started.catch(function () {});
+    } catch (error) {
+      state.playing = false;
+      updatePlayButton();
+      showPlayerUi(true);
+    }
+  }
+
   function stopPlayerMedia() {
     var frame = document.getElementById('embed-player'), video = document.getElementById('html-player');
     clearTimeout(state.trackPreferenceTimer);
@@ -5411,10 +5741,12 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   function closePlayer(skipRestore) {
     if (!state.playerOpen && document.getElementById('player').className.indexOf('hidden') >= 0) return;
     var times = currentPlayerTimes();
+    var lastItem = state.playerItem && !state.playerLive ? state.playerItem : null;
     if (state.playerItem && !state.playerLive && state.pendingResumeMs < CW_MIN_PROGRESS_MS) {
       saveContinueWatching(state.playerItem, times.current, times.duration, false);
     }
     stopPlayerMedia();
+    setPlaybackScreenSaver(true);
     state.playerOpen = false;
     window.__PRIPPI_PLAYBACK_ACTIVE__ = false;
     state.playing = false;
@@ -5433,13 +5765,19 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     state.liveRowTitle = '';
     state.liveSwitchBusy = false;
     state.trackCycleIndex = -1;
+    state.resumeAfterVisibility = false;
     state.playRequestId += 1;
     hideUpNext(false);
     clearTimeout(state.playerUiTimer);
     state.playerUiVisible = true;
     document.getElementById('player').className = 'player hidden';
     document.getElementById('player-ui').className = 'player-ui';
-    if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
+    if (!skipRestore && lastItem) {
+      state.detail = Object.assign({}, lastItem);
+      state.detailParent = null;
+      if (state.page === 'home') renderPage(false);
+      renderDetail(state.detail);
+    } else if (!skipRestore) setTimeout(function () { restoreFocusByKey(state.detailOrigin); }, 0);
   }
 
   function updatePlayButton() {
@@ -5578,10 +5916,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
   }
 
   function firstContentFocus() {
+    if (state.page === 'home') return document.querySelector('#content [data-zone="row"][data-col="0"]');
     return document.querySelector('#content [data-focusable]');
   }
 
   function restoreFocus(preserve) {
+    var overlay = document.getElementById('detail');
+    if (state.playerOpen || (overlay && overlay.className.indexOf('hidden') < 0)) return;
     if (preserve && restoreFocusByKey(state.focusMemory[state.page])) return;
     var first = firstContentFocus();
     if (!focusElement(first)) focusActiveNav();
@@ -5647,8 +5988,8 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
       var row = Number(active.getAttribute('data-row')), column = Number(active.getAttribute('data-col'));
       if (key === 37) return column > 0 ? focusRow(row, column - 1) : focusActiveNav();
       if (key === 39) return focusRow(row, column + 1);
-      if (key === 38) return row > 0 ? focusRow(row - 1, column) : focusElement(document.querySelector('.hero-action'));
-      if (key === 40) return focusRow(row + 1, column);
+      if (key === 38) return row > 0 ? focusRow(row - 1, 0) : focusElement(document.querySelector('.hero-action'));
+      if (key === 40) return focusRow(row + 1, 0);
     }
     if (zone === 'grid') return moveGrid(active, key);
     if (zone === 'form') {
@@ -5739,6 +6080,13 @@ window.__PRIPPI_LIVE_CHANNELS__ = [{"channel":"raiplay","title":"Rai 1","fulltit
     rememberFocus(event.target);
     if (event.target && /^player-/.test(event.target.id || '') && event.target.hasAttribute('data-focusable')) state.playerFocusId = event.target.id;
   });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) suspendPlaybackForVisibility();
+    else resumePlaybackFromVisibility();
+  });
+  window.addEventListener('pagehide', function () { persistActivePlayback('pagehide'); });
+  window.addEventListener('beforeunload', function () { persistActivePlayback('beforeunload'); });
 
   document.addEventListener('keydown', function (event) {
     var key = event.keyCode, active;

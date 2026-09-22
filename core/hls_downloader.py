@@ -77,10 +77,6 @@ class SegmentIntegrityError(Exception):
     """Raised when a CDN returns a successful but unusable HLS segment."""
 
 
-class NetworkUnavailableError(Exception):
-    """Raised when Android reports that no validated network is available."""
-
-
 def _pkcs7_unpad(data):
     if not data:
         return data
@@ -514,7 +510,7 @@ def download_stream(variant_url, headers, out_path,
 
         def _fetch(idx):
             _check_cancel()
-            if idx < 10:
+            if idx < 60:
                 try:
                     import xbmc
                     xbmc.log('[DLstart] idx=%d' % idx, xbmc.LOGINFO)
@@ -543,11 +539,6 @@ def download_stream(variant_url, headers, out_path,
                             'segment %d is empty after processing' % idx)
                     return idx, data
                 except DownloadCancelled:
-                    raise
-                except NetworkUnavailableError:
-                    # Connectivity is restored by the queue manager. Retrying
-                    # every segment here would only create a request storm and
-                    # consume all five transport attempts while offline.
                     raise
                 except Exception as exc:
                     code = _http_status(exc)
@@ -585,7 +576,7 @@ def download_stream(variant_url, headers, out_path,
             while pending:
                 _check_cancel()
                 _now_hb = _t_hb.time()
-                if _now_hb - _hb[0] >= 10:
+                if _now_hb - _hb[0] >= 3:
                     _hb[0] = _now_hb
                     try:
                         import xbmc

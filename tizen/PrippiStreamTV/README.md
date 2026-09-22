@@ -25,8 +25,9 @@ in locale host e Home già validati. La modalità attuale copre:
   incorporato, 97 loghi locali e resolver TV/ClearKey/Freeshot/IPTV/Daddy;
 - fallback Daddy associato ai canali TV/SKY/Sport compatibili e canali Daddy
   autonomi (Sky Cinema Uno +24, Eurosport 1/2 e Rai Sport);
-- EPG SKY/Sport caricato in background dall'API ufficiale Sky, con programma
-  corrente, orario, sinossi e programma successivo;
+- guida Live caricata in background e aggiornata periodicamente: fonti ufficiali
+  Sky, RaiPlay e Mediaset con fallback SuperGuidaTV, programma corrente, orario,
+  sinossi e programma successivo su tutte le righe;
 - ricerca Mediaset GraphQL allineata alla 2.0, con fallback sulle pagine
   ufficiali e lettura episodi dalle pagine moderne/WittyTV;
 - catalogo Discovery, la cui riproduzione Widevine resta da completare;

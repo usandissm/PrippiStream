@@ -1,3 +1,9 @@
+## 2.0.2
+- Guida Live più completa e precisa con fonti ufficiali e fallback automatici.
+- Aggiornamento periodico di programma corrente e successivo su tutte le righe Live.
+- Migliorata la copertura di canali TV, SKY, sport ed Eurosport senza abbinamenti errati tra canali numerati.
+- Migliorate stabilità dei download HLS, gestione delle code e diagnostica.
+
 ## Prossima
 - Riproduzione Rai più robusta: i file video diretti non vengono più interpretati come playlist HLS.
 - Episodio successivo più affidabile: la durata viene confermata dal player prima di aggiornare la cronologia o mostrare l'avviso finale.
