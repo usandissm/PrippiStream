@@ -26,6 +26,15 @@ import os
 import re
 import threading
 import time
+try:
+    from html import unescape as _html_unescape
+except ImportError:  # py2
+    from HTMLParser import HTMLParser
+    _html_unescape = HTMLParser().unescape
+try:
+    from concurrent.futures import ThreadPoolExecutor
+except ImportError:
+    ThreadPoolExecutor = None
 
 try:
     from urllib.request import Request, urlopen
@@ -55,10 +64,47 @@ _chan_lock = threading.Lock()
 _epg_cache = {}
 _epg_lock = threading.Lock()
 
+_SUPERGUIDE_URLS = (
+    'https://www.superguidatv.it/ora-in-onda/',
+    'https://www.superguidatv.it/ora-in-onda/sky-cinema/',
+    'https://www.superguidatv.it/ora-in-onda/sky-intrattenimento/',
+    'https://www.superguidatv.it/ora-in-onda/sky-doc-e-lifestyle/',
+    'https://www.superguidatv.it/ora-in-onda/sky-sport/',
+    'https://www.superguidatv.it/ora-in-onda/sky-news/',
+    'https://www.superguidatv.it/ora-in-onda/dazn/',
+)
+_TVEPG_URLS = (
+    'https://tvepg.eu/it/italia/c/eurosport-1',
+    'https://tvepg.eu/it/italia/c/eurosport-2',
+)
+_RAIPLAY_NOW_URL = 'https://www.raiplay.it/palinsesto/onAir.json'
+_MEDIASET_NOW_URL = 'https://static3.mediasetplay.mediaset.it/apigw/nownext/nownext.json'
+_superguide_cache = {}
+_superguide_loaded_at = 0
+_superguide_lock = threading.Lock()
+_SUPERGUIDE_TTL = 3 * 60
+_GUIDE_ENTRY_TTL = 5 * 60
+_prefetch_guard = threading.Lock()
+_prefetch_running = False
+_last_prefetch_at = 0
+
 # Aliases for channels whose Sky guide name differs from our row title.
 _NAME_ALIASES = {
     'mtv': 'mtv hd',
     'zonadazn': 'dazn 1',   # "Zona DAZN" in Sport row → "DAZN 1" in Sky EPG
+}
+
+_SUPERGUIDE_ALIASES = {
+    'raiuno': 'rai1', 'raidue': 'rai2', 'raitre': 'rai3',
+    'retequattro': 'rete4', 'canale5italia': 'canale5',
+    'italiauno': 'italia1', 'la7d': 'la7d',
+    'discoverygialloitalia': 'giallo', 'discoverygiallo': 'giallo',
+    'skycomedycentral': 'comedycentral', 'crimeinv': 'crimeinvestigation',
+    'skynba': 'skysportbasket', 'skybasket': 'skysportbasket',
+    'dazn1': 'dazn', 'rmc': 'radiomontecarlo', 'tgcom': 'tgcom24',
+    'la7d': 'la7cinema', 'motortrend': 'discoveryturbo',
+    'homeandgardentv': 'hgtvhomegarden', 'hgtv': 'hgtvhomegarden',
+    'warnertv': 'discovery',
 }
 
 # Channels whose EPG name changes dynamically (thematic branded slots).
@@ -106,6 +152,183 @@ def _http_json(url, timeout=12, quiet=False):
         if not quiet:
             logger.error('[SkyEPG] http_json %s: %s' % (url, str(exc)))
         return None
+
+
+def _http_text(url, timeout=12, quiet=False):
+    try:
+        resp = urlopen(Request(url, headers={'User-Agent': _UA,
+                                             'Accept-Language': 'it-IT,it;q=0.9'}), timeout=timeout)
+        data = resp.read()
+        resp.close()
+        if isinstance(data, bytes):
+            data = data.decode('utf-8', 'replace')
+        return data
+    except Exception as exc:
+        if not quiet:
+            logger.error('[SkyEPG] http_text %s: %s' % (url, str(exc)))
+        return ''
+
+
+_SG_CHANNEL_RE = re.compile(
+    r'<a[^>]+href="/programmazione-canale/[^"]+/[^/]+/(\d+)/"[^>]*>(.*?)</a>(.*?)(?=<a[^>]+href="/programmazione-canale/|$)',
+    re.I | re.S)
+_SG_NAME_RE = re.compile(r'<img[^>]+alt="([^"]+)"', re.I)
+_SG_ITEM_RE = re.compile(
+    r'<p[^>]*class="[^"]*font-bold[^"]*"[^>]*>\s*(\d{1,2}:\d{2})\s*</p>.*?'
+    r'<p[^>]*class="[^"]*truncate[^"]*text-(?:lg|base)[^"]*"[^>]*>(.*?)</p>',
+    re.I | re.S)
+_TAG_RE = re.compile(r'<[^>]+>')
+_TVEPG_NAME_RE = re.compile(r'<h3[^>]*>(.*?)</h3>', re.I | re.S)
+_TVEPG_ROW_RE = re.compile(r'<tr>(.*?)</tr>', re.I | re.S)
+_TVEPG_TITLE_RE = re.compile(r'<a[^>]+title="(\d{1,2}:\d{2})\s+([^"]+)"', re.I | re.S)
+
+
+def _clean_html(value):
+    return re.sub(r'\s+', ' ', _html_unescape(_TAG_RE.sub('', value or ''))).strip()
+
+
+def _parse_superguide(html):
+    result = {}
+    for _cid, header, body in _SG_CHANNEL_RE.findall(html or ''):
+        name_match = _SG_NAME_RE.search(header)
+        if not name_match:
+            continue
+        programmes = [(clock, _clean_html(title)) for clock, title in _SG_ITEM_RE.findall(body)]
+        programmes = [(clock, title) for clock, title in programmes if title]
+        if not programmes:
+            continue
+        key = _norm(_clean_html(name_match.group(1)))
+        current = programmes[0]
+        entry = {'prog': current[1], 'start': current[0], 'end': '',
+                 'synopsis': '', 'until': time.time() + _GUIDE_ENTRY_TTL,
+                 'source': 'superguidatv'}
+        # Some event channels expose simultaneous tiles with the same start:
+        # they are alternatives, not a real "next" programme.
+        if len(programmes) > 1 and programmes[1][0] != current[0]:
+            entry['end'] = programmes[1][0]
+            entry['next_start'] = programmes[1][0]
+            entry['next_prog'] = programmes[1][1]
+        result[key] = entry
+    return result
+
+
+def _parse_tvepg(html):
+    """Parse the dedicated Eurosport schedule pages (current + next row)."""
+    name_match = _TVEPG_NAME_RE.search(html or '')
+    rows = _TVEPG_ROW_RE.findall(html or '')
+    if not name_match or not rows:
+        return {}
+    current_index = next((i for i, row in enumerate(rows) if 'progress-bar' in row), None)
+    if current_index is None:
+        current_index = next((i for i, row in enumerate(rows) if 'id="now"' in row), None)
+    if current_index is None:
+        return {}
+    current = _TVEPG_TITLE_RE.search(rows[current_index])
+    following = (_TVEPG_TITLE_RE.search(rows[current_index + 1])
+                 if current_index + 1 < len(rows) else None)
+    if not current:
+        return {}
+    entry = {'prog': _clean_html(current.group(2)), 'start': current.group(1),
+             'end': '', 'synopsis': '', 'until': time.time() + _GUIDE_ENTRY_TTL,
+             'source': 'tvepg'}
+    if following and following.group(1) != current.group(1):
+        entry.update(end=following.group(1), next_start=following.group(1),
+                     next_prog=_clean_html(following.group(2)))
+    return {_norm(_clean_html(name_match.group(1))): entry}
+
+
+def _clock_from_epoch(milliseconds):
+    try:
+        return time.strftime('%H:%M', time.localtime(float(milliseconds) / 1000.0))
+    except Exception:
+        return ''
+
+
+def _official_free_entries():
+    """Current/next data from the broadcasters themselves (Rai and Mediaset)."""
+    result = {}
+    rai = _http_json(_RAIPLAY_NOW_URL, quiet=True) or {}
+    for channel in rai.get('on_air', []):
+        current = channel.get('currentItem') or {}
+        following = channel.get('nextItem') or {}
+        name = channel.get('channel') or current.get('channel')
+        if not name or not current.get('name'):
+            continue
+        result[_norm(name)] = {
+            'prog': current.get('name'), 'start': current.get('hour', ''),
+            'end': following.get('hour', ''), 'synopsis': current.get('description', ''),
+            'next_start': following.get('hour', ''), 'next_prog': following.get('name', ''),
+            'until': time.time() + _GUIDE_ENTRY_TTL, 'source': 'raiplay'
+        }
+
+    mediaset = (_http_json(_MEDIASET_NOW_URL, quiet=True) or {}).get('response', {})
+    listings = mediaset.get('listings', {})
+    for station in mediaset.get('stations', {}).values():
+        callsign = station.get('callSign')
+        guide = listings.get(callsign, {})
+        current = guide.get('currentListing') or {}
+        following = guide.get('nextListing') or {}
+        name = station.get('title')
+        title = current.get('mediasetlisting$epgTitle') or (current.get('program') or {}).get('title')
+        if not name or not title:
+            continue
+        entry = {
+            'prog': title, 'start': _clock_from_epoch(current.get('startTime')),
+            'end': _clock_from_epoch(current.get('endTime')),
+            'synopsis': current.get('description', ''),
+            'next_start': _clock_from_epoch(following.get('startTime')),
+            'next_prog': (following.get('mediasetlisting$epgTitle') or
+                          (following.get('program') or {}).get('title', '')),
+            'until': time.time() + _GUIDE_ENTRY_TTL, 'source': 'mediaset'
+        }
+        if _norm(name) not in result:
+            result[_norm(name)] = entry
+    return result
+
+
+def _superguide_entries(force=False):
+    global _superguide_cache, _superguide_loaded_at
+    now = time.time()
+    with _superguide_lock:
+        if _superguide_cache and not force and now - _superguide_loaded_at < _SUPERGUIDE_TTL:
+            return _superguide_cache
+        merged = _official_free_entries()
+        if ThreadPoolExecutor:
+            pool = ThreadPoolExecutor(max_workers=4)
+            try:
+                urls = _SUPERGUIDE_URLS + _TVEPG_URLS
+                pages = list(pool.map(lambda url: _http_text(url, quiet=True), urls))
+            finally:
+                pool.shutdown(wait=False)
+        else:
+            urls = _SUPERGUIDE_URLS + _TVEPG_URLS
+            pages = [_http_text(url, quiet=True) for url in urls]
+        # The broadcaster feeds above are authoritative. Public guide sites fill
+        # only channels which those feeds do not expose.
+        for index, page in enumerate(pages):
+            parsed = (_parse_superguide(page) if index < len(_SUPERGUIDE_URLS)
+                      else _parse_tvepg(page))
+            for key, entry in parsed.items():
+                if key not in merged:
+                    merged[key] = entry
+        if merged:
+            _superguide_cache = merged
+            _superguide_loaded_at = now
+            logger.info('[SkyEPG] SuperGuidaTV: %d canali' % len(merged))
+        return _superguide_cache
+
+
+def _superguide_for(key, entries):
+    nk = _norm(key)
+    candidates = [nk, _SUPERGUIDE_ALIASES.get(nk, '')]
+    for candidate in candidates:
+        if candidate and candidate in entries:
+            return entries[candidate]
+    wanted_digits = re.findall(r'\d+', nk)
+    matches = [(abs(len(name) - len(nk)), value) for name, value in entries.items()
+               if len(nk) >= 5 and (name in nk or nk in name)
+               and re.findall(r'\d+', name) == wanted_digits]
+    return min(matches, key=lambda pair: pair[0])[1] if matches else None
 
 
 # ── channel map ───────────────────────────────────────────────────────────────
@@ -278,7 +501,7 @@ def _fetch_events(ids, now):
     return None
 
 
-def prefetch(keys):
+def _prefetch(keys):
     """Fetch the currently-airing programme (plus the previous and next ones) for
     every mappable channel *key* (its stable 'par', or a title) in one batched
     /events call and store it in _epg_cache.  Safe to call from a background thread;
@@ -291,13 +514,11 @@ def prefetch(keys):
         cid, off = _resolve(k)
         if cid:
             res[k] = (cid, off)
-    if not res:
-        return 0
     now = _utc_now()
     ids = ','.join(str(c) for c in sorted({cid for cid, _o in res.values()}))
-    data = _fetch_events(ids, now)
+    data = _fetch_events(ids, now) if ids else None
     if not data or 'events' not in data:
-        return 0
+        data = {'events': []}
     # sky id -> [(start, end, event), …] sorted by start
     by_id = {}
     for ev in data['events']:
@@ -308,6 +529,7 @@ def prefetch(keys):
             continue
         by_id.setdefault(cid, []).append((st, en, ev))
     n = 0
+    superguide = _superguide_entries()
     with _epg_lock:
         for k, (cid, off) in res.items():
             evs = by_id.get(cid)
@@ -355,8 +577,35 @@ def prefetch(keys):
                     entry['prev_start'] = _fmt_local(prv[0] - off)
             _epg_cache[_norm(k)] = entry
             n += 1
+        for k in keys:
+            nk = _norm(k)
+            existing = _epg_cache.get(nk)
+            fallback = _superguide_for(k, superguide)
+            # RaiPlay/Mediaset describe their own transmission and therefore
+            # take precedence over the satellite schedule for those channels.
+            authoritative = fallback and fallback.get('source') in ('raiplay', 'mediaset')
+            if existing and now < existing.get('until', 0) and not authoritative:
+                continue
+            if fallback:
+                _epg_cache[nk] = dict(fallback)
+                n += 1
     logger.info('[SkyEPG] prefetch: %d/%d channels now-on-air' % (n, len(res)))
     return n
+
+
+def prefetch(keys):
+    global _prefetch_running, _last_prefetch_at
+    now = time.time()
+    with _prefetch_guard:
+        if _prefetch_running or (now - _last_prefetch_at) < 3 * 60:
+            return 0
+        _prefetch_running = True
+    try:
+        return _prefetch(list(dict.fromkeys(k for k in keys if k)))
+    finally:
+        with _prefetch_guard:
+            _prefetch_running = False
+            _last_prefetch_at = time.time()
 
 
 def now_on(title):

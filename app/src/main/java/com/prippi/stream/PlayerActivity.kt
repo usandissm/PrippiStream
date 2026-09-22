@@ -1828,6 +1828,9 @@ open class PlayerActivity : ComponentActivity() {
         val current = player ?: return
         val duration = current.duration.takeIf { it > 0 && it != C.TIME_UNSET } ?: return
         val position = current.currentPosition.coerceAtLeast(0L)
+        PlaybackDetailSession.item = runCatching {
+            ContentItem.fromJson(JSONObject(contentJson)).withProgress(position, duration)
+        }.getOrNull()
         val remaining = (duration - position).coerceAtLeast(0L)
         if (
             !upNextTriggered &&

@@ -106,6 +106,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
@@ -851,7 +853,9 @@ private fun PrippiApp(
                 AppPage.HOME -> HomePage(
                     state.homeRows,
                     state.loading,
-                    model::showDetail,
+                    { item ->
+                        model.openHomeItem(item, play)
+                    },
                     model::loadHome,
                     isTelevision,
                     tvHomeFocusedRow,
@@ -1019,7 +1023,9 @@ private fun TelevisionApp(
                     AppPage.HOME -> TelevisionHome(
                         rows = state.homeRows,
                         loading = state.loading,
-                        onClick = model::showDetail,
+                        onClick = { item ->
+                            model.openHomeItem(item, play)
+                        },
                         onPlay = { item -> model.play(item, false, play) },
                         onRetry = model::loadHome,
                         focusedRowId = homeFocusedRow,
@@ -1310,14 +1316,12 @@ private fun TelevisionHome(
         }
         hero = candidate
     }
-    // A FocusRequester must not move between recycled lazy-list nodes while the
-    // user is navigating. Freeze the restore target for this recovery cycle.
-    val restoreRowId = remember(focusRecoveryNonce) { focusedRowId }
-    val restoreItemKey = remember(focusRecoveryNonce) { focusedItemKey }
-    val targetRow = rows.indexOfFirst { it.id == restoreRowId }.takeIf { it >= 0 } ?: 0
-    val targetItem = rows.getOrNull(targetRow)?.items?.indexOfFirst {
-        it.stableKey == restoreItemKey
-    }?.takeIf { it >= 0 } ?: 0
+    // Home entry always starts at CW, or the first non-empty row.
+    val targetRow = rows.indexOfFirst { it.id == "continue_watching" && it.items.isNotEmpty() }
+        .takeIf { it >= 0 } ?: rows.indexOfFirst { it.items.isNotEmpty() }.coerceAtLeast(0)
+    val targetItem = 0
+    val rowFocus = remember(rows.map { it.id }) { rows.map { FocusRequester() } }
+    val rowScroll = remember(rows.map { it.id }) { rows.map { androidx.compose.foundation.lazy.LazyListState() } }
     val firstFocus = remember(focusRecoveryNonce) { FocusRequester() }
     val homeListState = rememberLazyListState()
     val homeScrollScope = rememberCoroutineScope()
@@ -1328,7 +1332,7 @@ private fun TelevisionHome(
         mutableIntStateOf(targetRow)
     }
     LaunchedEffect(rows.isNotEmpty(), focusRecoveryNonce) {
-        if (restoreItemKey.isNotBlank()) {
+        if (rows.any { it.items.isNotEmpty() }) {
             homeListState.scrollToItem(targetRow)
             delay(80)
             runCatching { firstFocus.requestFocus() }
@@ -1345,7 +1349,26 @@ private fun TelevisionHome(
             )
         }
         LazyColumn(
-            Modifier.fillMaxWidth().weight(1f).focusGroup(),
+            Modifier.fillMaxWidth().weight(1f).onPreviewKeyEvent { event ->
+                val key = event.nativeKeyEvent.keyCode
+                val vertical = key == android.view.KeyEvent.KEYCODE_DPAD_UP || key == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                if (!vertical) false else {
+                    val step = if (key == android.view.KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
+                    var next = lastFocusedRowIndex + step
+                    while (next in rows.indices && rows[next].items.isEmpty()) next += step
+                    if (next !in rows.indices) false else {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                            homeScrollScope.launch {
+                                homeListState.scrollToItem(next)
+                                rowScroll[next].scrollToItem(0)
+                                withFrameNanos { }
+                                runCatching { rowFocus[next].requestFocus() }
+                            }
+                        }
+                        true
+                    }
+                }
+            }.focusGroup(),
             state = homeListState,
             contentPadding = PaddingValues(
                 top = (10f * dimensions.uiScale).dp,
@@ -1377,6 +1400,7 @@ private fun TelevisionHome(
                             ),
                         )
                         LazyRow(
+                            state = rowScroll[rowIndex],
                             modifier = Modifier.focusGroup(),
                             contentPadding = PaddingValues(
                                 horizontal = dimensions.screenHorizontalPadding,
@@ -1397,7 +1421,8 @@ private fun TelevisionHome(
                                     modifier = if (
                                         rowIndex == targetRow &&
                                         itemIndex == targetItem
-                                    ) Modifier.focusRequester(firstFocus) else Modifier,
+                                    ) Modifier.focusRequester(firstFocus).focusRequester(rowFocus[rowIndex])
+                                    else if (itemIndex == 0) Modifier.focusRequester(rowFocus[rowIndex]) else Modifier,
                                     onFocused = {
                                         pendingHero = item
                                         onFocused(row.id, item.stableKey)
@@ -3373,6 +3398,15 @@ private fun SearchBar(
     television: Boolean = false,
 ) {
     val fieldFocus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val submitSearch = {
+        if (query.isNotBlank()) {
+            keyboard?.hide()
+            focusManager.clearFocus()
+            onSearch()
+        }
+    }
     LaunchedEffect(requestInitialFocus) {
         if (requestInitialFocus) {
             delay(80)
@@ -3390,7 +3424,7 @@ private fun SearchBar(
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
-                onSearch = { if (query.isNotBlank()) onSearch() },
+                onSearch = { submitSearch() },
             ),
             modifier = Modifier
                 .weight(1f)
@@ -3399,7 +3433,7 @@ private fun SearchBar(
         )
         Spacer(Modifier.width(8.dp))
         Button(
-            onClick = onSearch,
+            onClick = submitSearch,
             enabled = query.isNotBlank(),
             modifier = Modifier.tvFocusableFrame(television, RoundedCornerShape(22.dp)),
         ) {
@@ -3459,18 +3493,14 @@ private fun HomePage(
         }
         return
     }
-    // Congela il target soltanto all'ingresso della schermata. In precedenza
-    // ogni movimento del telecomando spostava lo stesso FocusRequester sulla
-    // nuova card e riavviava scroll/requestFocus, creando una tempesta di
-    // ricomposizioni proprio durante gli aggiornamenti progressivi della Home.
-    val restoreRowId = remember(rows.isNotEmpty(), focusRecoveryNonce) { focusedRowId }
-    val restoreItemKey = remember(rows.isNotEmpty(), focusRecoveryNonce) { focusedItemKey }
-    val targetRowIndex = rows.indexOfFirst { it.id == restoreRowId }
-        .takeIf { it >= 0 } ?: 0
-    val targetRow = rows.getOrNull(targetRowIndex)
-    val targetItemIndex = targetRow?.items?.indexOfFirst {
-        it.stableKey == restoreItemKey
-    }?.takeIf { it >= 0 } ?: 0
+    // Same Home entry policy for compact TV layouts.
+    val targetRowIndex = rows.indexOfFirst { it.id == "continue_watching" && it.items.isNotEmpty() }
+        .takeIf { it >= 0 } ?: rows.indexOfFirst { it.items.isNotEmpty() }.coerceAtLeast(0)
+    val targetItemIndex = 0
+    val rowFirstFocus = remember(rows.map { it.id }) { rows.map { FocusRequester() } }
+    val rowStates = remember(rows.map { it.id }) { rows.map { androidx.compose.foundation.lazy.LazyListState() } }
+    val navigationScope = rememberCoroutineScope()
+    var activeRow by remember { mutableIntStateOf(targetRowIndex) }
     val restoredCardFocus = remember { FocusRequester() }
     val columnState = rememberLazyListState()
     LaunchedEffect(
@@ -3485,6 +3515,24 @@ private fun HomePage(
         }
     }
     LazyColumn(
+        modifier = Modifier.onPreviewKeyEvent { event ->
+            val key = event.nativeKeyEvent.keyCode
+            if (!isTelevision || (key != android.view.KeyEvent.KEYCODE_DPAD_UP && key != android.view.KeyEvent.KEYCODE_DPAD_DOWN)) false
+            else {
+                val step = if (key == android.view.KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
+                var next = activeRow + step
+                while (next in rows.indices && rows[next].items.isEmpty()) next += step
+                if (next !in rows.indices) false else {
+                    if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN) navigationScope.launch {
+                        columnState.scrollToItem(next)
+                        rowStates[next].scrollToItem(0)
+                        withFrameNanos { }
+                        runCatching { rowFirstFocus[next].requestFocus() }
+                    }
+                    true
+                }
+            }
+        },
         state = columnState,
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -3498,13 +3546,7 @@ private fun HomePage(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
                 LazyRow(
-                    state = rememberLazyListState(
-                        initialFirstVisibleItemIndex = if (rowIndex == targetRowIndex) {
-                            targetItemIndex
-                        } else {
-                            0
-                        },
-                    ),
+                    state = rowStates[rowIndex],
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
@@ -3531,14 +3573,14 @@ private fun HomePage(
                                 isContinueWatching = row.id == "continue_watching",
                                 onClick = { onClick(item) },
                                 isTelevision = isTelevision,
-                                onFocused = { onItemFocused(row.id, item.stableKey) },
+                                onFocused = { activeRow = rowIndex; onItemFocused(row.id, item.stableKey) },
                                 modifier = if (
                                     rowIndex == targetRowIndex &&
                                     itemIndex == targetItemIndex
                                 ) {
-                                    Modifier.focusRequester(restoredCardFocus)
+                                    Modifier.focusRequester(restoredCardFocus).focusRequester(rowFirstFocus[rowIndex])
                                 } else {
-                                    Modifier
+                                    if (itemIndex == 0) Modifier.focusRequester(rowFirstFocus[rowIndex]) else Modifier
                                 },
                             )
                         }

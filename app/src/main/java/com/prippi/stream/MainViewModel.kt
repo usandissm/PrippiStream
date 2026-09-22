@@ -129,7 +129,7 @@ class MainViewModel(
         liveRefreshJob = viewModelScope.launch {
             // Parte prima della Home e continua finche' tutte le quattro righe Live
             // sono state raccolte. L'ingresso nella pagina non avvia altri probe.
-            repeat(60) {
+            while (true) {
                 while (uiPaused || state.page !in setOf(AppPage.HOME, AppPage.LIVE)) {
                     // Metadata, ricerca, browse e player sono azioni esplicite:
                     // sui dispositivi lenti hanno sempre precedenza sui probe Live.
@@ -158,13 +158,13 @@ class MainViewModel(
                         )
                     }
                 }
-                if (rows.map { it.id }.containsAll(
+                val complete = rows.map { it.id }.containsAll(
                         listOf("live_sky", "live_sport", "live_iptv_dazn", "live_tv"),
                     )
-                ) {
-                    return@launch
-                }
-                delay(5_000)
+                // Once all rows are ready, keep refreshing only guide metadata.
+                // The Python channel catalog remains cached, so this does not
+                // repeat availability probes or reserve IPTV slots.
+                delay(if (complete) 4 * 60_000L else 5_000L)
             }
             // Non blocca per sempre l'app se una sorgente esterna resta appesa.
         }
@@ -280,13 +280,17 @@ class MainViewModel(
         val baseRows = state.homeRows.filterNot { it.id == CONTINUE_ROW_ID }
         state = state.copy(homeRows = withContinueWatching(baseRows))
         state.selectedItem?.let { selected ->
-            val saved = progressStore.find(selected)
+            val saved = progressStore.find(selected.continueWatchingKey)
+            val current = saved?.contentItem()
+            val played = PlaybackDetailSession.item?.takeIf {
+                it.continueWatchingKey == selected.continueWatchingKey
+            }
             state = state.copy(
-                selectedItem = selected.withProgress(
-                    saved?.positionMs ?: 0,
-                    saved?.durationMs ?: 0,
-                ),
+                selectedItem = played ?: (if (selected.isEpisode) current ?: selected else selected).withProgress(
+                    saved?.positionMs ?: 0, saved?.durationMs ?: 0),
                 selectedProgressItem = saved?.contentItem(),
+                selectedSeason = (played ?: current)?.season?.takeIf { it > 0 } ?: state.selectedSeason,
+                episodes = applyStoredProgress(state.episodes),
             )
         }
     }
@@ -617,6 +621,17 @@ class MainViewModel(
                 .takeIf { it.settings.isNotEmpty() }
         }
         state = state.copy(settings = settings, page = AppPage.SETTINGS)
+    }
+
+    fun openHomeItem(item: ContentItem, onPlayback: (ContentItem, List<PlaybackRequest>, Long) -> Unit) {
+        val fromContinue = state.homeRows.any { row ->
+            row.id == CONTINUE_ROW_ID && row.items.any { it.stableKey == item.stableKey }
+        }
+        if (!fromContinue) { showDetail(item); return }
+        play(item, true) { current, requests, position ->
+            onPlayback(current, requests, position)
+            showDetail(current)
+        }
     }
 
     fun showDetail(item: ContentItem) {

@@ -1014,8 +1014,10 @@ def _refresh_live_background():
             live_items = []
             for key in row_keys:
                 live_items += sportchannels.build_items(key) or []
-            epg_keys = [getattr(item, 'sport_par', '') or getattr(item, 'fulltitle', '')
-                        for item in live_items]
+            epg_keys = []
+            for item in live_items:
+                epg_keys.extend((getattr(item, 'sport_par', ''),
+                                 getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
             skyepg.prefetch([key for key in epg_keys if key])
         except Exception as exc:
             logger.error('[bridge] live EPG: %s' % exc)
@@ -1039,12 +1041,20 @@ def live_rows():
     from platformcode import sportchannels
     from platformcode import skyepg
     rows = []
-    for index, key in enumerate(('sky', 'sport', 'iptv_dazn', 'tv')):
-        items = sportchannels.build_items(key) or []
+    built_rows = [(key, sportchannels.build_items(key) or [])
+                  for key in ('sky', 'sport', 'iptv_dazn', 'tv')]
+    epg_keys = []
+    for _key, items in built_rows:
+        for item in items:
+            epg_keys.extend((getattr(item, 'sport_par', ''),
+                             getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
+    skyepg.prefetch(epg_keys)
+    for index, (key, items) in enumerate(built_rows):
         for item in items:
             item._app_live = True
-            epg = skyepg.now_on(getattr(item, 'sport_par', '') or
-                                getattr(item, 'fulltitle', ''))
+            par = getattr(item, 'sport_par', '')
+            display = getattr(item, 'fulltitle', '') or getattr(item, 'title', '')
+            epg = skyepg.now_on(par) or skyepg.now_on(display)
             if epg:
                 when = ('%s–%s' % (epg.get('start', ''), epg.get('end', ''))).strip('–')
                 lines = [u'IN ONDA%s' % (u' · ' + when if when else ''), epg.get('prog', '')]

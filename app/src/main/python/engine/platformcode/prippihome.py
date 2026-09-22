@@ -2665,7 +2665,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if getattr(it, 'is_live_channel', False):
             try:
                 # Look up by the stable 'par' (must match the key prefetch used).
-                epg = skyepg.now_on(getattr(it, 'sport_par', '') or title)
+                epg = skyepg.now_on(getattr(it, 'sport_par', '')) or skyepg.now_on(title)
             except Exception:
                 epg = None
             if epg:
