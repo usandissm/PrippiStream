@@ -2787,6 +2787,40 @@ private fun DownloadsPage(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scale = LocalPrippiDimensions.current.uiScale
+    var pendingRemoval by remember { mutableStateOf<DownloadEntry?>(null) }
+    val cancelRemovalFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(pendingRemoval?.key) {
+        if (isTelevision && pendingRemoval != null) {
+            withFrameNanos { }
+            runCatching { cancelRemovalFocusRequester.requestFocus() }
+        }
+    }
+    pendingRemoval?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingRemoval = null },
+            title = { Text("Eliminare il download?") },
+            text = {
+                Text("Vuoi eliminare \"${entry.displayTitle}\" e rimuovere il file scaricato dal dispositivo?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingRemoval = null
+                        onRemove(entry)
+                    },
+                ) { Text("Elimina") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingRemoval = null },
+                    modifier = Modifier.focusRequester(cancelRemovalFocusRequester),
+                ) { Text("Annulla") }
+            },
+        )
+    }
+    val orderedEntries = remember(entries) {
+        DownloadOrdering.episodesChronologically(entries)
+    }
     val freeBytes = remember(entries) {
         runCatching { StatFs(context.filesDir.absolutePath).availableBytes }.getOrDefault(0L)
     }
@@ -2820,7 +2854,7 @@ private fun DownloadsPage(
             )
             HorizontalDivider()
         }
-        items(entries, key = { it.key }) { entry ->
+        items(orderedEntries, key = { it.key }) { entry ->
             var speedBytesPerSecond by remember(entry.key) { mutableStateOf(0.0) }
             var previousBytes by remember(entry.key) { mutableStateOf(entry.totalBytes) }
             var previousSampleAt by remember(entry.key) { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -2915,7 +2949,7 @@ private fun DownloadsPage(
                             }
                         }
                         if (!entry.isActive) {
-                            IconButton(onClick = { onRemove(entry) }) {
+                            IconButton(onClick = { pendingRemoval = entry }) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = "Elimina download")
                             }
                         }

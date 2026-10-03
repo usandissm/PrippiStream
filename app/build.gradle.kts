@@ -50,8 +50,8 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 92
-        versionName = "0.9.37"
+        versionCode = 93
+        versionName = "0.9.38"
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
 
         // Release universale per box Android 32-bit e dispositivi ARM64.
@@ -66,6 +66,10 @@ android {
                 storePassword = releaseKeystore.getProperty("storePassword")
                 keyAlias = releaseKeystore.getProperty("keyAlias")
                 keyPassword = releaseKeystore.getProperty("keyPassword")
+                // Keep v2 signing and add the legacy JAR signature for older
+                // package installers that otherwise report the APK unsigned.
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }
