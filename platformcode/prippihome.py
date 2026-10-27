@@ -69,6 +69,7 @@ except Exception:
 PY3 = sys.version_info[0] >= 3
 
 _cache = {'data': None, 'ts': 0}
+_yt_trailer_retry_after = 0
 
 
 def _get_fourk():
@@ -86,9 +87,11 @@ def _fourk_if_loaded():
     return _fourk
 
 
-def _refresh_fourk_index():
+def _refresh_fourk_index(stop=None):
     """Import and refresh the optional 4K index from a post-paint worker."""
-    _get_fourk().build_4k_index()
+    stop = stop if stop is not None else _shutdown_event
+    if not stop.is_set():
+        _get_fourk().build_4k_index(cancel=stop.is_set)
 
 
 def _cache_put(d, key, val, cap=400):
@@ -669,7 +672,7 @@ _DL_ROW_LABEL = u'I miei download'
 # when empty — an empty live row means "no channel online right now", which we
 # show as a bare titled row rather than hiding it like the other empty rows.
 _LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'),
-                    sportchannels.row_label('iptv_dazn'), sportchannels.row_label('tv'))
+                    sportchannels.row_label('tv'))
 
 # Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
 # of the home. Sourced live from the animeunity channel (which already handles
@@ -1387,12 +1390,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     pass
             return config.get_setting(key) is False
 
-        # SLOT FISSI PER IDENTITÀ: le 5 righe speciali occupano SEMPRE gli slot
-        # 0-4 (CW=2000, Download=2010, SKY=2020, Sport=2030, TV=2040), anche
+        # SLOT FISSI PER IDENTITÀ: le 6 righe speciali occupano SEMPRE gli slot
+        # 0-5 (CW, Download, SKY, Sport, Eventi Calcio, TV), anche
         # quando spente da setting o vuote: restano in rows_data con [] (il
         # gruppo si nasconde e lo spazio collassa), così le righe successive
-        # NON slittano e ogni riga mantiene il SUO controllo XML — i 5 slot
-        # sono tutti type="list" (non ciclici), le wraplist partono dallo slot 5.
+        # NON slittano e ogni riga mantiene il SUO controllo XML.
         try:
             _dl_items = [] if _row_hidden('show_downloads_row') else (_build_dl_items() or [])
         except Exception as exc:
@@ -1401,14 +1403,15 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self.rows_data.append((_DL_ROW_LABEL, _dl_items))
         _perf_t = perf.mark('home.assembly.download', _perf_t)
 
-        # Live-channel rows (SKY, Sport Live, then TV).  Items play directly on
+        # Live rows: build SKY/Sport/TV, then insert events immediately before TV.
+        # Items play directly on
         # click (handled in onClick), never opening DetailWindow. Le righe spente
         # restano comunque probate in background (_refresh_live_rows), così
         # riattivarle le mostra all'istante con i canali già in cache.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
-        for _row_key in ('sky', 'sport', 'iptv_dazn', 'tv'):
+        for _row_key in ('sky', 'sport', 'tv'):
             _ch_items = []
-            if _row_key.startswith('iptv_') or not _row_hidden(_row_toggle[_row_key]):
+            if not _row_hidden(_row_toggle[_row_key]):
                 try:
                     _ch_items = sportchannels.build_items(_row_key) or []
                     # Prefetch "now on air" for any disk-cached online channels so
@@ -1421,8 +1424,21 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self.rows_data.append((sportchannels.row_label(_row_key), _ch_items))
         _perf_t = perf.mark('home.assembly.live', _perf_t)
 
+        # "Eventi Calcio" row (TheGroove live football events). Seeded from the
+        # disk cache so it paints instantly; _refresh_tg_events swaps in fresh
+        # fetches on a 10 min cycle. Empty/missing cache → empty row, which
+        # _rerender_live_row hides until the first successful fetch lands.
+        try:
+            from platformcode import tgevents as _tg_mod
+            _tg_items = _tg_mod.build_row_items(_tg_mod.load_cached())
+        except Exception as exc:
+            logger.error('[PrippiHome] tg events row build: %s' % str(exc))
+            _tg_items = []
+        # Keep TV last in the Live block: SKY, Sport Live, Events, TV.
+        self.rows_data.insert(len(self.rows_data) - 1, (u'Eventi Calcio', _tg_items))
+
         # Index after the live block. The optional 4K row inserts here so it never
-        # splits Sport from TV (TV must stay right after Sport).
+        # splits the Live block (TV remains its last row).
         _live_block_end = len(self.rows_data)
 
         if self._low_power:
@@ -1454,7 +1470,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # live channels have no watch progress).
         _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
                         sportchannels.row_label('sky'), sportchannels.row_label('tv'),
-                        sportchannels.row_label('iptv_dazn'))
+                        u'Eventi Calcio')
         if cw_items:
             for row_label, row_items in self.rows_data:
                 if row_label in _live_labels:
@@ -1581,6 +1597,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         _t_sport = threading.Thread(target=self._refresh_live_rows)
         _t_sport.daemon = True
         _t_sport.start()
+        # TheGroove "Eventi Calcio" row refresher (10 min cycle, off-thread).
+        _t_tg = threading.Thread(target=self._refresh_tg_events)
+        _t_tg.daemon = True
+        _t_tg.start()
+        _t_event_ui = threading.Thread(target=self._event_ui_tick)
+        _t_event_ui.daemon = True
+        _t_event_ui.start()
         sportchannels.start_keepalive(_shutdown_event)
 
         self._set_loading(8)
@@ -1819,7 +1842,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Launch the non-blocking post-render background jobs."""
         # Import and refresh the optional 4K cache only after first paint.
         if self._alive:
-            t4k_refresh = threading.Thread(target=_refresh_fourk_index)
+            t4k_refresh = threading.Thread(target=_refresh_fourk_index, args=(_shutdown_event,))
             t4k_refresh.daemon = True
             t4k_refresh.start()
 
@@ -1945,7 +1968,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             mon = xbmc.Monitor()
             with self._rows_lock:
                 snapshot = list(enumerate(self.rows_data))
-            for idx, (label, items) in snapshot:
+            for idx, (label, original_items) in snapshot:
+                items = list(original_items or [])
                 if idx < start_idx:
                     continue
                 if not self._alive or mon.abortRequested() or _shutdown_event.is_set():
@@ -1972,7 +1996,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 if items[0].infoLabels.get('_enr'):
                     continue
                 try:
-                    _tmdb_enrich_validated(items)
+                    if _tmdb_enrich_validated(items) is False:
+                        continue
                     for it in items:
                         it.infoLabels['_enr'] = 1
                 except Exception as exc:
@@ -1980,6 +2005,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     continue
                 # Re-render this row's cards so they pick up the official TMDB
                 # HD posters (SC/IPTV posters are lower-res / sometimes unofficial).
+                with self._rows_lock:
+                    same_row = (idx < len(self.rows_data) and self.rows_data[idx][0] == label
+                                and self.rows_data[idx][1] is original_items)
+                if not same_row:
+                    continue
                 if idx in self._populated and self._alive:
                     try:
                         self._refresh_row_cards(idx)
@@ -2076,6 +2106,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if self._pending_select_pos is not None and self._pending_select_pos[0] == wl_id:
             return
         with self._rows_lock:
+            if i >= len(self.rows_data):
+                return
             row_items = list(self.rows_data[i][1])
         if not row_items:
             return
@@ -2093,7 +2125,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             wl.addItems([_item_to_li(it) for it in row_items])
             if cur_pos > 0:
                 try:
-                    wl.selectItem(cur_pos)
+                    wl.selectItem(min(cur_pos, len(row_items) - 1))
                 except Exception:
                     pass
             if currently_focused:
@@ -2163,18 +2195,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 return
             xbmc.sleep(200)
 
-        # Prepara un piccolo gruppo di liste libere mentre l'utente consulta la
-        # Home. Il clic SPORT/DAZN dovrà così fare soltanto il controllo finale
-        # dello slot e non scaricare in quel momento l'intero palinsesto Xtream.
-        try:
-            from platformcode import iptv_pool
-            _pool_warm = threading.Thread(target=iptv_pool.warmup)
-            _pool_warm.daemon = True
-            _pool_warm.name = 'IPTVPoolWarmup'
-            _pool_warm.start()
-        except Exception as exc:
-            logger.debug('[IPTV] warmup start: %s' % exc)
-
         def _refresh_one(row_key):
             if (not self._alive or _shutdown_event.is_set()
                     or _app_monitor.abortRequested()):
@@ -2240,7 +2260,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 return
             with self._rows_lock:
                 self.rows_data[idx] = (label, items)
-            logger.info('[PrippiHome] live row "%s" (#%d) → %d online channels'
+            # The private IPTV pool is validated on acquisition, so a merged
+            # catalog entry is a candidate, not a pre-probed live channel.
+            logger.info('[PrippiHome] live row "%s" (#%d) → %d published channels'
                         % (label, idx, len(items)))
             self._rerender_live_row(idx, items)
             self._prefetch_live_epg(items)
@@ -2250,7 +2272,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # pools together multiplied network threads on the 2 GB box. TV is
             # cheap/official and must appear first; SKY is normally much quicker
             # than the broad Sport probe.
-            for key in ('sky', 'sport', 'iptv_dazn', 'tv'):
+            for key in ('sky', 'sport', 'tv'):
                 if not self._alive or _shutdown_event.is_set():
                     return
                 while (not self._bg_ui_pause.is_set() and self._alive
@@ -2259,7 +2281,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 _refresh_one(key)
         else:
             threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
-                       for k in ('sport', 'sky', 'iptv_dazn', 'tv')]
+                       for k in ('sport', 'sky', 'tv')]
             for t in threads:
                 if _shutdown_event.is_set() or _app_monitor.abortRequested():
                     return
@@ -2319,6 +2341,218 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     self.getControl(lbl_id).setVisible(False)
         except Exception as exc:
             logger.error('[PrippiHome] _rerender_live_row %d: %s' % (i, str(exc)))
+
+    def _event_ui_tick(self):
+        """Refresh clocks/art in-place; never reset the carousel to update a label."""
+        if not self._first_paint.wait(timeout=30):
+            return
+        while self._alive and not _shutdown_event.is_set():
+            for _ in range(30):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                xbmc.sleep(500)
+            try:
+                from platformcode import eventpresentation
+                with self._rows_lock:
+                    rows = [(i, list(items)) for i, (label, items) in enumerate(self.rows_data)
+                            if label == u'Eventi Calcio']
+                for i, items in rows:
+                    if i not in self._populated:
+                        continue
+                    wl = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP)
+                    for pos, item in enumerate(items):
+                        fixture = dict(item.__dict__.get('event_fixture') or {})
+                        fixture.update(sources=item.__dict__.get('_tg_event_sources') or [],
+                                       calendar_url=item.__dict__.get('event_calendar_url') or '')
+                        item.event_status = eventpresentation.event_status(
+                            fixture, playing=bool(item.__dict__.get('event_is_playing')))
+                        li = wl.getListItem(pos)
+                        li.setProperty('event_status', item.event_status)
+                        for side, team in zip(('home', 'away'), eventpresentation.teams(item.title or '')):
+                            li.setProperty('event_' + side + '_badge', eventpresentation.badge(team))
+                    if self._row_from_fid(self.getFocusId()) == i:
+                        self._update_hero(i)
+            except Exception as exc:
+                logger.debug('[Events] UI tick: %s' % str(exc))
+
+    def _probe_focused_event(self, item, row_idx):
+        """Verify ONE focused fixture off-thread; no player or bulk source scans."""
+        from platformcode import eventcalendar
+        route = item.__dict__.get('event_calendar_url') or ''
+        if not route or eventcalendar.verified_state(route) is not None:
+            return
+        if getattr(self, '_event_source_busy', False):
+            return
+        self._event_source_busy = True
+        token = self._hero_nav_token
+        def worker():
+            check_token = None
+            def active():
+                return (self._alive and not _shutdown_event.is_set() and
+                        token == self._hero_nav_token and self._hero_item() is item)
+            try:
+                xbmc.sleep(500)
+                if not active():
+                    return
+                check_token = eventcalendar.begin_source_check(route)
+                if check_token is None:
+                    return
+                self._update_hero(row_idx)
+                candidates = list(item.__dict__.get('_tg_event_sources') or [])
+                try:
+                    extra = eventcalendar.sources(route, timeout=3)
+                    known = {source.get('url') for source in candidates}
+                    candidates.extend(source for source in extra if source.get('url') not in known)
+                except Exception:
+                    # Failure of the supplementary calendar must not suppress a
+                    # working source already supplied by the primary provider.
+                    if not candidates:
+                        raise
+                from platformcode import eventavailability, eventresolver
+                def resolve(source, budget):
+                    path = (eventcalendar.resolve_embed(source, timeout=3) if source.get('calendar_embed')
+                            else source['url'])
+                    return eventresolver.resolve(path, source.get('headers') or {}, budget=budget,
+                                                 active=active, request_timeout=3) if path else []
+                result = eventavailability.check(candidates, resolve, active=active)
+                eventcalendar.finish_source_check(route, check_token, result, cancelled=not active())
+                logger.info('[Events] availability %s: %s' % (
+                    item.title or '', 'reachable' if result is True else
+                    'unavailable' if result is False else 'inconclusive/cancelled'))
+                if active():
+                    self._update_hero(row_idx)
+            except Exception as exc:
+                if check_token is not None:
+                    eventcalendar.finish_source_check(route, check_token, None, cancelled=not active())
+                logger.debug('[Events] focused source discovery: %s' % str(exc))
+            finally:
+                self._event_source_busy = False
+                # Rapid scrolling can cancel this probe while the next hero
+                # update sees busy=True. Retry the NEW focus without waiting 15s.
+                if self._alive and not _shutdown_event.is_set() and token != self._hero_nav_token:
+                    current = self._row_from_fid(self.getFocusId())
+                    if 0 <= current < len(self.rows_data) and self.rows_data[current][0] == u'Eventi Calcio':
+                        self._schedule_hero(current)
+        task = threading.Thread(target=worker)
+        task.daemon = True
+        task.start()
+
+    def _select_row_card(self, row_idx, pos):
+        """Focus the list BEFORE selecting, and refresh the hero for arrow clicks too."""
+        wl_id = ROW_WRAPLIST_BASE + row_idx * ROW_STEP
+        self._populate_single_row(row_idx)
+        wl = self.getControl(wl_id)
+        self.setFocusId(wl_id)
+        wl.selectItem(pos)
+        self._last_focused_row = row_idx
+        self._hover_last = (-1, -1)
+        self._schedule_hero(row_idx)
+
+    def _refresh_tg_events(self):
+        """Background refresher for the "Eventi Calcio" row (TheGroove live
+        football events).
+
+        Fetches every ~10 min — well clear of the server's per-page cooldown
+        (~5 min, same order as its 375 s key-rotation period), so a fetch never
+        lands inside the window where loader.php answers Content-Length: 0.
+        A failed fetch keeps the previous items so a transient error (or an
+        unlucky cooldown hit) never empties the row."""
+        from platformcode import tgevents
+
+        # Cached rows are already painted by _assemble_initial (from disk cache).
+        # Give the first paint a grace period before touching the GUI, same as
+        # _refresh_live_rows — but longer: the first fetch is a real network hit.
+        if not self._first_paint.wait(timeout=30):
+            return
+        grace = 20.0 if self._low_power else 8.0
+        deadline = time.time() + grace
+        while time.time() < deadline:
+            if not self._alive or _shutdown_event.is_set():
+                return
+            xbmc.sleep(200)
+
+        while self._alive and not _shutdown_event.is_set():
+            try:
+                from platformcode import eventcalendar
+                eventcalendar.refresh()
+                cached_events = tgevents.load_cached() or []
+                calendar_items = tgevents.build_row_items(cached_events)
+                with self._rows_lock:
+                    calendar_idx = next((n for n, (label, _) in enumerate(self.rows_data)
+                                         if label == u'Eventi Calcio'), None)
+                    if calendar_idx is not None:
+                        self.rows_data[calendar_idx] = (u'Eventi Calcio', calendar_items)
+                if calendar_idx is not None:
+                    self._rerender_live_row(calendar_idx, calendar_items)
+            except Exception as exc:
+                logger.error('[Events] calendar refresh: %s' % str(exc))
+            # Stay clear of the server's per-page cooldown even when an on-demand
+            # click-refresh ran mid-cycle: if the cache is still younger than the
+            # window, wait out the remainder (abortible 30 s steps) instead of
+            # firing a request that would answer Content-Length: 0. The +1 step
+            # guarantees waking strictly outside the window.
+            age = tgevents.cache_age()
+            if age is not None and age < tgevents.FETCH_COOLDOWN_S:
+                for _ in range(int((tgevents.FETCH_COOLDOWN_S - age) / 30) + 1):
+                    if not self._alive or _shutdown_event.is_set():
+                        return
+                    xbmc.sleep(30 * 1000)
+                continue
+            try:
+                events = tgevents.fetch_events()
+            except Exception as exc:
+                logger.error('[PrippiHome] tg refresh: %s' % str(exc))
+                events = None
+            if (not self._alive or _shutdown_event.is_set()):
+                return
+            if events is not None:
+                # Re-locate the row on every cycle: home may have been rebuilt
+                # (close/reopen) and the index can shift.
+                idx = None
+                with self._rows_lock:
+                    for n, (lbl, _) in enumerate(self.rows_data):
+                        if lbl == u'Eventi Calcio':
+                            idx = n
+                            break
+                if idx is not None:
+                    try:
+                        items = tgevents.build_row_items(events)
+                    except Exception as exc:
+                        logger.error('[PrippiHome] tg build items: %s' % str(exc))
+                        items = []
+                    selected_title = ''
+                    try:
+                        selected_pos = int(self.getControl(ROW_WRAPLIST_BASE + idx * ROW_STEP).getSelectedPosition() or 0)
+                        old_items = self.rows_data[idx][1]
+                        if 0 <= selected_pos < len(old_items):
+                            selected_title = old_items[selected_pos].fulltitle
+                    except Exception:
+                        pass
+                    with self._rows_lock:
+                        if idx < len(self.rows_data):
+                            self.rows_data[idx] = (u'Eventi Calcio', items)
+                    logger.info('[TGEvents] row #%d refreshed: %d events' % (idx, len(items)))
+                    self._rerender_live_row(idx, items)
+                    try:
+                        from platformcode import eventpresentation
+                        eventpresentation.warm_badges(eventcalendar.merge(events))
+                        if not self._alive or _shutdown_event.is_set():
+                            return
+                        items = tgevents.build_row_items(events)
+                        with self._rows_lock:
+                            self.rows_data[idx] = (u'Eventi Calcio', items)
+                        self._rerender_live_row(idx, items)
+                        if selected_title:
+                            selected_pos = next((n for n, value in enumerate(items)
+                                                 if value.fulltitle == selected_title), 0)
+                            self.getControl(ROW_WRAPLIST_BASE + idx * ROW_STEP).selectItem(selected_pos)
+                    except Exception as exc:
+                        logger.error('[Events] badge enrichment: %s' % str(exc))
+            # ~10 min cycle in abortible 30 s steps.
+            for _ in range(20):
+                if not self._alive or _shutdown_event.is_set():
+                    return
+                xbmc.sleep(30 * 1000)
 
     def _bg_fill_4k_row(self):
         """Wait (non-blocking) for the 4K index, then fill the reserved row live."""
@@ -2744,10 +2978,43 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         epg.get('prev_start', ''), epg['prev_prog'])
         try:
             img = fanart or thumb
+            if '_tg_event_sources' in it.__dict__:
+                from platformcode import eventpresentation
+                home_team, away_team = eventpresentation.teams(it.title or '')
+                is_multi = eventpresentation.is_multigol(it.title or '')
+                self.setProperty('event_hero_multi', '1' if is_multi else '')
+                # Re-read disk-cache badges: background downloads may have
+                # completed since the row's Item snapshot was materialized.
+                self.setProperty('event_hero_home', eventpresentation.badge(home_team))
+                self.setProperty('event_hero_away', eventpresentation.badge(away_team))
+                self.setProperty('event_hero_home_initials', '' if is_multi else eventpresentation.initials(home_team))
+                self.setProperty('event_hero_away_initials', eventpresentation.initials(away_team) if away_team and not is_multi else '')
+                self.setProperty('event_hero', '1')
+                self.getControl(BG_FANART).setImage('')
+            else:
+                self.clearProperty('event_hero')
             if img:
                 self.getControl(BG_FANART).setImage(img)
             self.getControl(HERO_TITLE).setLabel('[B]' + title + '[/B]')
             meta = '  •  '.join(p for p in [year, ctype_lbl, lang, rating_str, genre_str] if p)
+            if '_tg_event_sources' in it.__dict__:
+                from platformcode import eventpresentation
+                fixture = dict(it.__dict__.get('event_fixture') or {})
+                fixture.update(sources=it.__dict__.get('_tg_event_sources') or [],
+                               calendar_url=it.__dict__.get('event_calendar_url') or '')
+                live_meta = eventpresentation.event_status(
+                    fixture, playing=bool(it.__dict__.get('event_is_playing')))
+                it.event_status = live_meta
+                try:
+                    self.getControl(ROW_WRAPLIST_BASE + row_idx * ROW_STEP).getListItem(pos).setProperty(
+                        'event_status', live_meta)
+                except Exception:
+                    pass
+                live_plot = (it.__dict__.get('event_league', '') +
+                             '\nOrari italiani · Stato evento basato sul calendario.' +
+                             '\nDisponibilità verificata sul flusso, non sul solo link.' +
+                             '\nLa decodifica video viene verificata all’avvio della riproduzione.')
+                self._probe_focused_event(it, row_idx)
             self.getControl(HERO_META).setLabel(live_meta if live_meta is not None else meta)
             self.getControl(HERO_CATEG).setLabel(self.rows_data[row_idx][0])
             try:
@@ -2902,7 +3169,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 except Exception:
                     pass
 
-        i = self._row_from_fid(control_id)
+        i = self._row_from_nav_fid(control_id)
         if i >= 0:
             self._last_focused_row = i
             self._populate_navigation_window(i)
@@ -3185,6 +3452,14 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         if aid in (ACTION_LEFT, ACTION_RIGHT):
             fid = self.getFocusId()
             i = self._row_from_fid(fid)
+            if i >= 0 and i < len(self.rows_data) and self.rows_data[i][0] == u'Eventi Calcio':
+                items = self.rows_data[i][1]
+                if items:
+                    wl = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP)
+                    pos = int(wl.getSelectedPosition() or 0)
+                    if (aid == ACTION_LEFT and pos == 0) or (aid == ACTION_RIGHT and pos == len(items) - 1):
+                        self._select_row_card(i, len(items) - 1 if aid == ACTION_LEFT else 0)
+                        return
             if i < 0:
                 # BORDO RIGA. Le righe sono <list> (non più <wraplist>: quella teneva
                 # per forza l'elemento selezionato a focusposition=0, così il solo
@@ -3202,9 +3477,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 try:
                     # selectItem prima del focus: sulla lista non focalizzata la
                     # posizione regge (stesso trucco dei bottoni freccia in onClick).
-                    self.getControl(wl_id).selectItem(
-                        len(items) - 1 if aid == ACTION_LEFT else 0)
-                    self.setFocusId(wl_id)
+                    self._select_row_card(i, len(items) - 1 if aid == ACTION_LEFT else 0)
                 except Exception:
                     return
             self._last_focused_row = i
@@ -3409,6 +3682,25 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         elif changed & _row_keys:
             logger.info('[PrippiHome] SC row cache not ready — skipping live row re-render')
 
+    def close(self):
+        """Signal shutdown on Back/Exit immediately, not 0.5s later in open()."""
+        self._alive = False
+        self._hero_nav_token += 1
+        _shutdown_event.set()
+        for name in ('_bg_ui_pause', '_nav_idle', '_nav_kick', '_first_paint'):
+            event = getattr(self, name, None)
+            if event is not None:
+                event.set()
+        try:
+            sportchannels.abort_probes()
+            skyepg.abort_prefetch()
+        except Exception as exc:
+            logger.debug('[Home] stop background: %s' % type(exc).__name__)
+        fourk = _fourk_if_loaded()
+        if fourk is not None:
+            fourk.abort_build()
+        super(PrippiHomeWindow, self).close()
+
     def onClick(self, control_id):
         if control_id == CLOSE_BTN:
             self._alive = False
@@ -3456,7 +3748,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                             new_pos = (pos - ARROW_PAGE_SIZE) % n_items
                         else:
                             new_pos = (pos + ARROW_PAGE_SIZE) % n_items
-                        wl.selectItem(new_pos)
+                        self._select_row_card(i, new_pos)
                 except Exception:
                     pass
                 return
@@ -3469,7 +3761,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     pos = int(self.getControl(wl_id).getSelectedPosition() or 0)
                     if 0 <= pos < len(self.rows_data[i][1]):
                         _it = self.rows_data[i][1][pos]
-                        if getattr(_it, 'is_live_channel', False):
+                        if _it.__dict__.get('_event_calendar_menu'):
+                            self._open_event_calendar()
+                        elif '_tg_event_sources' in _it.__dict__:
+                            # TheGroove football event ("Eventi Calcio"): probe its
+                            # Check actual membership: Item.__getattr__ returns
+                            # an empty string for missing attributes, ignoring
+                            # getattr's default. Empty-source events still route
+                            # here, but normal Live channels must not.
+                            self._play_tg_event(_it, i, pos)
+                        elif getattr(_it, 'is_live_channel', False):
                             if getattr(_it, '_app_live_provider', False):
                                 self._play_provider_live(_it, i, pos)
                             else:
@@ -4733,7 +5034,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             with self._rows_lock:
                 label, items = self.rows_data[row_idx]
                 snapshot = list(items)
-            row_key = next((rk for rk in ('sky', 'sport', 'tv', 'iptv_dazn')
+            row_key = next((rk for rk in ('sky', 'sport', 'tv')
                             if label == sportchannels.row_label(rk)), None)
             if not row_key or not snapshot:
                 return
@@ -4959,6 +5260,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     busy = None
                 par  = getattr(item, 'sport_par', None)
                 kind = getattr(item, 'sport_kind', '')
+                logger.info('[PrippiHome] live resolve start: %s kind=%s' %
+                            (par or item.fulltitle or item.title, kind or '?'))
                 player = _LivePlayer()
 
                 def _dismiss_error_dialog():
@@ -5071,26 +5374,24 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 #   • prefer_ff → that DaddyLive feed needs inputstream.ffmpegdirect
                 #     (muxed-TS that ISA can't decode, e.g. Zona DAZN).
                 _prim = ('validated', lambda: sportchannels.resolve_validated_listitem(item))
+                # The probe only proves a source worked a few seconds earlier.
+                # Live URLs and DNS records can rotate between Home paint and
+                # click, so resolve the normal non-IPTV chain again before
+                # declaring the channel unavailable.
+                _fresh = ('fresh_primary', lambda: sportchannels.resolve_listitem(item))
                 _dad  = ('daddy',    lambda: sportchannels.daddy_listitem(item))
                 _dadf = ('daddy_ff', lambda: sportchannels.daddy_ff_listitem(item))
                 _route = getattr(item, 'sport_validated_route', '')
-                if getattr(item, 'sport_kind', '') == 'iptv':
-                    # Ogni tentativo interroga nuovamente il pool Group-E ed
-                    # esclude l'account appena fallito.  In questo modo una
-                    # collisione sul singolo slot o una lista instabile non
-                    # costringe l'utente a tornare alla Home e riprovare.
-                    candidates = [
-                        ('iptv_pool_1', lambda: sportchannels.resolve_iptv_attempt(item, 0)),
-                        ('iptv_pool_2', lambda: sportchannels.resolve_iptv_attempt(item, 1)),
-                        ('iptv_pool_3', lambda: sportchannels.resolve_iptv_attempt(item, 2)),
-                        ('iptv_pool_4', lambda: sportchannels.resolve_iptv_attempt(item, 3)),
-                    ]
-                elif _route == 'daddy':
-                    # Stessa sorgente validata, con due decoder possibili.
-                    candidates = [_dadf, _prim] if sportchannels.is_prefer_ff(par) else [_prim, _dadf]
+                if _route == 'daddy':
+                    # The backend had selected Daddy during the probe. Try it
+                    # first, then recompute the channel's normal source.
+                    candidates = ([_dadf, _prim, _fresh] if sportchannels.is_prefer_ff(par)
+                                  else [_prim, _dadf, _fresh])
                 else:
-                    # Non provare fallback diversi da quello verificato.
-                    candidates = [_prim]
+                    # A stale primary must not make an otherwise healthy
+                    # channel disappear: retry it fresh, then the ordinary
+                    # non-IPTV Daddy decoders when the channel has a mapping.
+                    candidates = [_prim, _fresh, _dad, _dadf]
 
                 played = False
                 for _src, _resolve in candidates:
@@ -5104,6 +5405,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         logger.error('[PrippiHome] resolve %s %s: %s' % (par, _src, str(exc)))
                         _li = None
                     if not _li:
+                        logger.info('[PrippiHome] live source unavailable: %s via %s' %
+                                    (par or item.fulltitle or item.title, _src))
                         continue                              # this source unavailable → next
                     _close_busy()                             # reveal the player
                     logger.info('[PrippiHome] play %s via %s' % (par, _src))
@@ -5123,7 +5426,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         #    must be re-tried FIRST on every play, so a channel that's
                         #    back online on ClearKey is used instead of DaddyLive.
                         # Only a primary win clears any stale daddy pin.
-                        if _src == 'validated':
+                        if _src in ('validated', 'fresh_primary'):
                             sportchannels.unprefer_daddy(par)
                         sportchannels.unprefer_ff(par)
                         break
@@ -5187,6 +5490,385 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                         busy.close()
                     except Exception:
                         pass
+        t = threading.Thread(target=_worker)
+        t.daemon = True
+        t.start()
+
+    def _open_event_calendar(self):
+        """Choose a date/fixture, never a playback link."""
+        from platformcode import tgevents
+        items = tgevents.build_row_items(tgevents.load_cached() or [], full_calendar=True)
+        groups = {}
+        for event in items:
+            status = event.__dict__.get('event_status', '')
+            day = (event.fulltitle or '').split(' ', 1)[0]
+            if not re.match(r'^\d{2}/\d{2}$', day):
+                day = 'Data non confermata'
+            groups.setdefault(day, []).append(event)
+        days = list(groups)
+        selected = xbmcgui.Dialog().select('Calendario calcio · scegli il giorno', days)
+        if selected < 0:
+            return
+        fixtures = groups[days[selected]]
+        position = xbmcgui.Dialog().select(days[selected], [e.fulltitle for e in fixtures])
+        if position >= 0:
+            self._play_tg_event(fixtures[position])
+
+    def _play_tg_event(self, item, row_idx=None, pos=None):
+        """Play a TheGroove football event ("Eventi Calcio" row).
+
+        Probes the event's sources in priority order — direct HLS first (ISA +
+        pipe headers), plain web/HTTP as last resort; AceStream is already
+        excluded at parse time.  Same worker pattern as _play_channel_stream:
+        busy spinner, per-candidate open+progress verification, home restore on
+        end.  No LiveRemote/zapping session — an event is a one-shot stream."""
+        # Remember where we were so _restore_home() returns focus here.
+        if row_idx is not None:
+            self._last_focused_row = row_idx
+        if pos is not None:
+            self._last_focused_pos = pos
+        if row_idx is not None and pos is not None:
+            self._end_live_remote_session()
+
+        # Play generation: each click supersedes any in-flight play worker so an
+        # older worker can't mistake a NEWER playback for its own (all workers
+        # share one xbmc.Player()).  Captured per worker below.
+        self._play_gen = getattr(self, '_play_gen', 0) + 1
+        my_gen = self._play_gen
+
+        def _worker():
+            busy = None
+            try:
+                from platformcode import tgevents as _tg
+
+                snap_sources = [s for s in (getattr(item, '_tg_event_sources', None) or [])
+                                if isinstance(s, dict) and s.get('url')]
+                sources = list(snap_sources)
+
+                # On-demand refresh: the row's links are a snapshot of the last
+                # background fetch, but streams can change before kickoff. If
+                # that snapshot is older than the server cooldown window, grab
+                # fresh links for THIS event first — bounded wait (12 s), and on
+                # timeout/failure we fall back to the snapshot so playback never
+                # blocks. A successful fetch also re-renders the row so it stays
+                # consistent with what is actually being played.
+                age = _tg.cache_age()
+                if age is None or age >= _tg.FETCH_COOLDOWN_S:
+                    fresh = [None]
+
+                    def _do_fetch():
+                        try:
+                            fresh[0] = _tg.fetch_events()
+                        except Exception as exc:
+                            logger.error('[TGEvents] on-demand fetch: %s' % str(exc))
+
+                    ft = threading.Thread(target=_do_fetch)
+                    ft.daemon = True
+                    ft.start()
+                    ft.join(timeout=12)
+                    if not ft.is_alive() and fresh[0]:
+                        want_full = (item.fulltitle or '').strip()
+                        want_teams = (item.title or '').strip().lower()
+                        match = None
+                        for ev in fresh[0]:
+                            if want_full and (ev.get('fulltitle') or '').strip() == want_full:
+                                match = ev
+                                break
+                        if match is None:
+                            for ev in fresh[0]:
+                                if (ev.get('teams') or '').strip().lower() == want_teams:
+                                    fixture = item.__dict__.get('event_fixture') or {}
+                                    if fixture.get('league'):
+                                        from platformcode.eventpresentation import competition_key
+                                        if competition_key(ev.get('league')) != competition_key(fixture['league']):
+                                            continue
+                                    if (fixture.get('time') and ev.get('time') != fixture['time']):
+                                        continue
+                                    if (fixture.get('date') and ev.get('date') and
+                                            not fixture['date'].startswith(ev['date'])):
+                                        continue
+                                    match = ev
+                                    break
+                        if match is not None and match.get('sources'):
+                            sources = [s for s in match['sources']
+                                       if isinstance(s, dict) and s.get('url')]
+                            item._tg_event_sources = list(match['sources'])
+                            logger.info('[TGEvents] on-demand refresh: fresh links for %s'
+                                        % (item.title or ''))
+                        # Re-locate the row (home may have been rebuilt) and swap
+                        # in the freshly fetched items, same as the refresher.
+                        idx = None
+                        with self._rows_lock:
+                            for n, (lbl, _) in enumerate(self.rows_data):
+                                if lbl == u'Eventi Calcio':
+                                    idx = n
+                                    break
+                        if idx is not None:
+                            try:
+                                items2 = _tg.build_row_items(fresh[0])
+                            except Exception as exc:
+                                logger.error('[TGEvents] on-demand build items: %s' % str(exc))
+                                items2 = []
+                            with self._rows_lock:
+                                if idx < len(self.rows_data):
+                                    self.rows_data[idx] = (u'Eventi Calcio', items2)
+                            try:
+                                self._rerender_live_row(idx, items2)
+                            except Exception as exc:
+                                logger.error('[TGEvents] on-demand rerender: %s' % str(exc))
+
+                # Calendar sources supplement existing sources automatically.
+                # One selected fixture only: no mass opening of monthly pages.
+                calendar_route = item.__dict__.get('event_calendar_url') or ''
+                for source in sources:
+                    source.setdefault('_origin', 'primary')
+                if calendar_route:
+                    try:
+                        from platformcode import eventcalendar
+                        backup_sources = eventcalendar.sources(calendar_route)
+                        for source in backup_sources:
+                            source['_origin'] = 'calendar'
+                        known = {source['url'] for source in sources}
+                        sources.extend(source for source in backup_sources if source['url'] not in known)
+                        logger.info('[Events] fixture %s: %d total (%d calendar candidates)' %
+                                    (item.title or '', len(sources), len(backup_sources)))
+                    except Exception as exc:
+                        logger.error('[Events] fixture source refresh failed: %s' % str(exc))
+
+                # HLS first, web last — the feed's document order is arbitrary.
+                item._tg_event_sources = list(sources)
+                sources.sort(key=lambda s: 0 if s.get('kind') == 'hls' else 1)
+                title = item.fulltitle or item.title or u'Evento'
+
+                def _dismiss_error_dialog():
+                    """A failed player.play() pops Kodi's modal 'Playback failed' OK
+                    dialog.  Left up it blocks the next candidate's playback and
+                    invites a stray keypress that bumps _play_gen — close it so the
+                    candidate chain can proceed cleanly."""
+                    try:
+                        for _w in ('okdialog', 'yesnodialog'):
+                            if xbmc.getCondVisibility('Window.IsVisible(%s)' % _w):
+                                xbmc.executebuiltin('Dialog.Close(%s, true)' % _w)
+                        xbmc.sleep(60)
+                    except Exception:
+                        pass
+
+                def _hls_li(src):
+                    from urllib.parse import urlencode
+                    li = xbmcgui.ListItem(path=src['url'], offscreen=True)
+                    li.setLabel(title)
+                    li.setContentLookup(False)
+                    li.setMimeType("application/x-mpegURL")
+                    li.setProperty("inputstream", "inputstream.adaptive")
+                    li.setProperty("inputstream.adaptive.manifest_type", "hls")
+                    hdr = urlencode({k: v for k, v in (src.get('headers') or {}).items() if v})
+                    # verifypeer=false: match _hls_listitem — several event CDNs
+                    # serve invalid TLS certs and ISA fails before the request out.
+                    hdr += '&verifypeer=false'
+                    li.setProperty("inputstream.adaptive.stream_headers", hdr)
+                    li.setProperty("inputstream.adaptive.manifest_headers", hdr)
+                    return li
+
+                def _web_li(src):
+                    from platformcode import eventresolver
+                    path = src['url']
+                    if src.get('calendar_embed'):
+                        from platformcode import eventcalendar
+                        path = eventcalendar.resolve_embed(src)
+                        if not path:
+                            return None
+                    candidates = eventresolver.resolve(path, src.get('headers') or {})
+                    if not candidates:
+                        logger.info('[Events] native resolver found no stream')
+                        return None
+                    src['_native_alternatives'] = candidates[1:]
+                    resolved = candidates[0]
+                    return _hls_li(resolved)
+
+                def _play_and_verify(_li):
+                    """Play *_li* and confirm it GENUINELY runs: must open within
+                    ≤6 s and then prove decode progress (getTime advances) or stay
+                    up ~3 s uninterrupted.  True/False, None if aborted/superseded."""
+                    player.reset_flags()
+                    _dismiss_error_dialog()                   # clear a leftover modal from a prior candidate
+                    # Kodi can display its modal playback-error dialog inside
+                    # play(), blocking this worker before it can try the next
+                    # candidate. Close only that OK dialog while opening and
+                    # remember it as a failure, not a successful user stop.
+                    opening_done = threading.Event()
+                    error_dialog_seen = threading.Event()
+
+                    def _watch_open_error():
+                        while not opening_done.wait(0.1):
+                            if (not self._alive or _shutdown_event.is_set()
+                                    or my_gen != self._play_gen):
+                                return
+                            try:
+                                if xbmc.getCondVisibility('Window.IsVisible(okdialog)'):
+                                    error_dialog_seen.set()
+                                    xbmc.executebuiltin('Dialog.Close(okdialog, true)')
+                            except Exception:
+                                pass
+
+                    watchdog = threading.Thread(target=_watch_open_error)
+                    watchdog.daemon = True
+                    watchdog.start()
+                    try:
+                        player.play(_li.getPath(), _li)
+                    finally:
+                        opening_done.set()
+                    if error_dialog_seen.is_set():
+                        return False
+                    mon = xbmc.Monitor()
+                    opened = False
+                    for _ in range(12):                       # ≤6 s to open
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if player.isPlaying():
+                            opened = True
+                            break
+                        if player.playback_error or player.playback_ended:
+                            return False                      # open failed fast → next candidate now
+                        # A failed open or stopping the previous player can emit
+                        # onPlayBackStopped before onPlayBackError. Before this
+                        # candidate has opened, that is not proof of success.
+                        xbmc.sleep(500)
+                    if not opened:
+                        for _ in range(6):                    # ≤600 ms grace
+                            if player.playback_error or player.playback_ended:
+                                break
+                            xbmc.sleep(100)
+                        return False
+                    base_t = None
+                    stable = 0
+                    proof_checks = 40 if deviceprofile.is_low_power() else 16
+                    for _ in range(proof_checks):
+                        xbmc.sleep(500)
+                        if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
+                            return None
+                        if not player.isPlaying():
+                            # isPlaying() flips False a beat before the onPlayBack*
+                            # callback lands — wait for it, then only a real
+                            # EOF/error counts as a failure.
+                            for _ in range(8):                # ≤800 ms grace for the callback
+                                if player.user_stopped or player.playback_error or player.playback_ended:
+                                    break
+                                xbmc.sleep(100)
+                            if player.playback_error or player.playback_ended:
+                                return False                  # genuine EOF/error → failed
+                            if player.user_stopped:
+                                return None                   # user watched/left; stop retrying
+                            return True                       # opened & ran, no failure signal → keep
+                        stable += 1
+                        try:
+                            t = player.getTime()
+                        except Exception:
+                            t = 0
+                        if base_t is None:
+                            base_t = t
+                        elif t - base_t > 0.5:
+                            return True                       # decoding & advancing → real
+                        if stable >= 6:                       # ~3 s uninterrupted = OK
+                            return True
+                    return False
+
+                player = _LivePlayer()
+
+                if not sources:
+                    if calendar_route:
+                        eventcalendar.report_source_result(calendar_route, False)
+                    xbmcgui.Dialog().notification(
+                        'PrippiStream', u'Nessuna fonte disponibile al momento: evento programmato o link non ancora pubblicati',
+                        item.thumbnail or xbmcgui.NOTIFICATION_INFO, 4000)
+                    return
+
+                try:
+                    busy = xbmcgui.DialogBusy()
+                    busy.create()
+                except Exception:
+                    busy = None
+
+                def _close_busy():
+                    if busy is not None:
+                        try:
+                            busy.close()
+                        except Exception:
+                            pass
+
+                from platformcode import eventquality
+                def _resolve_candidate(source):
+                    return _hls_li(source) if source.get('kind') == 'hls' else _web_li(source)
+
+                ranked_sources = eventquality.prepare(
+                    sources, _resolve_candidate,
+                    active=lambda: (self._alive and not _shutdown_event.is_set()
+                                    and my_gen == self._play_gen))
+                logger.info('[Events] quality order (height, bitrate): %s' %
+                            str([quality for _, _, quality in ranked_sources]))
+                played = False
+                for source_index, (src, prepared_li, quality) in enumerate(ranked_sources, 1):
+                    if my_gen != self._play_gen:
+                        _close_busy()
+                        return
+                    try:
+                        li = prepared_li or _resolve_candidate(src)
+                    except Exception as exc:
+                        logger.error('[TGEvents] listitem %s: %s' % (src['url'][:80], str(exc)))
+                        continue
+                    if not li:
+                        logger.info('[TGEvents] source %d could not be resolved' % source_index)
+                        continue
+                    logger.info('[TGEvents] attempting source %d/%d (%s, quality=%s)' %
+                                (source_index, len(ranked_sources), src.get('kind', '?'), quality))
+                    try:
+                        ok = _play_and_verify(li)
+                    except Exception as exc:
+                        logger.error('[TGEvents] source %d failed: %s' % (source_index, str(exc)))
+                        ok = False
+                    if ok is None:                            # aborted/superseded
+                        _close_busy()
+                        return
+                    if ok:
+                        played = True
+                        item.event_is_playing = True
+                        if calendar_route:
+                            eventcalendar.report_source_result(calendar_route, True)
+                        break
+                    logger.info('[TGEvents] source %d failed, trying next' % source_index)
+                    for alternative in src.pop('_native_alternatives', []):
+                        if not any(existing.get('url') == alternative['url'] for existing, _, _ in ranked_sources):
+                            ranked_sources.append((alternative, None, (0, 0)))
+                    _dismiss_error_dialog()
+
+                _close_busy()
+                if not played:
+                    if calendar_route:
+                        eventcalendar.report_source_result(calendar_route, False)
+                    xbmcgui.Dialog().notification(
+                        'PrippiStream', u'Nessuna fonte funzionante per questo evento',
+                        item.thumbnail or xbmcgui.NOTIFICATION_INFO, 4000)
+                    return
+
+                # Good source — wait for it to end, then restore the home.
+                monitor = xbmc.Monitor()
+                while player.isPlaying():
+                    if not self._alive or monitor.abortRequested():
+                        return
+                    if my_gen != self._play_gen:
+                        return  # another play took over
+                    xbmc.sleep(500)
+                if self._alive and my_gen == self._play_gen:
+                    item.event_is_playing = False
+                    self._restore_home()
+            except Exception as exc:
+                logger.error('[PrippiHome] _play_tg_event: %s' % str(exc))
+                if busy:
+                    try:
+                        busy.close()
+                    except Exception:
+                        pass
+            finally:
+                item.event_is_playing = False
         t = threading.Thread(target=_worker)
         t.daemon = True
         t.start()
@@ -6414,6 +7096,11 @@ def _item_to_li(item):
     li.setProperty('plot',         plot)
     li.setProperty('rating',       str(item.infoLabels.get('rating') or ''))
     li.setProperty('genre',        str(item.infoLabels.get('genre') or ''))
+    if '_tg_event_sources' in item.__dict__:
+        li.setProperty('event_card', '1')
+        for key in ('event_multi', 'event_home_badge', 'event_away_badge', 'event_home_initials',
+                    'event_away_initials', 'event_status', 'event_league'):
+            li.setProperty(key, str(item.__dict__.get(key) or ''))
     # Kodi 21 deprecates per-card setInfo() and emitted hundreds of warnings on
     # the box. The skin reads the lightweight ListItem properties above; set the
     # basic VideoInfoTag fields directly only for consumers outside the skin.
@@ -7523,14 +8210,15 @@ def _tmdb_enrich_validated(items):
     positives across IT/EN/native-script titles and still can't separate
     word-overlapping mismatches. On a hit we strip tmdb_id/imdb_id and restore
     SC's own (self-consistent) poster/title/plot."""
+    items = list(items or [])  # a provider/background append must not shift sc_snap
     if not items:
-        return
+        return True
     # Hard choke point: skip ALL TMDB enrichment while a download runs. TMDB
     # responses are large JSON; parsing them holds the Python GIL for long
     # stretches and starves the download's writer thread.
     if _dl_active():
         logger.info('[PrippiHome] enrich skipped — download active')
-        return
+        return False
     from core import tmdb as _tmdb
 
     # Snapshot SC-provided data BEFORE enrichment overwrites it.
@@ -7543,7 +8231,10 @@ def _tmdb_enrich_validated(items):
         'fanart': it.fanart or '',
     } for it in items]
 
-    _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True)
+    stop = _shutdown_event
+    _tmdb.set_infoLabels_itemlist(items, seekTmdb=True, forced=True, cancel=stop.is_set)
+    if stop.is_set():
+        return False
 
     for i, it in enumerate(items):
         snap = sc_snap[i]
@@ -7581,6 +8272,7 @@ def _tmdb_enrich_validated(items):
                 it.infoLabels['plot'] = snap['plot']
             it.thumbnail = snap['thumb']
             it.fanart = snap['fanart'] or snap['thumb']
+    return True
 
 
 def _fetch_main_rows(progress_cb=None):
@@ -8322,6 +9014,10 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
 
     def _start_trailer(self, trailer_url):
         """Delay slightly then fire PlayMedia so the window is fully rendered first."""
+        global _yt_trailer_retry_after
+        youtube = str(trailer_url or '').startswith('plugin://plugin.video.youtube/')
+        if youtube and time.time() < _yt_trailer_retry_after:
+            return  # keep the detail poster instead of repeatedly launching a broken dependency
         # Check close flag before the initial delay: if user already pressed back, skip entirely
         if self._close_requested:
             return
@@ -8331,6 +9027,14 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
             if self._close_requested:
                 return
         try:
+            if youtube:
+                try:
+                    xbmcaddon.Addon('plugin.video.youtube')
+                except Exception:
+                    _yt_trailer_retry_after = time.time() + 120
+                    xbmcgui.Dialog().notification('Trailer non disponibile',
+                        'Addon YouTube non disponibile.', xbmcgui.NOTIFICATION_INFO, 3500)
+                    return
             # Configure YouTube plugin subtitles / quality (persistent but harmless settings)
             try:
                 yt = xbmcaddon.Addon('plugin.video.youtube')
@@ -8366,6 +9070,11 @@ class DetailWindow(xbmcgui.WindowXMLDialog):
                 xbmc.sleep(100)
                 if self._player.isPlaying():
                     break
+            if youtube and not self._player.isPlaying() and not self._close_requested:
+                _yt_trailer_retry_after = time.time() + 120
+                logger.info('[Trailer] YouTube did not start: suppressing automatic retries for 120s')
+                xbmcgui.Dialog().notification('Trailer non disponibile',
+                    'Verifica addon YouTube e connessione.', xbmcgui.NOTIFICATION_INFO, 3500)
             if self._player.isPlaying() and not self._close_requested:
                 # Hide fanart so the videowindow (behind it) becomes visible
                 try:
@@ -11071,6 +11780,9 @@ def _br_is_korean(it):
     return ('KR' in oc) or ('Korea' in oc) or ('Corea' in oc)
 
 
+_br_genre_cache_expiry = {}
+
+
 def _br_fetch_genres(macro):
     """Return [{'name','sc_id','anime_item'}] for *macro*. Cached per macro.
 
@@ -11078,7 +11790,7 @@ def _br_fetch_genres(macro):
     Serie & K-Drama tv+all — otherwise picking a wrong-type genre returns ~0
     titles (e.g. the TV genre 'Action & Adventure' under Film gave 1 result).
     """
-    if macro in _br_genre_cache:
+    if macro in _br_genre_cache and time.time() < _br_genre_cache_expiry.get(macro, 0):
         return _br_genre_cache[macro]
     genres = [{'name': 'Tutti', 'sc_id': None, 'anime_item': None}]
     try:
@@ -11090,6 +11802,8 @@ def _br_fetch_genres(macro):
             want = ('movie', 'all') if macro == 'film' else ('tv', 'all')
             picked, seen = [], set()
             for g in raw:
+                if not isinstance(g, dict):
+                    continue
                 if g.get('type') not in want:
                     continue
                 name = (g.get('name') or '').strip()
@@ -11159,6 +11873,7 @@ def _br_fetch_genres(macro):
     except Exception as exc:
         logger.error('[Browse] genres %s: %s' % (macro, str(exc)[:160]))
     _br_genre_cache[macro] = genres
+    _br_genre_cache_expiry[macro] = time.time() + (900 if len(genres) > 1 else 45)
     return genres
 
 
@@ -12323,7 +13038,9 @@ def open_prippi_home():
     # Clear a stale flag from a previous home BEFORE checking Kodi. Clearing it
     # after the check lost an abort delivered in between and let onInit create a
     # new window while Kodi was already destroying controls (1.9.954 race).
-    _shutdown_event.clear()
+    global _shutdown_event
+    # A new generation must not clear the stop flag captured by old workers.
+    _shutdown_event = threading.Event()
     try:
         from platformcode import live_remote
         live_remote.clear_session()
@@ -12340,6 +13057,7 @@ def open_prippi_home():
     # state that would deadlock playback.  Reset them for a clean slate.
     try:
         sportchannels.reset_state()
+        skyepg.resume_prefetch()
     except Exception:
         pass
     win = PrippiHomeWindow('PrippiHome.xml', config.get_runtime_path())
@@ -12356,6 +13074,9 @@ def open_prippi_home():
     except Exception:
         pass
     _shutdown_event.set()     # unblocks all BG network threads immediately
+    skyepg.abort_prefetch()
+    if _fourk_if_loaded() is not None:
+        _fourk_if_loaded().abort_build()
     try:
         sportchannels.abort_probes()   # stop any running probe from blocking exit
     except Exception:

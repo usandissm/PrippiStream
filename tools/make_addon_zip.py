@@ -3,7 +3,6 @@ import os
 import re
 import shutil
 import hashlib
-import json
 
 # Percorso root relativo a questo script (funziona su Linux/Windows/GitHub Actions)
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,7 +19,8 @@ os.makedirs(docs_dir, exist_ok=True)
 
 out = os.path.join(docs_dir, f'{addon_id}-{version}.zip')
 
-exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.vscode',
+exclude_names = {'.git', '.github', '.claude', '.agents', '.codex', 'private_iptv',
+                 'docs', 'tools', 'tests', '__pycache__', '.vscode',
                  '.codex-log-analysis', '.pytest_cache', 'reports',
                  '.codex-artifacts', '.codex_spreadsheet_work', '.continue',
                  'outputs', 'release-output', 'tmp', 'workspace', 'tizen',
@@ -42,7 +42,11 @@ exclude_names = {'.git', '.github', 'docs', 'tools', 'tests', '__pycache__', '.v
                  # screenshot dello store: il repo GitHub li legge dal git, non
                  # servono nello zip installato (~1,5MB risparmiati)
                  'screenshot-1.png', 'screenshot-2.png', 'screenshot-3.png'}
-exclude_ext = {'.pyc', '.pyo', '.zip', '.apk'}
+exclude_ext = {'.pyc', '.pyo', '.zip', '.apk', '.log', '.dmp'}
+runtime_dirs = {'channels', 'core', 'lib', 'platformcode', 'resources', 'servers', 'specials'}
+runtime_root_files = {'addon.xml', 'changelog.txt', 'channels.json', 'channelselector.py',
+                      'default.py', 'default_channel_settings.json', 'service.py',
+                      '__init__.py', 'LICENSE', 'README.md', 'CONTRIBUTING.md'}
 # Development-only content shipped inside vendored libraries. Match complete
 # relative path prefixes: generic directory names such as "test" may be used by
 # runtime providers elsewhere and must not be excluded globally.
@@ -52,6 +56,7 @@ exclude_path_prefixes = (
     'lib/torrentool/repo/',
 )
 exclude_paths = {
+    'platformcode/eventfeed.py',  # superseded local prototype, not used by this release
     'lib/future/README.rst',
     'lib/future/CONTRIBUTING.rst',
 }
@@ -66,8 +71,11 @@ if os.path.exists(tmp_out):
 with zipfile.ZipFile(tmp_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
     for dirpath, dirnames, files in os.walk(root_dir):
         # Rimuovi le cartelle escluse dalla ricerca
-        dirnames[:] = sorted(d for d in dirnames if d not in exclude_names)
+        dirnames[:] = sorted(d for d in dirnames if d not in exclude_names
+                             and (dirpath != root_dir or d in runtime_dirs))
         for file in sorted(files):
+            if dirpath == root_dir and file not in runtime_root_files:
+                continue
             if file in exclude_names:
                 continue
             _, ext = os.path.splitext(file)
@@ -90,38 +98,6 @@ with zipfile.ZipFile(tmp_out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
             zf.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED,
                         compresslevel=9)
 
-    # I dati IPTV restano fuori da Git, ma vanno inseriti entrambi nella
-    # release locale: senza catalogo una nuova installazione mostrerebbe solo
-    # ClearKey pur avendo il pool account. I client restano indipendenti: ogni
-    # play verifica live active_cons/max_connections sul provider.
-    kodi_data = os.path.join(os.environ.get('APPDATA', ''), 'Kodi', 'userdata',
-                             'addon_data', addon_id)
-    seed_specs = (
-        ('iptv_accounts.json', 'accounts'),
-        ('iptv_catalog.json', 'items'),
-    )
-    for seed_name, collection_key in seed_specs:
-        source = os.path.join(kodi_data, seed_name)
-        if not os.path.isfile(source):
-            raise RuntimeError('Seed IPTV richiesto ma assente: %s' % source)
-        with open(source, 'rb') as seed_file:
-            seed_data = seed_file.read()
-        try:
-            seed_json = json.loads(seed_data.decode('utf-8-sig'))
-            seed_count = len(seed_json.get(collection_key, []))
-        except Exception as exc:
-            raise RuntimeError('Seed IPTV non valido (%s): %s' % (seed_name, exc))
-        if not seed_count:
-            raise RuntimeError('Seed IPTV vuoto: %s' % seed_name)
-        seed_info = zipfile.ZipInfo(
-            addon_id + '/resources/data/' + seed_name, ZIP_TIMESTAMP)
-        seed_info.compress_type = zipfile.ZIP_DEFLATED
-        seed_info.external_attr = 0o600 << 16
-        seed_info.create_system = 3
-        zf.writestr(seed_info, seed_data, compress_type=zipfile.ZIP_DEFLATED,
-                    compresslevel=9)
-        print('Seed IPTV incluso: %s (%d voci)' % (seed_name, seed_count))
-
 os.replace(tmp_out, out)
 
 # Mantieni nella cartella docs solo l'artefatto appena completato. La pulizia
@@ -139,6 +115,7 @@ print(f'ZIP addon creato: {out}')
 # contenuto del pacchetto, quindi non puo' finire ricorsivamente nella build.
 install_copy = os.path.join(root_dir, os.path.basename(out))
 shutil.copy2(out, install_copy)
+shutil.copy2(out, os.path.join(root_dir, 'docs', addon_id + '.zip'))
 print(f'ZIP pronto per installazione: {install_copy}')
 with open(out, 'rb') as _f:
     digest = hashlib.sha256(_f.read()).hexdigest().upper()

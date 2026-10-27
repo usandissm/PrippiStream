@@ -3,7 +3,7 @@
 # Canale per AnimeUnity
 # ------------------------------------------------------------
 
-import json, copy, inspect
+import json, copy, inspect, time
 from core import jsontools, support, httptools, scrapertools
 from platformcode import autorenumber, logger, config
 
@@ -34,6 +34,7 @@ _UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
 _session = None
 _headers = None        # headers for the get-animes XHR (built after a successful init)
 _archivio_data = None  # raw /archivio HTML (genres/years parse it)
+_init_failure_until = 0
 
 
 def _get_session():
@@ -87,8 +88,10 @@ def _ensure_init(_retry=True):
     on failure it re-discovers the domain via findhost and retries once. Leaves
     _headers None (falsy) on terminal failure so a later call retries instead of
     caching the broken state."""
-    global _headers, _archivio_data
+    global _headers, _archivio_data, _init_failure_until
     if _headers:   # truthy only after a successful init
+        return
+    if time.time() < _init_failure_until:
         return
     try:
         s = _get_session()
@@ -101,6 +104,7 @@ def _ensure_init(_retry=True):
         if r.status_code >= 400 or not token:
             raise Exception('archivio code=%s csrf=%s' % (r.status_code, bool(token)))
         _archivio_data = data
+        _init_failure_until = 0
         _headers = {
             'Content-Type': 'application/json;charset=UTF-8',
             'X-CSRF-TOKEN': token,
@@ -114,6 +118,7 @@ def _ensure_init(_retry=True):
             return _ensure_init(_retry=False)
         _headers = None
         _archivio_data = None
+        _init_failure_until = time.time() + 45
 
 
 @support.menu
@@ -152,26 +157,46 @@ def genres(item):
     support.info()
     _ensure_init()
     itemlist = []
-
-    genres = json.loads(support.match(_archivio_data, patron='genres="([^"]+)').match.replace('&quot;','"'))
+    if not isinstance(_archivio_data, str) or not _archivio_data:
+        return []
+    raw = support.match(_archivio_data, patron='genres="([^"]+)').match
+    if not isinstance(raw, str) or not raw:
+        return []
+    try:
+        genres = json.loads(raw.replace('&quot;', '"'))
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(genres, list):
+        return []
 
     for genre in genres:
-        item.args['genres'] = [genre]
-        itemlist.append(item.clone(title=support.typo(genre['name'],'bold'), action='peliculas'))
+        if not isinstance(genre, dict) or not isinstance(genre.get('name'), str):
+            continue
+        args = dict(item.args) if isinstance(item.args, dict) else {}
+        args['genres'] = [genre]
+        itemlist.append(item.clone(title=support.typo(genre['name'],'bold'), action='peliculas', args=args))
     return support.thumb(itemlist)
 
 def years(item):
     support.info()
     _ensure_init()
     itemlist = []
+    if not isinstance(_archivio_data, str) or not _archivio_data:
+        return []
 
     from datetime import datetime
     next_year = datetime.today().year + 1
-    oldest_year = int(support.match(_archivio_data, patron='anime_oldest_date="([^"]+)').match)
+    try:
+        oldest_year = int(support.match(_archivio_data, patron='anime_oldest_date="([^"]+)').match)
+    except (TypeError, ValueError):
+        return []
+    if not 1900 <= oldest_year <= next_year:
+        return []
 
     for year in list(reversed(range(oldest_year, next_year + 1))):
-        item.args['year']=year
-        itemlist.append(item.clone(title=support.typo(year,'bold'), action='peliculas'))
+        args = dict(item.args) if isinstance(item.args, dict) else {}
+        args['year'] = year
+        itemlist.append(item.clone(title=support.typo(year,'bold'), action='peliculas', args=args))
     return itemlist
 
 

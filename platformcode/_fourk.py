@@ -18,7 +18,7 @@ import os
 import re
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from platformcode.taskpool import map_background
 
 from platformcode import config, logger, deviceprofile
 
@@ -56,6 +56,42 @@ _index_by_tmdb = {}        # int tmdb_id → {"stream_url","name","year","poster
 _ready         = False     # True after first successful build
 _building      = False     # True while a build is in progress
 _lock          = threading.Lock()
+_build_stop = threading.Event()
+_last_attempt = 0
+
+
+def abort_build():
+    _build_stop.set()
+
+
+def _validated_movies(values):
+    result = {}
+    if not isinstance(values, dict):
+        return result
+    for key, value in values.items():
+        try:
+            tid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if tid > 0 and isinstance(value, dict) and isinstance(value.get('stream_url'), str):
+            result[tid] = value
+    return result
+
+
+def _validated_streams(values):
+    if not isinstance(values, list):
+        return None
+    result = []
+    for value in values:
+        if not isinstance(value, dict) or not isinstance(value.get('name'), str):
+            continue
+        try:
+            sid = int(value.get('stream_id', 0))
+        except (TypeError, ValueError):
+            continue
+        if sid > 0 and value['name'].strip() and not value['name'].startswith('-----'):
+            result.append(dict(value, stream_id=sid))
+    return result
 
 
 # ── DNS fallback via DoH ────────────────────────────────────────────────
@@ -130,8 +166,8 @@ def _http_get(url, timeout=12):
                     logger.info('[4K] DNS fallback succeeded for %s' % parsed.hostname)
                     return resp2, resp2.geturl()
                 except Exception as exc2:
-                    logger.error('[4K] DoH fallback request failed for %s: %s' % (url[:80], str(exc2)))
-        logger.error('[4K] HTTP error for %s: %s' % (url[:80], exc_str))
+                    logger.error('[4K] DoH fallback failed host=%s error=%s' % (urlparse(url).hostname, type(exc2).__name__))
+        logger.error('[4K] HTTP request failed host=%s error=%s' % (urlparse(url).hostname, type(exc).__name__))
         return None, None
 
 
@@ -139,7 +175,10 @@ def _http_get_body(url, timeout=12):
     """HTTP GET returning decoded string or None."""
     resp, _ = _http_get(url, timeout)
     if resp:
-        return resp.read().decode('utf-8', errors='ignore')
+        try:
+            return resp.read().decode('utf-8', errors='ignore')
+        finally:
+            resp.close()
     return None
 
 
@@ -191,7 +230,7 @@ def _resolve_stream_url(sid, ext):
                     logger.info('[4K] Captured CDN redirect for sid=%d: %s' % (sid, location[:80]))
                     return location
     except Exception as exc:
-        logger.error('[4K] _resolve_stream_url failed for sid=%d: %s' % (sid, str(exc)))
+        logger.error('[4K] _resolve_stream_url failed for sid=%d: %s' % (sid, type(exc).__name__))
 
     # Fallback: return the hostname URL; get_resolved_url will rewrite host to IP
     return url
@@ -200,7 +239,7 @@ def _resolve_stream_url(sid, ext):
 def _api(action, params=''):
     """Call Xtream Codes API, return parsed JSON or None."""
     url = '%s?%s&action=%s%s' % (_API_BASE, _API_AUTH, action, params)
-    body = _http_get_body(url)
+    body = _http_get_body(url, timeout=4)
     if not body:
         return None
     try:
@@ -216,7 +255,7 @@ def _fetch_vod_info(stream_id):
     for attempt in range(2):
         try:
             data = _api('get_vod_info', '&vod_id=%s' % stream_id)
-            if data and 'info' in data:
+            if isinstance(data, dict) and isinstance(data.get('info'), dict):
                 info = data['info']
                 tmdb_id = info.get('tmdb_id')
                 # Fallback: parse tmdb_id from tmdb_url
@@ -250,16 +289,21 @@ def _extract_year(name):
 
 # ── Public API ──────────────────────────────────────────────────────────
 
-def build_4k_index():
+def build_4k_index(cancel=None):
     """(Re)build the 4K index. Call from a background thread at startup."""
-    global _index_by_tmdb, _ready, _building
+    global _index_by_tmdb, _ready, _building, _build_stop, _last_attempt
 
     # Prevent concurrent builds
     with _lock:
-        if _building:
+        if _building or time.time() - _last_attempt < 60:
             logger.info('[4K] Build already in progress, skipping')
             return
         _building = True
+        _last_attempt = time.time()
+        _build_stop = threading.Event()
+        stop = _build_stop
+    def cancelled():
+        return stop.is_set() or bool(cancel and cancel())
 
     try:
         # ── Check cache first ──
@@ -269,29 +313,35 @@ def build_4k_index():
             if os.path.exists(cache_path):
                 with open(cache_path, 'r', encoding='utf-8') as f:
                     cache = json.load(f)
-                if (time.time() - cache.get('ts', 0) < _CACHE_TTL
+                if not isinstance(cache, dict):
+                    raise ValueError('invalid cache schema')
+                movies = _validated_movies(cache.get('movies'))
+                if (movies and time.time() - cache.get('ts', 0) < _CACHE_TTL
                         and cache.get('ver') == _CACHE_VERSION):
                     with _lock:
-                        _index_by_tmdb = {int(k): v for k, v in cache.get('movies', {}).items()}
+                        _index_by_tmdb = movies
                         _ready = True
                     logger.info('[4K] Cache hit: %d movies' % len(_index_by_tmdb))
                     return
                 # Cache expired but keep it as fallback
-                _old_cache = cache
+                _old_cache = movies
         except Exception as exc:
             logger.error('[4K] Cache read error: %s' % str(exc))
 
         logger.info('[4K] Building index from API…')
 
         # ── Step 1: fetch all streams in category 150 ──
-        streams = _api('get_vod_streams', '&category_id=%d' % _API_CAT_ID)
+        if cancelled():
+            return
+        payload = _api('get_vod_streams', '&category_id=%d' % _API_CAT_ID)
+        streams = _validated_streams(payload)
         if not streams:
-            logger.error('[4K] No streams returned from API')
+            logger.error('[4K] No valid streams from API (payload type=%s)' % type(payload).__name__)
             # Fallback: use expired cache if available
             if _old_cache:
-                logger.info('[4K] Using expired cache as fallback (%d movies)' % len(_old_cache.get('movies', {})))
+                logger.info('[4K] Using expired cache as fallback (%d movies)' % len(_old_cache))
                 with _lock:
-                    _index_by_tmdb = {int(k): v for k, v in _old_cache.get('movies', {}).items()}
+                    _index_by_tmdb = _old_cache
                     _ready = True
             return
 
@@ -304,20 +354,13 @@ def build_4k_index():
         ]
 
         tmdb_map = {}  # stream_id → tmdb_id
-        completed = 0
-        with ThreadPoolExecutor(
-                max_workers=(2 if deviceprofile.is_low_power() else _MAX_WORKERS)) as pool:
-            futures = {pool.submit(_fetch_vod_info, sid): sid for sid in stream_ids}
-            for future in as_completed(futures):
-                try:
-                    sid, tmdb = future.result()
-                    if tmdb:
-                        tmdb_map[sid] = tmdb
-                    completed += 1
-                    if completed % 50 == 0:
-                        logger.info('[4K] … %d/%d streams resolved' % (completed, len(stream_ids)))
-                except Exception as exc:
-                    logger.error('[4K] thread error: %s' % str(exc))
+        resolved, complete = map_background(_fetch_vod_info, stream_ids,
+            workers=(2 if deviceprofile.is_low_power() else min(4, _MAX_WORKERS)), cancelled=cancelled)
+        if not complete or cancelled():
+            return  # retain the last good index; never persist a partial build
+        for sid, tmdb in resolved:
+            if tmdb:
+                tmdb_map[sid] = tmdb
 
         logger.info('[4K] Resolved %d tmdb_ids out of %d streams' % (len(tmdb_map), len(stream_ids)))
 
@@ -337,9 +380,15 @@ def build_4k_index():
                 continue
 
             clean_name, year = _extract_year(name)
-            ext = s.get('container_extension', 'mkv')
+            ext = s.get('container_extension') or 'mkv'
+            if not isinstance(ext, str) or not re.fullmatch(r'[a-zA-Z0-9]{1,8}', ext):
+                ext = 'mkv'
             stream_url = '%s/%d.%s' % (_STREAM_BASE, sid, ext)
 
+            try:
+                rating = float(s.get('rating', 0) or 0)
+            except (TypeError, ValueError):
+                rating = 0.0
             new_index[tmdb_id] = {
                 'name':       clean_name,
                 'year':       year,
@@ -347,9 +396,18 @@ def build_4k_index():
                 'sid':        sid,
                 'ext':        ext,
                 'poster':     s.get('stream_icon', ''),
-                'rating':     float(s.get('rating', 0) or 0),
+                'rating':     rating,
             }
 
+        if cancelled():
+            return
+        if not new_index and (_old_cache or _index_by_tmdb):
+            logger.info('[4K] Empty rebuilt index: retaining the last good catalogue')
+            if _old_cache:
+                with _lock:
+                    _index_by_tmdb = _old_cache
+                    _ready = True
+            return
         # ── Step 4: save cache ──
         try:
             cache = {
@@ -357,8 +415,9 @@ def build_4k_index():
                 'ver':    _CACHE_VERSION,
                 'movies': {str(k): v for k, v in new_index.items()},
             }
-            with open(cache_path, 'w', encoding='utf-8') as f:
+            with open(cache_path + '.tmp', 'w', encoding='utf-8') as f:
                 json.dump(cache, f, ensure_ascii=False)
+            os.replace(cache_path + '.tmp', cache_path)
         except Exception as exc:
             logger.error('[4K] Cache write error: %s' % str(exc))
 
@@ -421,11 +480,11 @@ def get_resolved_url(f4k):
             port = parsed.port
             host_hdr = ('%s:%d' % (parsed.hostname, port)) if port else parsed.hostname
             url_ip = urlunparse(parsed._replace(netloc=('%s:%d' % (ip, port)) if port else ip))
-            logger.info('[4K] Fallback IP rewrite for Kodi: %s (Host: %s)' % (url_ip[:80], host_hdr))
+            logger.info('[4K] Fallback IP route for Kodi (Host: %s)' % host_hdr)
             return '%s|User-Agent=Mozilla/5.0&Host=%s' % (url_ip, host_hdr)
 
     # CDN URL (or non-blocked host) — pass directly to Kodi, no Host override.
-    logger.info('[4K] CDN URL passed to Kodi: %s' % url[:80])
+    logger.info('[4K] CDN route passed to Kodi host=%s' % parsed.hostname)
     if '|User-Agent=' not in url:
         url += '|User-Agent=Mozilla/5.0'
     return url
@@ -458,9 +517,10 @@ def _try_load_cache():
         with open(cache_path, 'r', encoding='utf-8') as _f:
             _cache = json.load(_f)
         # Accept any version that has movies data (stale is better than missing)
-        if _cache.get('movies'):
+        movies = _validated_movies(_cache.get('movies')) if isinstance(_cache, dict) else {}
+        if movies:
             with _lock:
-                _index_by_tmdb = {int(k): v for k, v in _cache['movies'].items()}
+                _index_by_tmdb = movies
                 _ready = True
             logger.info('[4K] Eagerly loaded %d movies from cache (age %.1fh)' % (
                 len(_index_by_tmdb),

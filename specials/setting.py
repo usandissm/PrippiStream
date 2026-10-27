@@ -786,6 +786,20 @@ def _tg_token():
     return base64.b64decode(_TG_TOKEN_OBF).decode('utf-8')[::-1]
 
 
+def _confirm_diagnostic_send():
+    note = platformtools.dialog_input(default='', heading='Nome e problema (opzionale)')
+    if note is None:
+        return None
+    if not platformtools.dialog_yesno(
+            'Conferma invio log',
+            'Inviare log e diagnostica allo sviluppatore?\n'
+            'Possono contenere cronologia, indirizzi e dati del dispositivo.\n' +
+            ('Invio senza nome e descrizione.' if not note.strip() else 'Invio con la nota inserita.'),
+            nolabel='Annulla', yeslabel='Invia'):
+        return None
+    return note
+
+
 def send_log_to_dev(item):
     """Invia i log di Kodi direttamente allo sviluppatore via bot Telegram.
 
@@ -874,10 +888,9 @@ def send_log_to_dev(item):
     log_bytes = collected[0][1]
 
     # ── 2. Nota opzionale (chi sei / che problema hai) ────────────────────
-    note = platformtools.dialog_input(
-        default='', heading='Nome e problema (opzionale, OK per inviare)')
+    note = _confirm_diagnostic_send()
     if note is None:
-        note = ''   # BACK sul telecomando: invia comunque, anonimo
+        return  # Back means cancel, never silent anonymous transmission.
 
     # ── 3. Impacchetta tutti i log in un unico zip + metadati ─────────────
     buf = io.BytesIO()
@@ -966,6 +979,12 @@ def send_log_to_dev(item):
 
     # ── 5. Fallback: dpaste.org, URL da girare a mano ─────────────────────
     if not sent:
+        if not platformtools.dialog_yesno(
+                'Invio diretto non riuscito',
+                'Vuoi caricare il log su dpaste.org e ottenere un link condivisibile?\n'
+                'Questo servizio è diverso dall’invio privato allo sviluppatore.',
+                nolabel='Annulla', yeslabel='Carica'):
+            return
         try:
             try:
                 from urllib.parse import urlencode

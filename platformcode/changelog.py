@@ -54,15 +54,7 @@ def _block(version, notes):
 
 
 def pending_notes(last_seen, current, text):
-    """FULL release-notes history (newest first) up to *current*, so the update
-    popup always shows the older versions too — not just the latest — letting a
-    user who skipped releases see everything that was added.
-
-    Returns None when *current* has no changelog entry of its own (e.g. a routine
-    patch that shipped no notes) so those releases don't pop up. *last_seen* is
-    accepted for API compatibility; the caller (service.py) gates on the version
-    actually changing before calling this.
-    """
+    """Only this release's approved notes; history stays in the changelog file."""
     releases = [(v, n) for (v, n) in parse(text) if _is_release(v)]
     if not releases:
         return None
@@ -71,7 +63,7 @@ def pending_notes(last_seen, current, text):
     if cur_k is not None and not any(_vkey(v) == cur_k for (v, _) in releases):
         return None
     releases.sort(key=lambda e: _vkey(e[0]), reverse=True)
-    shown = [(v, n) for (v, n) in releases if cur_k is None or _vkey(v) <= cur_k]
+    shown = [(v, n) for (v, n) in releases if cur_k is None or _vkey(v) == cur_k]
     if not shown:
         return None
-    return '\n\n'.join(_block(v, n) for (v, n) in shown)
+    return shown[0][1] or None

@@ -9,12 +9,15 @@ from __future__ import unicode_literals
 import importlib
 import os
 import re
+import time
 
 from core.item import Item
 from platformcode import logger
 
 
 PROVIDERS = ('raiplay', 'mediasetplay', 'la7', 'discoveryplus')
+_LAST_GOOD = {}
+_FALLBACK_TTL = 30 * 60
 
 
 def _logo(title, current=''):
@@ -56,8 +59,22 @@ def load():
                 item._app_live_provider = True
                 items.append(item)
             logger.info('[TV] %s: %d dirette' % (provider, len(items) - before))
+            if len(items) > before:
+                _LAST_GOOD[provider] = (time.time(), tuple(value.clone() for value in items[before:]))
         except Exception as exc:
             logger.error('[TV] %s: %s' % (provider, str(exc)))
+            saved = _LAST_GOOD.get(provider)
+            if saved and time.time() - saved[0] < _FALLBACK_TTL:
+                reused = 0
+                for value in saved[1]:
+                    title = (value.fulltitle or value.title or '').strip()
+                    key = (provider, title.casefold())
+                    if title and key not in seen:
+                        items.append(value.clone())
+                        seen.add(key)
+                        reused += 1
+                logger.info('[TV] %s: retained %d recent channel entries; playback still resolves fresh' %
+                            (provider, reused))
     return items
 
 

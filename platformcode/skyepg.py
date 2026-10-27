@@ -31,10 +31,19 @@ try:
 except ImportError:  # py2
     from HTMLParser import HTMLParser
     _html_unescape = HTMLParser().unescape
-try:
-    from concurrent.futures import ThreadPoolExecutor
-except ImportError:
-    ThreadPoolExecutor = None
+from platformcode.taskpool import map_background
+
+_prefetch_stop = threading.Event()
+
+
+def abort_prefetch():
+    _prefetch_stop.set()
+
+
+def resume_prefetch():
+    global _prefetch_stop
+    if _prefetch_stop.is_set():
+        _prefetch_stop = threading.Event()
 
 try:
     from urllib.request import Request, urlopen
@@ -292,20 +301,18 @@ def _official_free_entries():
 def _superguide_entries(force=False):
     global _superguide_cache, _superguide_loaded_at
     now = time.time()
+    stop = _prefetch_stop
+    if stop.is_set():
+        return _superguide_cache
     with _superguide_lock:
         if _superguide_cache and not force and now - _superguide_loaded_at < _SUPERGUIDE_TTL:
             return _superguide_cache
         merged = _official_free_entries()
-        if ThreadPoolExecutor:
-            pool = ThreadPoolExecutor(max_workers=4)
-            try:
-                urls = _SUPERGUIDE_URLS + _TVEPG_URLS
-                pages = list(pool.map(lambda url: _http_text(url, quiet=True), urls))
-            finally:
-                pool.shutdown(wait=False)
-        else:
-            urls = _SUPERGUIDE_URLS + _TVEPG_URLS
-            pages = [_http_text(url, quiet=True) for url in urls]
+        urls = _SUPERGUIDE_URLS + _TVEPG_URLS
+        pages, complete = map_background(lambda url: _http_text(url, timeout=4, quiet=True),
+                                          urls, workers=4, cancelled=stop.is_set)
+        if not complete or stop.is_set():
+            return _superguide_cache
         # The broadcaster feeds above are authoritative. Public guide sites fill
         # only channels which those feeds do not expose.
         for index, page in enumerate(pages):

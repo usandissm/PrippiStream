@@ -1,3 +1,10 @@
+## 2.0.4
+Novità dell’aggiornamento
+
+- Correzioni di bug e miglioramenti generali alla stabilità e all’esperienza d’uso.
+- La riga DAZN è stata rimossa e non verrà più mostrata.
+- Al suo posto è stata aggiunta la nuova riga Eventi Calcio, dedicata agli eventi della giornata.
+
 ## 2.0.2
 - Guida Live più completa e precisa con fonti ufficiali e fallback automatici.
 - Aggiornamento periodico di programma corrente e successivo su tutte le righe Live.

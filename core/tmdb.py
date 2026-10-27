@@ -246,7 +246,7 @@ def set_infoLabels(source, seekTmdb=True, search_language=def_lang, forced=False
     return ret
 
 
-def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, forced=False):
+def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, forced=False, cancel=None):
     """
     Concurrently, it gets the data of the items included in the item_list.
 
@@ -267,6 +267,7 @@ def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, 
     if not config.get_setting('tmdb_active') and not forced:
         return
 
+    itemlist = list(itemlist or [])
     r_list = list()
 
     def sub_thread(_item, _i, _seekTmdb):
@@ -285,6 +286,12 @@ def set_infoLabels_itemlist(itemlist, seekTmdb=False, search_language=def_lang, 
     # satura GIL e socket; 8 = valore effettivo odierno sui quad-core, quindi
     # nessun cambio lì, solo un tetto dove il default esplodeva.
     normal_workers = max(2, min(8, (os.cpu_count() or 4)))
+    if cancel is not None:
+        from platformcode.taskpool import map_background
+        values, complete = map_background(
+            lambda pair: sub_thread(pair[1], pair[0], seekTmdb), enumerate(itemlist),
+            workers=deviceprofile.worker_count('tmdb', normal_workers), cancelled=cancel)
+        return [value[2] for value in values]
     executor = futures.ThreadPoolExecutor(
         max_workers=deviceprofile.worker_count('tmdb', normal_workers))
     searchList = [executor.submit(sub_thread, item, i, seekTmdb) for i, item in enumerate(itemlist)]
