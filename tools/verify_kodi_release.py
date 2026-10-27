@@ -9,6 +9,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def same_text(left, right):
+    # Git normalizes checkout line endings; the ZIP was built on Windows.
+    return left.replace(b'\r\n', b'\n') == right.replace(b'\r\n', b'\n')
+
+
 def normal_notes(text):
     return '\n'.join(line.strip().lstrip('-• ').strip() for line in text.splitlines() if line.strip())
 
@@ -51,8 +56,8 @@ def main():
         assert any('/event_team_badges/' in name for name in names), 'Portable event badges missing'
         assert ET.fromstring(package.read(prefix + 'addon.xml')).attrib['version'] == version
         for name in runtime:
-            assert package.read(prefix + name) == (ROOT / name).read_bytes(), 'Stale packaged runtime: ' + name
-        assert package.read(prefix + 'changelog.txt') == (ROOT / 'changelog.txt').read_bytes()
+            assert same_text(package.read(prefix + name), (ROOT / name).read_bytes()), 'Stale packaged runtime: ' + name
+        assert same_text(package.read(prefix + 'changelog.txt'), (ROOT / 'changelog.txt').read_bytes())
         assert b'IPTV_LIVE_ENABLED = False' in package.read(prefix + 'platformcode/sportchannels.py'), 'IPTV unexpectedly enabled'
     stable = ROOT / 'docs/plugin.video.prippistream.zip'
     assert hashlib.sha256(stable.read_bytes()).digest() == hashlib.sha256(archive.read_bytes()).digest(), 'Stable direct ZIP is stale'
