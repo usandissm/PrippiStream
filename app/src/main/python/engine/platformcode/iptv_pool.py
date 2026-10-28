@@ -26,6 +26,11 @@ _warmup_done_at = 0
 _ACCOUNT_TTL = 30 * 60
 _STREAM_MAP_TTL = 6 * 3600
 
+# Public builds deliberately keep this module dormant.  These guards make old
+# call sites harmless while allowing a later, authorised implementation to use
+# the same interface without bringing legacy network behaviour back by accident.
+IPTV_POOL_ENABLED = False
+
 def _runtime_seed_paths(filename):
     """Candidate paths for immutable packaged data.
 
@@ -137,6 +142,8 @@ def invalidate():
     with _lock: _loaded_at = 0
 
 def channels(category=None):
+    if not IPTV_POOL_ENABLED:
+        return []
     rows = list(_load())
     return [x for x in rows if not category or x.get('category') == category]
 
@@ -278,6 +285,8 @@ def warmup(limit=12):
     disponibilità viene ricontrollata al clic, quindi il dato non può diventare
     una falsa garanzia mentre l'utente resta sulla Home.
     """
+    if not IPTV_POOL_ENABLED:
+        return 0
     global _warmup_done_at
     now = time.time()
     if _warm_account_ids and now - _warmup_done_at < 30 * 60:
@@ -324,6 +333,8 @@ def _reachable_url(url):
         return False
 
 def acquire(title, lease_id, ttl=900, attempt=0):
+    if not IPTV_POOL_ENABLED:
+        return None
     catalog = list(_load()); now = time.time(); wanted = str(title or '').casefold().strip()
     # Prefer the complete Group-E pool. Each retry excludes accounts already
     # attempted for this channel, so a playback failure moves to a new list.
@@ -386,6 +397,8 @@ def release(url):
 
 def logo_for(title, fallback=''):
     """Return a cached local logo, downloading a public match once if needed."""
+    if not IPTV_POOL_ENABLED:
+        return fallback or ''
     safe = re.sub(r'[^a-z0-9]+', '_', str(title or '').lower()).strip('_')
     if not safe:
         return fallback or ''

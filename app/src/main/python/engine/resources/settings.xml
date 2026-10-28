@@ -116,6 +116,9 @@
         <setting id="show_sport_row" type="bool" label="Mostra riga Sport Live" default="true"/>
         <setting id="show_sky_row" type="bool" label="Mostra riga SKY" default="true"/>
         <setting id="show_tv_row" type="bool" label="Mostra riga TV" default="true"/>
+        <setting id="show_events_row" type="bool" label="Mostra riga Eventi Calcio" default="true"/>
+        <setting id="event_feed_url" type="text" label="URL feed Eventi Calcio" default=""/>
+        <setting id="event_feed_refresh_minutes" type="slider" label="Aggiorna Eventi Calcio ogni (minuti)" range="5,5,120" option="int" default="20"/>
         <setting label="Telecomando canali live" type="lsep"/>
         <setting id="live_remote_enabled" type="bool" label="Cambia canale con il telecomando" default="true"/>
         <setting id="live_remote_overlay" type="bool" label="Mostra nome e posizione durante il cambio" default="true"/>

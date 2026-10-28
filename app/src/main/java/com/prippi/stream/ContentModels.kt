@@ -107,6 +107,14 @@ data class ContentItem(
     val isLive: Boolean = false,
     val progressMs: Long = 0,
     val durationMs: Long = 0,
+    val isEvent: Boolean = false,
+    val eventHomeBadge: String = "",
+    val eventAwayBadge: String = "",
+    val eventHomeInitials: String = "",
+    val eventAwayInitials: String = "",
+    val eventMultigol: Boolean = false,
+    val eventStatus: String = "",
+    val eventLeague: String = "",
 ) {
     /** Labels used only by Continue Watching cards; playback keeps the original item untouched. */
     val continueWatchingTitle: String
@@ -155,6 +163,7 @@ data class ContentItem(
         get() {
             if (isLive) {
                 val payload = toJson()
+                if (isEvent) return "live:event:${payload.optString("event_id")}"
                 val kind = payload.optString("sport_kind")
                     .ifBlank { payload.optString("_app_live_provider") }
                     .ifBlank { channel }
@@ -197,7 +206,9 @@ data class ContentItem(
         fun fromJson(json: JSONObject, defaultChannel: String = "streamingcommunity"): ContentItem {
             val info = json.optJSONObject("infoLabels") ?: JSONObject()
             val mediaType = info.optString("mediatype").ifBlank { json.optString("contentType") }
-            val rawTitle = if (mediaType == "episode" || json.optInt("contentEpisodeNumber") > 0) {
+            val rawTitle = if (json.optBoolean("_app_event")) {
+                json.optString("title").ifBlank { json.optString("fulltitle") }
+            } else if (mediaType == "episode" || json.optInt("contentEpisodeNumber") > 0) {
                 json.optString("contentTitle")
                     .ifBlank { json.optString("title") }
                     .ifBlank { json.optString("fulltitle") }
@@ -273,6 +284,14 @@ data class ContentItem(
                 },
                 isLive = json.optBoolean("_app_live") ||
                     json.optString("contentType").equals("live", ignoreCase = true),
+                isEvent = json.optBoolean("_app_event"),
+                eventHomeBadge = json.optString("event_home_badge"),
+                eventAwayBadge = json.optString("event_away_badge"),
+                eventHomeInitials = json.optString("event_home_initials"),
+                eventAwayInitials = json.optString("event_away_initials"),
+                eventMultigol = json.optString("event_multi") == "1",
+                eventStatus = cleanKodiText(json.optString("event_status")),
+                eventLeague = cleanKodiText(json.optString("event_league")),
             )
         }
     }

@@ -777,8 +777,8 @@ def restore_tools(item):
 # ── Config invio-log Telegram ─────────────────────────────
 # Token offuscato (base64 del token invertito) per evitare scanner automatici.
 # Non e' crittografia: il bot puo' essere revocato da BotFather in ogni momento.
-_TG_TOKEN_OBF = 'WVh4Uzdtd2RrQXNLNnpYME1zZVhWallvN2dhaUY4ZWVGQUE6NDYzNjAxMzg4OA=='
-_TG_CHAT_ID = '6021418937'
+_TG_TOKEN_OBF = ''
+_TG_CHAT_ID = ''
 
 
 def _tg_token():

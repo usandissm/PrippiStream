@@ -50,8 +50,8 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 93
-        versionName = "0.9.38"
+        versionCode = 95
+        versionName = "0.9.40"
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
 
         // Release universale per box Android 32-bit e dispositivi ARM64.
@@ -99,6 +99,13 @@ android {
     }
 
     // Chaquopy prende automaticamente src/main/python come sorgente Python.
+    // The former private IPTV pool may remain in a developer checkout, but it
+    // is never distributed in APKs and the runtime has no active code path to it.
+    androidResources {
+        // AAPT matches asset names here (colon-separated), unlike source-set
+        // globs which can still be copied by the Chaquopy asset merger.
+        ignoreAssetsPattern = "iptv_accounts.json:iptv_catalog.json"
+    }
     packaging {
         resources.excludes += setOf("META-INF/*", "**/*.md", "**/*.txt")
     }

@@ -1660,7 +1660,12 @@ private fun TelevisionLive(
         }
         return
     }
-    var highlighted by remember(rows) { mutableStateOf(rows.first().items.firstOrNull()) }
+    var highlighted by remember { mutableStateOf(rows.first().items.firstOrNull()) }
+    LaunchedEffect(rows) {
+        val key = highlighted?.stableKey
+        highlighted = rows.asSequence().flatMap { it.items.asSequence() }
+            .firstOrNull { it.stableKey == key } ?: rows.first().items.firstOrNull()
+    }
     val targetRow = rows.indexOfFirst { it.id == focusedRowId }.takeIf { it >= 0 } ?: 0
     val targetItem = rows.getOrNull(targetRow)?.items?.indexOfFirst {
         it.stableKey == focusedItemKey
@@ -1691,14 +1696,26 @@ private fun TelevisionLive(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column {
-                    Text("Live TV", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        highlighted?.takeIf { it.isEvent }?.title ?: "Live TV",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     Text(
                         highlighted?.plot?.lineSequence()?.firstOrNull()
                             ?: "Canali verificati nella sessione",
                         color = Color(0xFFB9C9DA),
                         style = MaterialTheme.typography.titleMedium,
                     )
+                    highlighted?.takeIf { it.isEvent }?.let {
+                        Text(it.eventLeague, color = Color(0xFFB9C9DA))
+                    }
+                }
+                highlighted?.takeIf { it.isEvent }?.let {
+                    EventArtwork(it, Modifier.width((300f * scale).dp).height((135f * scale).dp))
                 }
                 if (loading) Text("Aggiornamento…", color = Color(0xFF86C9FF))
             }
@@ -1745,6 +1762,41 @@ private fun TelevisionLive(
 }
 
 @Composable
+private fun EventArtwork(item: ContentItem, modifier: Modifier = Modifier) {
+    Box(modifier.background(Color(0xFF080C11)), contentAlignment = Alignment.Center) {
+        if (item.eventMultigol) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("⚽", style = MaterialTheme.typography.headlineLarge)
+                Text("MULTIGOL", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        } else {
+            Row(
+                Modifier.fillMaxSize().padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                EventCrest(item.eventHomeBadge, item.eventHomeInitials, Modifier.weight(1f).fillMaxHeight())
+                Text("VS", fontWeight = FontWeight.Bold, color = Color(0xFFB9C9DA), modifier = Modifier.padding(5.dp))
+                EventCrest(item.eventAwayBadge, item.eventAwayInitials, Modifier.weight(1f).fillMaxHeight())
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventCrest(url: String, initials: String, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (url.isBlank()) {
+            Text(initials, fontWeight = FontWeight.Bold, color = Color.White)
+        } else {
+            AppImage(
+                model = url, fallbackModel = null, contentDescription = initials,
+                contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(5.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun TelevisionLiveCard(
     item: ContentItem,
     modifier: Modifier = Modifier,
@@ -1770,7 +1822,9 @@ private fun TelevisionLiveCard(
             .background(Color(0xFF111B25), RoundedCornerShape((12f * scale).dp))
             .clickable(onClick = onClick),
     ) {
-        AppImage(
+        if (item.isEvent) EventArtwork(
+            item, Modifier.fillMaxWidth().height((112f * scale).dp),
+        ) else AppImage(
             model = item.posterUrl,
             fallbackModel = item.backdropUrl.takeIf { it.isNotBlank() },
             contentDescription = item.title,
@@ -1797,10 +1851,10 @@ private fun TelevisionLiveCard(
             ),
         )
         Text(
-            item.plot.lineSequence().drop(1).firstOrNull()
+            if (item.isEvent) item.eventStatus else item.plot.lineSequence().drop(1).firstOrNull()
                 ?: item.plot.lineSequence().firstOrNull()
                 ?: "Diretta",
-            maxLines = 1,
+            maxLines = if (item.isEvent) 2 else 1,
             overflow = TextOverflow.Ellipsis,
             color = Color(0xFFB9C9DA),
             style = MaterialTheme.typography.bodySmall,
@@ -3919,7 +3973,9 @@ private fun LiveCard(
         shape = RoundedCornerShape(10.dp),
     ) {
         Column {
-            AppImage(
+            if (item.isEvent) EventArtwork(
+                item, Modifier.fillMaxWidth().aspectRatio(2f / 3f),
+            ) else AppImage(
                 model = item.posterUrl,
                 fallbackModel = item.backdropUrl.takeIf { it.isNotBlank() },
                 contentDescription = item.title,

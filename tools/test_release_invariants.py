@@ -82,8 +82,8 @@ assert "isoformat(timespec='milliseconds')" in xbmc
 assert "first_newline = tail.find" in xbmc
 
 gradle = read("app/build.gradle.kts")
-assert 'versionCode = 93' in gradle
-assert 'versionName = "0.9.38"' in gradle
+assert 'versionCode = 95' in gradle
+assert 'versionName = "0.9.40"' in gradle
 assert "enableV1Signing = true" in gradle
 assert "enableV2Signing = true" in gradle
 assert "prippiRequireDiagnosticsRelay" in gradle
@@ -156,7 +156,8 @@ main_view_model = read("app/src/main/java/com/prippi/stream/MainViewModel.kt")
 assert 'cw_home stored=${stored.size} rendered=${items.size}' in main_view_model
 assert "clearBootstrapCallbacks()" in player_activity
 assert "liveRowItems.length() == 0 && startPositionMs > 0" in player_activity
-assert "resolveLiveCandidate(candidate, remainingMs)" in player_activity
+assert "LIVE_SWITCH_CANDIDATE_TIMEOUT_MS" in player_activity
+assert "minOf(remainingMs, LIVE_SWITCH_CANDIDATE_TIMEOUT_MS)" in player_activity
 
 python_bridge = read("app/src/main/java/com/prippi/stream/PythonBridge.kt")
 assert "PAYLOAD_MARKER" in python_bridge
@@ -179,13 +180,16 @@ assert "notifyManualBackup(applicationContext, report)" in delivery
 bridge = read("app/src/main/python/bridge.py")
 assert "max_workers=2 if _APP_LOW_POWER else None" in bridge
 assert "max_new_rows=None" in bridge
-assert "existing_labels=[label for label, _items in sc_rows]" in bridge
+# The shipped archive API takes the count; duplicate labels are filtered by
+# the bridge before publication (there is no existing_labels argument).
+assert "progress_cb=publish_archive_row" in bridge
+assert "if key and key not in known:" in bridge
 assert "'complete': False" in bridge
 assert "home complete: %d rows" in bridge
 home_engine = read("app/src/main/python/engine/platformcode/prippihome.py")
 assert "max_workers=None, max_new_rows=None" in home_engine
 assert "int(max_workers) <= 1" in home_engine
-assert "pending_entries = [" in home_engine
-assert "SC_MAX_ROWS        = 64" in home_engine
+assert "entries_to_fetch = all_entries[:remaining]" in home_engine
+assert "SC_MAX_ROWS        = 30" in home_engine
 
 print("Current release invariants: OK")

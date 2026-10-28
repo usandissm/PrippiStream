@@ -89,6 +89,9 @@ class MainViewModel(
                     append(':').append(item.title.hashCode())
                     append(':').append(item.plot.hashCode())
                     append(':').append(item.posterUrl.hashCode())
+                    append(':').append(item.eventHomeBadge.hashCode())
+                    append(':').append(item.eventAwayBadge.hashCode())
+                    append(':').append(item.eventStatus.hashCode())
                 }
             }
         }
@@ -159,12 +162,12 @@ class MainViewModel(
                     }
                 }
                 val complete = rows.map { it.id }.containsAll(
-                        listOf("live_sky", "live_sport", "live_iptv_dazn", "live_tv"),
+                        listOf("live_sky", "live_sport", "live_tv"),
                     )
                 // Once all rows are ready, keep refreshing only guide metadata.
                 // The Python channel catalog remains cached, so this does not
                 // repeat availability probes or reserve IPTV slots.
-                delay(if (complete) 4 * 60_000L else 5_000L)
+                delay(if (complete) 15_000L else 5_000L)
             }
             // Non blocca per sempre l'app se una sorgente esterna resta appesa.
         }
@@ -741,9 +744,9 @@ class MainViewModel(
         val playbacks = withContext(Dispatchers.IO) { repository.livePlaybackCandidates(item) }
         if (playbacks.isEmpty()) error("Diretta non disponibile")
         val row = state.liveRows.firstOrNull { liveRow ->
-            liveRow.items.any { it.rawJson == item.rawJson }
+            liveRow.items.any { it.stableKey == item.stableKey }
         }
-        val index = row?.items?.indexOfFirst { it.rawJson == item.rawJson } ?: -1
+        val index = row?.items?.indexOfFirst { it.stableKey == item.stableKey } ?: -1
         val payload = item.toJson().apply {
             if (row != null && index >= 0) {
                 put("_app_live_row_items", org.json.JSONArray().apply {

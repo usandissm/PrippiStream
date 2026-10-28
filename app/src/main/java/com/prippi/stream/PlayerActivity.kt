@@ -369,6 +369,21 @@ open class PlayerActivity : ComponentActivity() {
             object : GestureDetector.SimpleOnGestureListener() {
                 override fun onDown(event: MotionEvent): Boolean = true
 
+                override fun onFling(
+                    first: MotionEvent?, last: MotionEvent,
+                    velocityX: Float, velocityY: Float,
+                ): Boolean {
+                    if (first == null || first.pointerCount != 1 || last.pointerCount != 1 ||
+                        liveRowItems.length() < 2 || liveRowIndex < 0
+                    ) return false
+                    val delta = LiveSwipePolicy.channelDelta(
+                        last.x - first.x, last.y - first.y, velocityX,
+                        resources.displayMetrics.density,
+                    ) ?: return false
+                    switchLiveChannel(delta)
+                    return true
+                }
+
                 override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
                     setTelevisionControlsVisible(trackControlsView.visibility != View.VISIBLE)
                     return true
@@ -2263,37 +2278,9 @@ open class PlayerActivity : ComponentActivity() {
         }.getOrDefault(emptyList())
     }
 
-    private fun retryIptvPool(generation: Long, current: ExoPlayer, detail: String): Boolean {
-        val source = liveRowItems.optJSONObject(liveRowIndex) ?: return false
-        if (source.optString("sport_kind") != "iptv" || livePoolAttempt >= 3) return false
-        val attempt = ++livePoolAttempt
-        current.release()
-        player = null
-        clearBootstrapCallbacks()
-        bootstrapWebView?.apply { stopLoading(); destroy() }
-        bootstrapWebView = null
-        statusView.text = "Cambio lista disponibile…"
-        statusView.visibility = View.VISIBLE
-        Thread {
-            val request = runCatching {
-                PlaybackRequest.fromJson(PythonBridge.resolveLiveAttempt(source, attempt))
-            }.onFailure {
-                android.util.Log.e("Prippi", "Fallback pool IPTV tentativo $attempt: $detail", it)
-            }.getOrNull()
-            runOnUiThread {
-                if (!isPlaybackGenerationActive(generation)) return@runOnUiThread
-                if (request == null || request.url.isBlank()) {
-                    liveSwitching.set(false)
-                    switchLiveChannel(liveSwitchDirection, userInitiated = false)
-                    return@runOnUiThread
-                }
-                playbackCandidates = listOf(request)
-                currentCandidateIndex = 0
-                startPlaybackCandidate(0)
-            }
-        }.start()
-        return true
-    }
+    // Dormant compatibility hook: never load accounts or contact a legacy pool.
+    @Suppress("UNUSED_PARAMETER")
+    private fun retryIptvPool(generation: Long, current: ExoPlayer, detail: String): Boolean = false
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun startPlaybackCandidate(index: Int) {

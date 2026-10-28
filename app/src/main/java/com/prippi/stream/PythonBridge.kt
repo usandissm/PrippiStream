@@ -233,7 +233,10 @@ object PythonBridge {
     fun resolve(item: JSONObject): JSONObject =
         JSONObject(bridge.callAttr("resolve_json", item.toString()).toString())
 
-    /** Retry lazy del pool Group-E: ogni tentativo seleziona una lista diversa. */
+    fun eventPlaybackCandidates(item: JSONObject): List<JSONObject> =
+        toList(bridge.callAttr("event_playback_candidates_json", item.toString()).toString())
+
+    /** Compatibility entry point; the Python implementation deliberately rejects IPTV. */
     fun resolveLiveAttempt(item: JSONObject, attempt: Int): JSONObject =
         JSONObject(
             bridge.callAttr("resolve_live_attempt_json", item.toString(), attempt).toString(),

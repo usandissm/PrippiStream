@@ -13,7 +13,7 @@ detail/trailer window):
             and are resolved through PrippiStream's DoH resolver to bypass the
             Piracy-Shield DNS block.
 
-Resolver kinds: 'sky', 'freeshot', 'iptvorg', 'daddycode'.
+Resolver kinds: 'sky', 'freeshot', 'daddycode'.
 
 Self-contained: depends only on xbmc/xbmcgui, the stdlib, platformcode.config/
 logger and (for daddyCode) core.resolverdns + lib.requests.
@@ -54,7 +54,11 @@ _CODE_SPORT_SKY2 = "A1A165A"   # Sport SKY 2 (freeshot/dazn)
 _CODE_LIVE_SKY = "A1A260"      # LIVE → SKY list (sky@@)
 _CODE_DADDY_IT = "A1A124"      # DaddyLive Italia list (daddyCode@@<id>) — auto-update source
 
-_IPTVORG_IT = "https://iptv-org.github.io/iptv/countries/it.m3u"
+# IPTV is intentionally disabled for public Live releases. Keep the legacy
+# code below only as dormant migration code: it must not populate a row, warm
+# up a provider, fetch a playlist or resolve a playback URL.
+IPTV_LIVE_ENABLED = False
+_IPTVORG_IT = ""
 
 # NowTV referer/UA used for the ClearKey DASH streams.
 _NOWTV_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -128,7 +132,6 @@ DEFAULT_SPORT = [
     {"title": u"Sky Sport 257",    "kind": "sky", "par": "skysport257",    "fs": None},
     {"title": u"Sky Sport 259",    "kind": "sky", "par": "skysport259",    "fs": None},
     {"title": u"Zona DAZN",        "kind": "freeshot", "par": "ZonaDAZN",  "fs": None},
-    {"title": u"FIFA+ Italia",     "kind": "iptvorg",  "par": "FIFA+ Italy", "fs": None},
 ]
 
 # LIVE SKY (entertainment) + Sky Cinema, all via the reliable sky@@ ClearKey
@@ -179,11 +182,6 @@ _ROWS = {
     'sport': {'label': u'Sport Live', 'default': DEFAULT_SPORT},
     'sky':   {'label': u'SKY',        'default': DEFAULT_SKY},
     'tv':    {'label': u'TV',         'default': []},
-    'iptv_cinema': {'label': u'Cinema', 'default': []},
-    'iptv_intrattenimento': {'label': u'Intrattenimento', 'default': []},
-    'iptv_documentari': {'label': u'Documentari', 'default': []},
-    'iptv_calcio': {'label': u'Calcio', 'default': []},
-    'iptv_dazn': {'label': u'DAZN', 'default': []},
 }
 
 # Pars for which we ship a bundled poster.
@@ -325,12 +323,7 @@ def _iptv_logo(title, remote=''):
 # ── per-row cache (memory + disk) ────────────────────────────────────────────
 _CACHE_TTL = 6 * 3600
 _mem_cache = {'sport': {"data": None, "ts": 0}, 'sky': {"data": None, "ts": 0},
-              'tv': {"data": None, "ts": 0},
-              'iptv_cinema': {"data": None, "ts": 0},
-              'iptv_intrattenimento': {"data": None, "ts": 0},
-              'iptv_documentari': {"data": None, "ts": 0},
-              'iptv_calcio': {"data": None, "ts": 0},
-              'iptv_dazn': {"data": None, "ts": 0}}
+              'tv': {"data": None, "ts": 0}}
 _ready_rows = set()
 
 def mark_row_ready(row):
@@ -798,11 +791,20 @@ def _parse_sport_backend():
 
     fs_map = {}
     dazn = None
+    dazn_mh = None
     raw_sky2 = _backend_get(_CODE_SPORT_SKY2)
     if raw_sky2:
         try:
             for it in json.loads(raw_sky2).get('items', []):
                 mr = it.get('myresolve', '') or ''
+                if (mr.startswith('mediahosting@@') and re.fullmatch(
+                        r'DAZN\s*\[MH\]', _strip_color(it.get('title', '')), re.I)):
+                    code = mr.split('@@', 1)[1]
+                    if re.fullmatch(r'[0-9]{1,6}', code):
+                        dazn_mh = {'title': 'DAZN', 'kind': 'mediahosting',
+                                   'par': 'dazn_mh', 'source_code': code, 'fs': None,
+                                   'logo': _logo_for('ZonaDAZN', it.get('thumbnail', ''))}
+                    continue
                 if mr.startswith('freeshot@@'):
                     code = mr.split('@@', 1)[1]
                     if code == 'ZonaDAZN':
@@ -817,7 +819,7 @@ def _parse_sport_backend():
         except Exception:
             pass
 
-    channels = []
+    channels = [dazn_mh] if dazn_mh else []
     for it in sky_items:
         mr = it.get('myresolve', '') or ''
         if not mr.startswith('sky@@'):
@@ -832,8 +834,6 @@ def _parse_sport_backend():
         return None
     if dazn:
         channels.append(dazn)
-    channels.append({"title": u"FIFA+ Italia", "kind": "iptvorg",
-                     "par": "FIFA+ Italy", "fs": None, "logo": _poster("FIFA+ Italy")})
     # New DaddyLive sport channels with no sky@@ equivalent (Eurosport, Rai Sport).
     channels.extend(_daddy_channels('sport'))
 
@@ -1015,6 +1015,15 @@ def _channel_token_valid(ch):
         logger.debug('[Sport] %s: deny-listed (recent playback failure)' % par)
         return False
 
+    if kind == 'mediahosting':
+        from platformcode import mediahosting
+        code = ch.get('source_code') or ''
+        ok = mediahosting.online(code)
+        if ok:
+            ch['_validated_route'] = 'mediahosting'
+            ch['_validated_code'] = code
+        return ok
+
     if kind == 'iptvorg':
         ok = _iptvorg_ok(par)
         if ok:
@@ -1195,7 +1204,9 @@ def _parse_tv_backend():
 
 
 def _parse_iptv_row(row):
-    """Load private FHD IPTV entries for one logical row."""
+    """Legacy IPTV hook, deliberately inert in public Live releases."""
+    if not IPTV_LIVE_ENABLED:
+        return []
     try:
         from platformcode import iptv_pool
         category = row.replace('iptv_', '', 1)
@@ -1230,12 +1241,7 @@ def _parse_iptv_row(row):
         return []
 
 _PARSERS = {'sport': _parse_sport_backend, 'sky': _parse_sky_backend,
-            'tv': _parse_tv_backend,
-            'iptv_cinema': lambda: _parse_iptv_row('iptv_cinema'),
-            'iptv_intrattenimento': lambda: _parse_iptv_row('iptv_intrattenimento'),
-            'iptv_documentari': lambda: _parse_iptv_row('iptv_documentari'),
-            'iptv_calcio': lambda: _parse_iptv_row('iptv_calcio'),
-            'iptv_dazn': lambda: _parse_iptv_row('iptv_dazn')}
+            'tv': _parse_tv_backend}
 
 
 def _load_disk_cache(row):
@@ -1388,19 +1394,23 @@ def build_items(row):
     if row in ('sky', 'sport') and not row_ready(row):
         return []
     channel_rows = list(get_channels(row))
-    if row == 'sky':
+    if not IPTV_LIVE_ENABLED:
+        channel_rows = [ch for ch in channel_rows if ch.get('kind') not in ('iptv', 'iptvorg')]
+    if IPTV_LIVE_ENABLED and row == 'sky':
         for cat in ('cinema', 'intrattenimento', 'documentari'):
             channel_rows += _parse_iptv_row('iptv_' + cat)
-    elif row == 'sport':
+    elif IPTV_LIVE_ENABLED and row == 'sport':
         for cat in ('sport', 'calcio'):
             channel_rows += _parse_iptv_row('iptv_' + cat)
-    elif row.startswith('iptv_'):
+    elif IPTV_LIVE_ENABLED and row.startswith('iptv_'):
         # Standalone IPTV rows (currently DAZN) must populate from the private
         # catalog just like the merged SKY/SPORT rows.
         channel_rows += _parse_iptv_row(row)
     # Merge by visible title while preserving native ClearKey/Daddy priority.
     seen = set()
     def _dedupe_key(ch):
+        if ch.get('par') == 'dazn_mh':
+            return 'dazn_mh'
         if row == 'sky':
             return _sky_canonical_title(ch.get('title', ''))
         if row == 'sport':
@@ -1410,13 +1420,17 @@ def build_items(row):
                     if not (_dedupe_key(ch) in seen or seen.add(_dedupe_key(ch)))]
     if row == 'sky':
         channel_rows.sort(key=_sky_sort_key)
-    elif row == 'iptv_dazn':
+    elif row == 'sport':
+        channel_rows.sort(key=lambda ch: 0 if ch.get('par') == 'dazn_mh' else 1)
+    elif IPTV_LIVE_ENABLED and row == 'iptv_dazn':
         # I feed Champions vengono pubblicati in testa da alcune liste Peter
         # Pan; nella riga DAZN devono rimanere sempre in coda.
         channel_rows.sort(key=lambda ch: (
             1 if 'champions' in str(ch.get('title', '')).casefold() else 0,))
     for ch in channel_rows:
         try:
+            if ch.get('par') == 'dazn_mh':
+                ch = dict(ch, title='DAZN')
             if ch.get('kind') == 'provider' and ch.get('provider_item'):
                 it = Item().fromjson(json.dumps(ch['provider_item']))
                 it.is_live_channel = True
@@ -1438,6 +1452,7 @@ def build_items(row):
             if ch.get('kind') == 'iptv':
                 it.sport_validated_route = 'primary'
             it.sport_validated_code = ch.get('_validated_code', '')
+            it.sport_source_code = ch.get('source_code', '')
             items.append(it)
         except Exception as exc:
             logger.error('[Sport] build_items %s: %s' % (ch.get('title'), str(exc)))
@@ -1860,6 +1875,8 @@ def _iptv_listitem(url, title, art):
 
 def resolve_iptv_attempt(item, attempt=0):
     """Resolve one IPTV attempt from a different remotely-free Group-E list."""
+    if not IPTV_LIVE_ENABLED:
+        return None
     try:
         from platformcode import iptv_pool
         title = item.fulltitle or item.title or getattr(item, 'sport_par', '')
@@ -1890,6 +1907,11 @@ def resolve_listitem(item):
     title = item.fulltitle or item.title or par
     art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
            'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+
+    if kind == 'mediahosting':
+        from platformcode import mediahosting
+        return mediahosting.listitem(getattr(item, 'sport_source_code', '') or
+                                     getattr(item, 'sport_validated_code', ''), title, art)
 
     if kind == 'daddy':
         res = resolve_daddy(par)
@@ -1943,6 +1965,9 @@ def resolve_validated_listitem(item):
     art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
            'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
 
+    if route == 'mediahosting':
+        from platformcode import mediahosting
+        return mediahosting.listitem(code or getattr(item, 'sport_source_code', ''), title, art)
     if route == 'sky':
         sky = resolve_sky(par)
         return (_clearkey_listitem(sky[0], sky[1], sky[2], title, art)
@@ -1962,6 +1987,8 @@ def resolve_validated_listitem(item):
 
 def resolve_iptvorg(display_name, quiet=False):
     """Resolve a channel from the iptv-org Italy list by matching its name."""
+    if not IPTV_LIVE_ENABLED:
+        return None
     m3u = _http_get(_IPTVORG_IT, timeout=10, quiet=quiet)
     if not m3u:
         return None

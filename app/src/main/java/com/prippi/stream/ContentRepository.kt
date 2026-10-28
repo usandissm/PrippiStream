@@ -135,44 +135,27 @@ class ContentRepository {
     /**
      * Prima riproduzione di una card Live.
      *
-     * Le card IPTV ricevono lo slot Group-E al momento della risoluzione. Un
-     * singolo slot può scadere o essere occupato proprio nel primo tentativo;
-     * il player già riprova la lista successiva, ma il tap dalla Home/Live in
-     * precedenza mostrava subito "Diretta non disponibile". Qui applichiamo
-     * gli stessi tentativi prima di dichiarare la card non riproducibile.
+     * Solo le sorgenti native abilitate; nessun tentativo verso pool IPTV.
+     * Gli eventi forniscono tutte le alternative risolte al player nativo.
      */
     fun livePlaybackCandidates(item: ContentItem): List<PlaybackRequest> {
-        playbackCandidates(item).takeIf { it.isNotEmpty() }?.let { return it }
-        val raw = item.toJson()
-        for (attempt in 0 until LIVE_POOL_ATTEMPTS) {
-            val request = runCatching {
-                PlaybackRequest.fromJson(PythonBridge.resolveLiveAttempt(raw, attempt))
-            }.onFailure { error ->
-                android.util.Log.w(
-                    "Prippi",
-                    "Diretta ${item.title}: tentativo pool ${attempt + 1}/$LIVE_POOL_ATTEMPTS non riuscito",
-                    error,
-                )
-            }.getOrNull()
-            if (request?.url?.isNotBlank() == true) {
-                android.util.Log.i(
-                    "Prippi",
-                    "Diretta ${item.title}: risolta al tentativo pool ${attempt + 1}",
-                )
-                return listOf(request)
-            }
-        }
-        return emptyList()
+        return playbackCandidates(item)
     }
 
     fun playbackCandidates(item: ContentItem): List<PlaybackRequest> {
+        if (item.isEvent) {
+            return runCatching {
+                PythonBridge.eventPlaybackCandidates(item.toJson()).map { PlaybackRequest.fromJson(it) }
+            }.onFailure { android.util.Log.e("Prippi", "Risoluzione evento", it) }
+                .getOrDefault(emptyList())
+        }
         val candidates = mutableListOf<Pair<String, org.json.JSONObject>>()
         val preResolved = mutableListOf<PlaybackRequest>()
 
         fun collect(content: org.json.JSONObject, defaultChannel: String) {
             val channel = content.optString("channel").ifBlank { defaultChannel }
             content.put("channel", channel)
-            val direct = content.optString("action") in setOf("play", "live_channel") ||
+            val direct = content.optString("action") in setOf("play", "live_channel", "event_play") ||
                 content.optString("server").isNotBlank() || content.optBoolean("_app_live")
             val sources = if (direct) listOf(content) else runCatching {
                 PythonBridge.channelCall(channel, "findvideos", content)
@@ -224,6 +207,5 @@ class ContentRepository {
     private companion object {
         const val DEFAULT_CHANNEL = "streamingcommunity"
         const val GLOBAL_CHANNEL = "__global__"
-        const val LIVE_POOL_ATTEMPTS = 3
     }
 }

@@ -187,7 +187,7 @@ def _from_item(item):
     for k, v in item.__dict__.items():
         if k.startswith('__'):
             continue
-        if k in ('thumbnail', 'fanart') and isinstance(v, str):
+        if k in ('thumbnail', 'fanart', 'event_home_badge', 'event_away_badge') and isinstance(v, str):
             prefix = 'special://home/addons/plugin.video.prippistream/'
             if v.startswith(prefix):
                 import prippi_env
@@ -203,6 +203,9 @@ def _from_item(item):
                 relative = v.split(marker, 1)[1]
                 v = 'file://' + os.path.join(
                     prippi_env.RUNTIME_DIR, relative.replace('/', os.sep))
+            elif k.startswith('event_') and os.path.isabs(v):
+                from pathlib import Path
+                v = Path(v).as_uri()
             elif current_sc_cdn and v.startswith(('http://', 'https://')):
                 try:
                     from urllib.parse import urlsplit, urlunsplit
@@ -530,22 +533,12 @@ def _live_listitem_payload(item, li):
 
 
 def resolve_live_attempt(item_dict, attempt=0):
-    """Resolve one explicit Group-E attempt lazily.
+    """Legacy IPTV retry entry point, deliberately disabled.
 
-    The Android player calls this only after a transport failure, therefore a
-    click never probes several account lists up front. Native/ClearKey cards
-    retain their regular resolver and priority; this applies only to IPTV
-    fallback cards.
+    Kept only so an already-open client cannot crash after upgrading; no IPTV
+    source is loaded or contacted by current builds.
     """
-    init()
-    item = _to_item(item_dict or {})
-    if getattr(item, 'sport_kind', '') != 'iptv':
-        return resolve(item_dict)
-    from platformcode import sportchannels
-    li = sportchannels.resolve_iptv_attempt(item, int(attempt or 0))
-    if li is None:
-        raise RuntimeError('Diretta IPTV non disponibile')
-    return _live_listitem_payload(item, li)
+    raise RuntimeError('Questa fonte Live non è più disponibile')
 
 
 def resolve(item_dict):
@@ -555,6 +548,12 @@ def resolve(item_dict):
     Ritorna {url, manifest_type, headers, drm_type, license_key, audio_language, subtitles}."""
     init()
     item = _to_item(item_dict or {})
+
+    if bool((item_dict or {}).get('_app_event')):
+        candidates = event_playback_candidates(item_dict)
+        if not candidates:
+            raise RuntimeError('Sorgente non disponibile per questo evento')
+        return candidates[0]
 
     # Le dirette TV ufficiali passano dal findvideos del provider proprietario,
     # non dal resolver SKY/Sport.
@@ -992,9 +991,8 @@ def _refresh_live_background():
 
     try:
         sportchannels.reset_state()
-        # Same fixed visual order as Kodi: the merged rows already honour
-        # ClearKey/Daddy before IPTV fallback while they are being built.
-        row_keys = ('sky', 'sport', 'iptv_dazn', 'tv')
+        # Same fixed visual order as Kodi, without IPTV-only rows or fallbacks.
+        row_keys = ('sky', 'sport', 'tv')
         if _APP_LOW_POWER:
             # Sulle box economiche tre parser/probe contemporanei contendono
             # CPU, rete e memoria proprio mentre la Home deve restare fluida.
@@ -1021,13 +1019,6 @@ def _refresh_live_background():
             skyepg.prefetch([key for key in epg_keys if key])
         except Exception as exc:
             logger.error('[bridge] live EPG: %s' % exc)
-        try:
-            # Read-only warm-up: it never reserves a slot. Availability is
-            # checked again only at the moment a user selects a channel.
-            from platformcode import iptv_pool
-            iptv_pool.warmup(limit=12)
-        except Exception as exc:
-            logger.debug('[bridge] IPTV pool warmup: %s' % exc)
     finally:
         with _LIVE_LOCK:
             _LIVE_LOADING = False
@@ -1042,9 +1033,20 @@ def live_rows():
     from platformcode import skyepg
     rows = []
     built_rows = [(key, sportchannels.build_items(key) or [])
-                  for key in ('sky', 'sport', 'iptv_dazn', 'tv')]
+                  for key in ('sky', 'sport')]
+    try:
+        from platformcode import appevents
+        appevents.start_refresh()
+        event_items = appevents.build_items()
+        built_rows.append(('events', event_items))
+    except Exception as exc:
+        from platformcode import logger
+        logger.error('[bridge] scheduled events: %s' % exc)
+    built_rows.append(('tv', sportchannels.build_items('tv') or []))
     epg_keys = []
     for _key, items in built_rows:
+        if _key == 'events':
+            continue
         for item in items:
             epg_keys.extend((getattr(item, 'sport_par', ''),
                              getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
@@ -1052,6 +1054,8 @@ def live_rows():
     for index, (key, items) in enumerate(built_rows):
         for item in items:
             item._app_live = True
+            if key == 'events':
+                continue
             par = getattr(item, 'sport_par', '')
             display = getattr(item, 'fulltitle', '') or getattr(item, 'title', '')
             epg = skyepg.now_on(par) or skyepg.now_on(display)
@@ -1068,7 +1072,7 @@ def live_rows():
         if items:
             rows.append({
                 'id': 'live_' + key,
-                'title': sportchannels.row_label(key),
+                'title': u'EVENTI' if key == 'events' else sportchannels.row_label(key),
                 'items': _items_to_list(items),
             })
     with _LIVE_LOCK:
@@ -1849,6 +1853,19 @@ def channel_methods_json(channel_id):
 
 def resolve_json(item_json='{}'):
     return json.dumps(resolve(json.loads(item_json or '{}')), ensure_ascii=False)
+
+
+def event_playback_candidates(item_dict):
+    init()
+    from platformcode import appevents
+    result = appevents.playback_candidates(item_dict or {})
+    for payload in result:
+        payload.update(_playback_preferences())
+    return result
+
+
+def event_playback_candidates_json(item_json='{}'):
+    return json.dumps(event_playback_candidates(json.loads(item_json or '{}')), ensure_ascii=False)
 
 
 def resolve_live_attempt_json(item_json='{}', attempt=0):

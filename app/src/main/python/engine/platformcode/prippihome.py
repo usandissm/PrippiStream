@@ -652,7 +652,7 @@ _DL_ROW_LABEL = u'I miei download'
 # when empty — an empty live row means "no channel online right now", which we
 # show as a bare titled row rather than hiding it like the other empty rows.
 _LIVE_ROW_LABELS = (sportchannels.row_label('sky'), sportchannels.row_label('sport'),
-                    sportchannels.row_label('iptv_dazn'), sportchannels.row_label('tv'))
+                    sportchannels.row_label('tv'))
 
 # Dedicated ANIME row (popular titles from AnimeUnity), appended at the very end
 # of the home. Sourced live from the animeunity channel (which already handles
@@ -1365,9 +1365,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # restano comunque probate in background (_refresh_live_rows), così
         # riattivarle le mostra all'istante con i canali già in cache.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
-        for _row_key in ('sky', 'sport', 'iptv_dazn', 'tv'):
+        for _row_key in ('sky', 'sport', 'tv'):
             _ch_items = []
-            if _row_key.startswith('iptv_') or not _row_hidden(_row_toggle[_row_key]):
+            if not _row_hidden(_row_toggle[_row_key]):
                 try:
                     _ch_items = sportchannels.build_items(_row_key) or []
                     # Prefetch "now on air" for any disk-cached online channels so
@@ -1412,8 +1412,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # Sync CW progress into every non-CW row (skip the live-channel rows —
         # live channels have no watch progress).
         _live_labels = (_CW_ROW_LABEL, _DL_ROW_LABEL, sportchannels.row_label('sport'),
-                        sportchannels.row_label('sky'), sportchannels.row_label('tv'),
-                        sportchannels.row_label('iptv_dazn'))
+                        sportchannels.row_label('sky'), sportchannels.row_label('tv'))
         if cw_items:
             for row_label, row_items in self.rows_data:
                 if row_label in _live_labels:
@@ -2109,18 +2108,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 return
             xbmc.sleep(200)
 
-        # Prepara un piccolo gruppo di liste libere mentre l'utente consulta la
-        # Home. Il clic SPORT/DAZN dovrà così fare soltanto il controllo finale
-        # dello slot e non scaricare in quel momento l'intero palinsesto Xtream.
-        try:
-            from platformcode import iptv_pool
-            _pool_warm = threading.Thread(target=iptv_pool.warmup)
-            _pool_warm.daemon = True
-            _pool_warm.name = 'IPTVPoolWarmup'
-            _pool_warm.start()
-        except Exception as exc:
-            logger.debug('[IPTV] warmup start: %s' % exc)
-
         def _refresh_one(row_key):
             if (not self._alive or _shutdown_event.is_set()
                     or _app_monitor.abortRequested()):
@@ -2196,7 +2183,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # pools together multiplied network threads on the 2 GB box. TV is
             # cheap/official and must appear first; SKY is normally much quicker
             # than the broad Sport probe.
-            for key in ('sky', 'sport', 'iptv_dazn', 'tv'):
+            for key in ('sky', 'sport', 'tv'):
                 if not self._alive or _shutdown_event.is_set():
                     return
                 while (not self._bg_ui_pause.is_set() and self._alive
@@ -2205,7 +2192,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 _refresh_one(key)
         else:
             threads = [threading.Thread(target=_refresh_one, args=(k,), daemon=True)
-                       for k in ('sport', 'sky', 'iptv_dazn', 'tv')]
+                       for k in ('sport', 'sky', 'tv')]
             for t in threads:
                 if _shutdown_event.is_set() or _app_monitor.abortRequested():
                     return
@@ -4657,7 +4644,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             with self._rows_lock:
                 label, items = self.rows_data[row_idx]
                 snapshot = list(items)
-            row_key = next((rk for rk in ('sky', 'sport', 'tv', 'iptv_dazn')
+            row_key = next((rk for rk in ('sky', 'sport', 'tv')
                             if label == sportchannels.row_label(rk)), None)
             if not row_key or not snapshot:
                 return
@@ -4998,18 +4985,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 _dad  = ('daddy',    lambda: sportchannels.daddy_listitem(item))
                 _dadf = ('daddy_ff', lambda: sportchannels.daddy_ff_listitem(item))
                 _route = getattr(item, 'sport_validated_route', '')
-                if getattr(item, 'sport_kind', '') == 'iptv':
-                    # Ogni tentativo interroga nuovamente il pool Group-E ed
-                    # esclude l'account appena fallito.  In questo modo una
-                    # collisione sul singolo slot o una lista instabile non
-                    # costringe l'utente a tornare alla Home e riprovare.
-                    candidates = [
-                        ('iptv_pool_1', lambda: sportchannels.resolve_iptv_attempt(item, 0)),
-                        ('iptv_pool_2', lambda: sportchannels.resolve_iptv_attempt(item, 1)),
-                        ('iptv_pool_3', lambda: sportchannels.resolve_iptv_attempt(item, 2)),
-                        ('iptv_pool_4', lambda: sportchannels.resolve_iptv_attempt(item, 3)),
-                    ]
-                elif _route == 'daddy':
+                if _route == 'daddy':
                     # Stessa sorgente validata, con due decoder possibili.
                     candidates = [_dadf, _prim] if sportchannels.is_prefer_ff(par) else [_prim, _dadf]
                 else:

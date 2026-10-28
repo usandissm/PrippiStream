@@ -13,6 +13,11 @@ build/
 .cxx/
 /app/release/
 /captures/
+/.tmp-*
+/reports/
+/device-screen.png
+/rick-image.bin
+/startup-*.png
 
 # Firma APK: conservare e fare backup fuori da Git
 /keystore.properties
