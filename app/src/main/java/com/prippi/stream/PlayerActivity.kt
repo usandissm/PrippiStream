@@ -793,7 +793,7 @@ open class PlayerActivity : ComponentActivity() {
                     metadata.setTextColor(Color.rgb(218, 224, 232))
                     metadata.textSize = 14f * textScale
                     metadata.gravity = Gravity.CENTER
-                    metadata.maxLines = 2
+                    metadata.maxLines = 4
                     metadata.setPadding(0, scaled(3).dp(), 0, 0)
                 })
             }
@@ -1086,7 +1086,7 @@ open class PlayerActivity : ComponentActivity() {
                     televisionMetadataView = metadata
                     metadata.setTextColor(Color.rgb(210, 220, 232))
                     metadata.textSize = 17f * textScale
-                    metadata.maxLines = 2
+                    metadata.maxLines = 4
                     metadata.setPadding(0, scaled(5).dp(), 0, 0)
                 })
 
@@ -1350,7 +1350,7 @@ open class PlayerActivity : ComponentActivity() {
             ).filter { it.isNotBlank() }.joinToString("  •  ")
         }.orEmpty()
         televisionMetadataView?.text = if (liveLines.size > 1) {
-            liveLines.drop(1).joinToString("  •  ")
+            LiveGuideFormatting.metadata(liveLines.drop(1))
         } else {
             contentMetadata.ifBlank {
                 if (liveRowItems.length() > 0) "Diretta" else "Riproduzione video"

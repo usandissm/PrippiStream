@@ -50,8 +50,8 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 98
-        versionName = "0.9.43"
+        versionCode = 99
+        versionName = "0.9.44"
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
 
         // Release universale per box Android 32-bit e dispositivi ARM64.
