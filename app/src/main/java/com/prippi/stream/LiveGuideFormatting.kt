@@ -2,7 +2,7 @@ package com.prippi.stream
 
 internal object LiveGuideFormatting {
     private val nextProgramme = Regex(
-        """\s*(?:[•·|]\s*)?(?=\bA[ \t]+seguire(?:[ \t]+\d{1,2}:\d{2}|[ \t]*[·•]))""",
+        """(?:\s*[•·|]\s*|\s+)(?=\bA[ \t]+seguire(?:[ \t]+\d{1,2}:\d{2}|[ \t]*[·•]))""",
         RegexOption.IGNORE_CASE,
     )
 
