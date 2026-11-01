@@ -1,4 +1,4 @@
 Novità dell’aggiornamento
 
-- Guida TV più leggibile nel player: il programma A seguire compare su una nuova riga.
-- Più spazio per i testi EPG su telefono, tablet e TV.
+- Corretta la perdita degli a capo durante la lettura dei dati EPG.
+- Il programma A seguire viene separato anche quando la guida arriva già su un'unica riga.

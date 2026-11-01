@@ -79,6 +79,11 @@ fun cleanKodiText(value: String?): String {
     }
 }
 
+/** HTML treats literal newlines as spaces: clean each guide line separately. */
+internal fun cleanLiveGuideText(value: String?): String = LiveGuideFormatting.normalize(
+    value.orEmpty().lineSequence().joinToString("\n") { cleanKodiText(it) },
+)
+
 data class ContentItem(
     val title: String,
     val subtitle: String,
@@ -205,6 +210,9 @@ data class ContentItem(
     companion object {
         fun fromJson(json: JSONObject, defaultChannel: String = "streamingcommunity"): ContentItem {
             val info = json.optJSONObject("infoLabels") ?: JSONObject()
+            val rawPlot = info.optString("plot").ifBlank { info.optString("plotoutline") }
+                .ifBlank { json.optString("contentPlot") }.ifBlank { json.optString("plot") }
+                .ifBlank { json.optString("description") }
             val mediaType = info.optString("mediatype").ifBlank { json.optString("contentType") }
             val rawTitle = if (json.optBoolean("_app_event")) {
                 json.optString("title").ifBlank { json.optString("fulltitle") }
@@ -232,13 +240,7 @@ data class ContentItem(
                 rawJson = json.toString(),
                 mediaType = mediaType,
                 tmdbId = info.optString("tmdb_id"),
-                plot = cleanKodiText(
-                    info.optString("plot")
-                        .ifBlank { info.optString("plotoutline") }
-                        .ifBlank { json.optString("contentPlot") }
-                        .ifBlank { json.optString("plot") }
-                        .ifBlank { json.optString("description") },
-                ),
+                plot = if (json.optBoolean("_app_live")) cleanLiveGuideText(rawPlot) else cleanKodiText(rawPlot),
                 year = info.optInt("year", json.optInt("year")),
                 genres = info.optString("genre"),
                 rating = info.ratingValue("rating", "vote_average", "tmdb_rating")

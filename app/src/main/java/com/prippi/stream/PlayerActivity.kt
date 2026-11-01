@@ -439,7 +439,7 @@ open class PlayerActivity : ComponentActivity() {
             refreshTelevisionOsd()
             return
         }
-        val guideLines = programme.lineSequence()
+        val guideLines = LiveGuideFormatting.normalize(programme).lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() && !it.equals(channelTitle, ignoreCase = true) }
             .map { line -> line.replace(Regex("^IN ONDA", RegexOption.IGNORE_CASE), "Adesso") }
