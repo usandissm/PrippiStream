@@ -23,6 +23,7 @@ data class WatchProgress(
  * alla ripresa il resolver genera una sorgente fresca dall'Item originale. */
 class WatchProgressStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    internal val offlineStore = OfflineWatchStore(context)
 
     @Synchronized
     fun list(): List<WatchProgress> = readAll().values
@@ -65,14 +66,17 @@ class WatchProgressStore(context: Context) {
             return
         }
         val canonicalKey = ContinueWatchingPolicy.keyFor(key, rawJson)
-        if (ContinueWatchingPolicy.isCompleted(positionMs, durationMs)) {
+        val pendingOfflineEpisode = runCatching {
+            JSONObject(rawJson).optBoolean("_app_offline_completed")
+        }.getOrDefault(false)
+        if (ContinueWatchingPolicy.isCompleted(positionMs, durationMs) && !pendingOfflineEpisode) {
             remove(canonicalKey)
             return
         }
         val all = readAll().toMutableMap()
         all[canonicalKey] = WatchProgress(
             canonicalKey,
-            rawJson,
+            ContinueWatchingPolicy.cleanMetadata(rawJson),
             positionMs,
             durationMs,
             System.currentTimeMillis(),
@@ -90,7 +94,7 @@ class WatchProgressStore(context: Context) {
         val all = readAll().toMutableMap()
         all[item.continueWatchingKey] = WatchProgress(
             key = item.continueWatchingKey,
-            rawJson = item.rawJson,
+            rawJson = ContinueWatchingPolicy.cleanMetadata(item.rawJson),
             positionMs = 0L,
             durationMs = 0L,
             updatedAt = System.currentTimeMillis(),

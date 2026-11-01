@@ -16,13 +16,15 @@ data class DownloadEntry(
     val season: Int,
     val episode: Int,
     val totalBytes: Long,
+    val contentJson: String = "",
+    val offlineAvailable: Boolean = true,
 ) {
     val displayTitle: String
         get() = if (showTitle.isNotBlank() && episode > 0) {
             "$showTitle · S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')} · $title"
         } else title
 
-    val isComplete: Boolean get() = status == "done"
+    val isComplete: Boolean get() = status == "done" && offlineAvailable
     val isActive: Boolean get() = status in setOf("queued", "downloading", "waiting_network")
     val canResume: Boolean get() = status in setOf("paused", "error")
 
@@ -40,6 +42,8 @@ data class DownloadEntry(
             season = json.optInt("season"),
             episode = json.optInt("episode"),
             totalBytes = json.optLong("total_bytes"),
+            contentJson = json.optJSONObject("content_item")?.toString().orEmpty(),
+            offlineAvailable = json.optBoolean("offline_available", true),
         )
     }
 }

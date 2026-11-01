@@ -54,6 +54,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
@@ -616,6 +617,7 @@ private fun PrippiApp(
                 putExtra("episode_queue_size", episodeQueueSize)
                 putExtra("episode_queue_index", if (episodeQueueSize > 0) fullIndex else -1)
                 putExtra("progress_key", item.continueWatchingKey)
+                putExtra("offline_download_key", episodePayload.optString("_app_offline_download_key"))
                 putExtra(
                     "content_json",
                     JSONObject(item.rawJson).apply {
@@ -659,16 +661,7 @@ private fun PrippiApp(
             startPlayer(item, plan.ordered, startMs)
         }
     }
-    val playOffline: (PlaybackRequest) -> Unit = { request ->
-        context.startActivity(Intent(context, PlayerActivity::class.java).apply {
-            putExtra("television_player", isTelevision)
-            putExtra("url", request.url)
-            putExtra("bootstrap_url", request.bootstrapUrl)
-            putExtra("manifest", request.manifest)
-            putExtra("audio", request.audioLanguage)
-            putExtra("headers", request.headersJson)
-        })
-    }
+    val playOffline: PlaybackStarter = { item, requests, startMs -> startPlayer(item, requests, startMs) }
     val download: (ContentItem, PlaybackRequest) -> Unit = { item, request ->
         val labels = arrayOf("Migliore disponibile", "Full HD · 1080p", "HD · 720p", "SD · 480p")
         val heights = intArrayOf(0, 1080, 720, 480)
@@ -700,10 +693,10 @@ private fun PrippiApp(
             .show()
     }
     LaunchedEffect(state.page) {
-        if (state.page == AppPage.DOWNLOADS) {
+        if (state.page in setOf(AppPage.DOWNLOADS, AppPage.DETAIL)) {
             while (true) {
-                delay(2_000)
                 model.refreshDownloads()
+                delay(2_000)
             }
         }
     }
@@ -920,6 +913,7 @@ private fun PrippiApp(
                 AppPage.DETAIL -> state.selectedItem?.let { selected ->
                     DetailPage(
                         item = selected,
+                        downloads = state.downloads,
                         progressItem = state.selectedProgressItem,
                         overview = state.detailOverview,
                         episodes = state.episodes,
@@ -950,7 +944,7 @@ private fun TelevisionApp(
     model: MainViewModel,
     state: AppUiState,
     play: PlaybackStarter,
-    playOffline: (PlaybackRequest) -> Unit,
+    playOffline: PlaybackStarter,
     download: (ContentItem, PlaybackRequest) -> Unit,
     focusRecoveryNonce: Int,
     homeFocusedRow: String,
@@ -1108,6 +1102,7 @@ private fun TelevisionApp(
                         }
                         TelevisionDetail(
                             item = item,
+                            downloads = state.downloads,
                             progressItem = state.selectedProgressItem,
                             overview = state.detailOverview,
                             episodes = state.episodes,
@@ -1660,7 +1655,7 @@ private fun TelevisionLive(
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Row(horizontalArrangement = Arrangement.spacedBy((14f * scale).dp)) {
                 CircularProgressIndicator(Modifier.size((30f * scale).dp))
-                Text("Verifica dei canali in corso…", style = MaterialTheme.typography.titleLarge)
+                Text("Preparazione canali e guida TV…", style = MaterialTheme.typography.titleLarge)
             }
         }
         return
@@ -2382,6 +2377,7 @@ private fun TelevisionActionCard(
 @Composable
 private fun TelevisionDetail(
     item: ContentItem,
+    downloads: List<DownloadEntry>,
     progressItem: ContentItem?,
     overview: String,
     episodes: List<ContentItem>,
@@ -2577,11 +2573,19 @@ private fun TelevisionDetail(
                         episodes.filter { selectedSeason <= 0 || it.season == selectedSeason },
                         key = { index, episode -> "${episode.stableKey}:$index" },
                     ) { _, episode ->
-                        TelevisionMediaCard(
-                            item = episode,
-                            onFocused = {},
-                            onClick = { onPlay(episode, episode.progressMs > 0) },
-                        )
+                        val offline = OfflinePlaybackPolicy.find(episode, downloads) != null
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TelevisionMediaCard(
+                                item = episode,
+                                onFocused = {},
+                                onClick = { onPlay(episode, true) },
+                            )
+                            TelevisionDetailActionButton(
+                                label = if (offline) "Disponibile offline" else "Scarica puntata",
+                                icon = if (offline) Icons.Default.CheckCircle else Icons.Default.Download,
+                                onClick = { if (offline) onPlay(episode, true) else onDownload(episode) },
+                            )
+                        }
                     }
                 }
             }
@@ -3872,6 +3876,14 @@ private fun LivePage(
     focusRecoveryNonce: Int,
     onItemFocused: (String, String) -> Unit,
 ) {
+    if (rows.isEmpty()) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text("Preparazione canali e guida TV…", modifier = Modifier.padding(16.dp))
+        }
+        return
+    }
     val restoreRowId = remember(rows.isNotEmpty(), focusRecoveryNonce) { focusedRowId }
     val restoreItemKey = remember(rows.isNotEmpty(), focusRecoveryNonce) { focusedItemKey }
     val targetRowIndex = rows.indexOfFirst { it.id == restoreRowId }
@@ -4419,6 +4431,7 @@ private fun continueWatchingActionLabel(
 @Composable
 private fun DetailPage(
     item: ContentItem,
+    downloads: List<DownloadEntry>,
     progressItem: ContentItem?,
     overview: String,
     episodes: List<ContentItem>,
@@ -4583,7 +4596,8 @@ private fun DetailPage(
                 ) { _, episode ->
                     EpisodeRow(
                         item = episode,
-                        onPlay = { onPlay(episode, episode.progressMs > 0) },
+                        downloaded = OfflinePlaybackPolicy.find(episode, downloads) != null,
+                        onPlay = { onPlay(episode, true) },
                         onDownload = { onDownload(episode) },
                     )
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
@@ -4594,12 +4608,13 @@ private fun DetailPage(
 }
 
 @Composable
-private fun EpisodeRow(item: ContentItem, onPlay: () -> Unit, onDownload: () -> Unit) {
+private fun EpisodeRow(item: ContentItem, downloaded: Boolean, onPlay: () -> Unit, onDownload: () -> Unit) {
     var expanded by rememberSaveable(item.stableKey) { mutableStateOf(false) }
     ListItem(
         headlineContent = { Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             Column {
+                if (downloaded) Text("✓ Disponibile offline", color = Color(0xFF62DFA2))
                 if (item.progressFraction > 0f) {
                     LinearProgressIndicator(progress = { item.progressFraction }, modifier = Modifier.fillMaxWidth())
                     Text("Riprendi da ${formatDuration(item.progressMs)}")
@@ -4629,8 +4644,12 @@ private fun EpisodeRow(item: ContentItem, onPlay: () -> Unit, onDownload: () -> 
         },
         trailingContent = {
             Row {
-                IconButton(onClick = onDownload) {
-                    Icon(Icons.Default.Download, contentDescription = "Scarica")
+                IconButton(onClick = if (downloaded) onPlay else onDownload) {
+                    Icon(
+                        if (downloaded) Icons.Default.CheckCircle else Icons.Default.Download,
+                        contentDescription = if (downloaded) "Disponibile offline: riproduci" else "Scarica",
+                        tint = if (downloaded) Color(0xFF62DFA2) else LocalContentColor.current,
+                    )
                 }
                 IconButton(onClick = onPlay) {
                     Icon(Icons.Default.PlayArrow, contentDescription = "Riproduci")

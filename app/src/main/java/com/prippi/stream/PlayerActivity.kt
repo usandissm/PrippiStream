@@ -106,6 +106,7 @@ open class PlayerActivity : ComponentActivity() {
     private var mediaTrackPreferenceKey: String? = null
     private var progressKey = ""
     private var contentJson = ""
+    private var offlineDownloadKey = ""
     private var startPositionMs = 0L
     private var downloadItemJson = ""
     private var downloadTargetHeight = 0
@@ -262,6 +263,7 @@ open class PlayerActivity : ComponentActivity() {
         mediaTrackPreferenceStore = MediaTrackPreferenceStore(applicationContext)
         progressKey = intent.getStringExtra("progress_key").orEmpty()
         contentJson = intent.getStringExtra("content_json").orEmpty()
+        offlineDownloadKey = intent.getStringExtra("offline_download_key").orEmpty()
         mediaTrackPreferenceKey = mediaPreferenceKey(contentJson)
         startPositionMs = intent.getLongExtra("start_position_ms", 0L).coerceAtLeast(0L)
         val liveQueueKey = intent.getStringExtra("live_row_queue_key").orEmpty()
@@ -1315,7 +1317,10 @@ open class PlayerActivity : ComponentActivity() {
                 },
             )
         }.orEmpty()
-        val episodeTitle = if (season > 0 && episode > 0) {
+        val episodeTitle = if (offlineDownloadKey.isNotBlank()) {
+            runCatching { OfflinePlaybackPolicy.playerTitle(ContentItem.fromJson(JSONObject(contentJson))) }
+                .getOrDefault(contentTitle)
+        } else if (season > 0 && episode > 0) {
             buildString {
                 append(showTitle.ifBlank { contentTitle })
                 append("  ·  S")
@@ -1802,7 +1807,13 @@ open class PlayerActivity : ComponentActivity() {
 
     private fun nextEpisodeItem(): ContentItem? {
         val targetIndex = episodeQueueIndex + 1
-        return episodeAt(targetIndex)?.let(ContentItem::fromJson)
+        val target = episodeAt(targetIndex)?.let(ContentItem::fromJson) ?: return null
+        if (offlineDownloadKey.isNotBlank() &&
+            !runCatching { JSONObject(contentJson).optBoolean("_app_episode_queue_complete") }.getOrDefault(false)) {
+            val current = runCatching { ContentItem.fromJson(JSONObject(contentJson)) }.getOrNull()
+            if (current == null || current.season != target.season || target.episode != current.episode + 1) return null
+        }
+        return target
     }
 
     private fun showEpisodeSelection() {
@@ -1841,6 +1852,8 @@ open class PlayerActivity : ComponentActivity() {
     private fun autoplayNextEnabled(): Boolean =
         episodeQueueIndex >= 0 &&
             episodeQueueIndex + 1 < episodeQueueLength() &&
+            (offlineDownloadKey.isBlank() || nextEpisodeItem()?.toJson()
+                ?.optString("_app_offline_download_key")?.isNotBlank() == true) &&
             playbackCandidates.getOrNull(currentCandidateIndex)?.autoplayNext != false
 
     private fun updateUpNextState() {
@@ -2075,7 +2088,13 @@ open class PlayerActivity : ComponentActivity() {
         statusView.text = "Preparazione ${target.title}…"
         statusView.visibility = View.VISIBLE
         Thread {
-            val result = runCatching { ContentRepository().playbackCandidates(target) }
+            val result = runCatching {
+                if (offlineDownloadKey.isNotBlank()) {
+                    val key = target.toJson().optString("_app_offline_download_key")
+                    check(key.isNotBlank()) { "Questa puntata non è disponibile offline" }
+                    listOf(ContentRepository().downloadPlayback(key))
+                } else ContentRepository().playbackCandidates(target)
+            }
             runOnUiThread {
                 if (!isAsyncOperationActive(operationGeneration)) {
                     episodeSwitching.set(false)
@@ -2088,6 +2107,7 @@ open class PlayerActivity : ComponentActivity() {
                         android.util.Log.e("Prippi", "Autoplay episodio", it)
                     }
                 } else {
+                    persistProgress(synchronous = true)
                     progressHandler.removeCallbacks(progressSaver)
                     clearBootstrapCallbacks()
                     bootstrapWebView?.apply { stopLoading(); destroy() }
@@ -2098,6 +2118,9 @@ open class PlayerActivity : ComponentActivity() {
                     episodeQueueIndex = targetIndex
                     progressKey = target.continueWatchingKey
                     contentJson = target.rawJson
+                    if (offlineDownloadKey.isNotBlank()) {
+                        offlineDownloadKey = target.toJson().optString("_app_offline_download_key")
+                    }
                     mediaTrackPreferenceKey = MediaTrackPreferencePolicy.keyFor(target)
                     startPositionMs = 0L
                     progressStore.advanceTo(target)
@@ -2441,6 +2464,7 @@ open class PlayerActivity : ComponentActivity() {
                             }
                             Player.STATE_BUFFERING -> status.text = "Caricamento…"
                             Player.STATE_ENDED -> {
+                                if (offlineDownloadKey.isNotBlank()) persistProgress(synchronous = true)
                                 val completedItem = runCatching {
                                     ContentItem.fromJson(JSONObject(contentJson))
                                 }.getOrNull()
@@ -2450,7 +2474,9 @@ open class PlayerActivity : ComponentActivity() {
                                     // subito il CW al successivo anche se l'utente ha
                                     // annullato l'autoplay o la risoluzione successiva fallisce.
                                     progressStore.advanceTo(nextEpisode)
-                                } else if (progressKey.isNotBlank()) {
+                                } else if (progressKey.isNotBlank() && !(offlineDownloadKey.isNotBlank() &&
+                                    completedItem?.isEpisode == true &&
+                                    !JSONObject(contentJson).optBoolean("_app_episode_queue_complete"))) {
                                     progressStore.remove(progressKey, contentJson)
                                 }
                                 if (autoplayNextEnabled() && !upNextPromptHidden) {
@@ -3221,6 +3247,12 @@ open class PlayerActivity : ComponentActivity() {
         if (progressKey.isBlank() || contentJson.isBlank()) return
         val duration = current.duration.takeUnless { it == C.TIME_UNSET || it < 0 } ?: 0L
         val position = current.currentPosition.coerceAtLeast(0L)
+        if (offlineDownloadKey.isNotBlank()) {
+            progressStore.offlineStore.save(offlineDownloadKey, position, duration, synchronous)
+        }
+        PlaybackDetailSession.item = runCatching {
+            ContentItem.fromJson(JSONObject(contentJson)).withProgress(position, duration)
+        }.getOrNull()
         val completedEpisode = ContinueWatchingPolicy.isCompleted(position, duration) &&
             runCatching { ContentItem.fromJson(JSONObject(contentJson)).isEpisode }
                 .getOrDefault(false)
@@ -3232,10 +3264,14 @@ open class PlayerActivity : ComponentActivity() {
             progressStore.advanceTo(nextEpisode, synchronous = synchronous)
             return
         }
+        val raw = if (completedEpisode && offlineDownloadKey.isNotBlank() &&
+            !JSONObject(contentJson).optBoolean("_app_episode_queue_complete")) {
+            JSONObject(contentJson).put("_app_offline_completed", true).toString()
+        } else contentJson
         if (synchronous) {
-            progressStore.saveNow(progressKey, contentJson, position, duration)
+            progressStore.saveNow(progressKey, raw, position, duration)
         } else {
-            progressStore.save(progressKey, contentJson, position, duration)
+            progressStore.save(progressKey, raw, position, duration)
         }
     }
 

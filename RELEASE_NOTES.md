@@ -1,5 +1,6 @@
 Novità dell’aggiornamento
 
-- Corretto il trasferimento delle liste Live ed Eventi al player, evitando di inviare centinaia di schede attraverso il sistema di apertura Android.
-- Mantenuti il cambio canale e la navigazione tra gli eventi su telefono, tablet e TV.
-- Nessuna modifica ai contenuti scaricati o a Continua a guardare.
+- Canali Live e guida TV preparati insieme, con attesa limitata e recupero automatico degli EPG mancanti.
+- Titolo del film o della serie e numero della puntata nel player dei download.
+- Ripresa dei download dal punto interrotto e aggiornamento di Continua a guardare anche durante la visione offline.
+- Indicatore di disponibilità offline negli elenchi degli episodi, su telefono, tablet e TV.

@@ -8,6 +8,13 @@ import java.util.Locale
 internal object ContinueWatchingPolicy {
     const val COMPLETE_PERCENT = 97
 
+    fun cleanMetadata(rawJson: String): String = runCatching {
+        JSONObject(rawJson).apply {
+            listOf("_app_offline_download_key", "_app_episode_queue", "_app_episode_index",
+                "_app_media_url", "_app_media_headers", "_app_subtitle_urls").forEach { remove(it) }
+        }.toString()
+    }.getOrDefault(rawJson)
+
     fun isCompleted(positionMs: Long, durationMs: Long): Boolean =
         durationMs > 0L && positionMs >= durationMs * COMPLETE_PERCENT / 100L
 

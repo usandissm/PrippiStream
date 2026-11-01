@@ -444,11 +444,11 @@ class MainViewModel(
     }
 
     fun refreshDownloads() {
-        if (state.page != AppPage.DOWNLOADS) return
+        if (state.page !in setOf(AppPage.DOWNLOADS, AppPage.DETAIL)) return
         viewModelScope.launch {
             try {
                 val downloads = withContext(Dispatchers.IO) { repository.downloads() }
-                if (state.page == AppPage.DOWNLOADS) state = state.copy(downloads = downloads)
+                if (state.page in setOf(AppPage.DOWNLOADS, AppPage.DETAIL)) state = state.copy(downloads = downloads)
             } catch (error: Exception) {
                 android.util.Log.e("Prippi", "aggiornamento download", error)
             }
@@ -462,7 +462,15 @@ class MainViewModel(
         if (item.isLive) error("Le dirette non possono essere scaricate")
         val playback = withContext(Dispatchers.IO) { repository.playback(item) }
             ?: error("Nessuna sorgente disponibile per il download")
-        onReady(item, playback)
+        val queue = EpisodeFlowPolicy.ordered(state.episodes)
+        val payload = item.toJson()
+        if (item.isEpisode && EpisodeFlowPolicy.indexOf(queue, item) >= 0 &&
+            queue.all { it.toJson().optBoolean("_app_episode_queue_complete", true) }) {
+            payload.put("_app_episode_queue", org.json.JSONArray().apply {
+                queue.forEach { put(it.toJson().apply { remove("_app_episode_queue") }) }
+            })
+        }
+        onReady(item.copy(rawJson = payload.toString()), playback)
     }
 
     fun openTrailer(item: ContentItem, onReady: (List<String>) -> Unit) = runTask {
@@ -505,9 +513,47 @@ class MainViewModel(
         state = state.copy(downloads = withContext(Dispatchers.IO) { repository.downloads() })
     }
 
-    fun playDownload(entry: DownloadEntry, onPlayback: (PlaybackRequest) -> Unit) = runTask {
+    fun playDownload(entry: DownloadEntry, onPlayback: (ContentItem, List<PlaybackRequest>, Long) -> Unit) = runTask {
+        val library = withContext(Dispatchers.IO) { repository.downloads() }
+        launchOffline(entry, library, onPlayback)
+    }
+
+    private suspend fun launchOffline(
+        entry: DownloadEntry,
+        library: List<DownloadEntry>,
+        onPlayback: (ContentItem, List<PlaybackRequest>, Long) -> Unit,
+        resume: Boolean = true,
+    ) {
+        val original = OfflinePlaybackPolicy.content(entry) ?: error("Metadati download non disponibili")
         val request = withContext(Dispatchers.IO) { repository.downloadPlayback(entry.key) }
-        onPlayback(request)
+        val payload = original.toJson()
+        val persistedQueue = payload.optJSONArray("_app_episode_queue")
+        val knownEpisodes = if (persistedQueue != null) {
+            (0 until persistedQueue.length()).mapNotNull { index ->
+                persistedQueue.optJSONObject(index)?.let { runCatching { ContentItem.fromJson(it) }.getOrNull() }
+            }
+        } else {
+            state.episodes.filter { it.continueWatchingKey == original.continueWatchingKey } +
+                library.mapNotNull(OfflinePlaybackPolicy::content)
+                    .filter { it.isEpisode && it.continueWatchingKey == original.continueWatchingKey } + original
+        }
+        if (original.isEpisode) {
+            val queue = EpisodeFlowPolicy.ordered(knownEpisodes)
+            payload.put("_app_episode_queue", org.json.JSONArray().apply {
+                queue.forEach { episode -> put(episode.toJson().apply {
+                    remove("_app_episode_queue")
+                    put("_app_episode_queue_complete", persistedQueue != null)
+                    OfflinePlaybackPolicy.find(episode, library)?.let { put("_app_offline_download_key", it.key) }
+                }) }
+            })
+            payload.put("_app_episode_index", EpisodeFlowPolicy.indexOf(queue, original))
+        }
+        payload.put("_app_offline_download_key", entry.key)
+        payload.put("_app_episode_queue_complete", persistedQueue != null)
+        val bookmark = progressStore.offlineStore.find(entry.key)
+        val shared = progressStore.find(original)
+        val position = OfflinePlaybackPolicy.resumePosition(bookmark, shared, resume)
+        onPlayback(original.copy(rawJson = payload.toString()), listOf(request), position)
     }
 
     fun openChannel(channel: ChannelInfo) = runTask {
@@ -654,6 +700,15 @@ class MainViewModel(
             returnTitle = if (state.page == AppPage.DETAIL) state.returnTitle else state.pageTitle,
             error = null,
         )
+        if (item.toJson().optString("_app_offline_download_key").isNotBlank()) {
+            val queue = item.toJson().optJSONArray("_app_episode_queue")
+            val episodes = if (queue == null) emptyList() else (0 until queue.length()).mapNotNull { index ->
+                queue.optJSONObject(index)?.let { runCatching { ContentItem.fromJson(it) }.getOrNull() }
+            }
+            state = state.copy(episodes = applyStoredProgress(episodes), loading = false,
+                selectedSeason = item.season.takeIf { it > 0 } ?: 1)
+            return
+        }
         runTask {
             val detailed = withContext(Dispatchers.IO) {
                 runCatching { repository.detailMetadata(enriched) }
@@ -701,6 +756,13 @@ class MainViewModel(
     ) = runTask {
         val saved = progressStore.find(item)
         val savedItem = saved?.contentItem()
+        val offlineTarget = if (resume && item.isSeries && !item.isEpisode) savedItem ?: item else item
+        val library = withContext(Dispatchers.IO) { runCatching { repository.downloads() }.getOrDefault(emptyList()) }
+        OfflinePlaybackPolicy.find(offlineTarget, library)?.let { offline ->
+            if (savedItem?.toJson()?.optBoolean("_app_offline_completed") == true && resume) return@let
+            launchOffline(offline, library, onPlayback, resume)
+            return@runTask
+        }
         val needsEpisodeFlow = item.isSeries || item.isEpisode ||
             item.toJson().has("_app_series_parent")
         val currentEpisodes = EpisodeFlowPolicy.ordered(state.episodes)
@@ -716,15 +778,21 @@ class MainViewModel(
         } else {
             currentEpisodes
         }
-        val playbackItem = EpisodeFlowPolicy.playbackItem(
+        val initialPlaybackItem = EpisodeFlowPolicy.playbackItem(
             requested = item,
             resume = resume,
             saved = savedItem,
             orderedEpisodes = episodeQueue,
         )
+        val pendingCompleted = resume && savedItem?.toJson()?.optBoolean("_app_offline_completed") == true
+        val playbackItem = if (pendingCompleted) {
+            val index = EpisodeFlowPolicy.indexOf(episodeQueue, initialPlaybackItem)
+            episodeQueue.getOrNull(index + 1).takeIf { index >= 0 }
+                ?: error("Impossibile individuare la puntata successiva: riapri la serie quando sei online")
+        } else initialPlaybackItem
         val playbacks = withContext(Dispatchers.IO) { repository.playbackCandidates(playbackItem) }
         if (playbacks.isEmpty()) error("Nessuna sorgente disponibile")
-        val startMs = if (resume) saved?.positionMs ?: playbackItem.progressMs else 0L
+        val startMs = if (resume && !pendingCompleted) saved?.positionMs ?: playbackItem.progressMs else 0L
         val episodeIndex = EpisodeFlowPolicy.indexOf(episodeQueue, playbackItem)
         val payload = playbackItem.toJson().apply {
             if (episodeIndex >= 0 && episodeQueue.size > 1) {

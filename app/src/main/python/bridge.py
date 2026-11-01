@@ -1050,8 +1050,13 @@ def live_rows():
         for item in items:
             epg_keys.extend((getattr(item, 'sport_par', ''),
                              getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
-    skyepg.prefetch(epg_keys)
+    from platformcode import liveepg
+    for key, items in built_rows:
+        if key != 'events':
+            liveepg.start(items)
     for index, (key, items) in enumerate(built_rows):
+        if key != 'events':
+            liveepg.wait(items)
         for item in items:
             item._app_live = True
             if key == 'events':
@@ -1069,6 +1074,8 @@ def live_rows():
                     lines.append(u'A seguire %s · %s' %
                                  (epg.get('next_start', ''), epg['next_prog']))
                 item.infoLabels['plot'] = '\n'.join(line for line in lines if line)
+            else:
+                item.infoLabels['plot'] = u'Guida momentaneamente non disponibile'
         if items:
             rows.append({
                 'id': 'live_' + key,
@@ -1680,7 +1687,31 @@ def downloads_list():
     init()
     from platformcode import downloads_db
     downloads_db.repair_completed()
-    return [_jsonable(entry) for entry in downloads_db.get_all()]
+    return [dict(_jsonable(entry), content_item=_download_content(entry),
+                 offline_available=entry.get('status') == 'done' and downloads_db._has_playable_file(entry))
+            for entry in downloads_db.get_all()]
+
+
+def _download_content(entry):
+    """Recover the ORIGINAL provider identity, never the temporary loopback URL."""
+    from core.item import Item
+    try:
+        item = Item().fromurl(entry['item_url']) if entry.get('item_url') else None
+        if item and getattr(item, 'title', ''):
+            for key in ('_app_media_url', '_app_media_headers', '_app_subtitle_urls'):
+                item.__dict__.pop(key, None)
+            return _from_item(item)
+    except Exception:
+        pass
+    # Older entries without an Item remain playable and keep their own progress.
+    return dict(title=entry.get('title') or 'Download',
+                contentSerieName=entry.get('show_title') or '',
+                contentType=entry.get('type') or 'movie',
+                channel=entry.get('channel') or 'downloads',
+                contentSeason=entry.get('season') or 0,
+                contentEpisodeNumber=entry.get('episode') or 0,
+                thumbnail=entry.get('thumbnail') or '',
+                id=entry.get('key') or '', infoLabels={})
 
 
 def downloads_resume_once():

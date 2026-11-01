@@ -87,6 +87,9 @@ _GUIDE_ENTRY_TTL = 5 * 60
 _prefetch_guard = threading.Lock()
 _prefetch_running = False
 _last_prefetch_at = 0
+_key_attempts = {}
+_pending_keys = set()
+_epg_disk_loaded = False
 
 # Aliases for channels whose Sky guide name differs from our row title.
 _NAME_ALIASES = {
@@ -594,18 +597,68 @@ def _prefetch(keys):
 
 
 def prefetch(keys):
+    """Coalesce requests without dropping keys from rows which arrive later."""
     global _prefetch_running, _last_prefetch_at
     now = time.time()
     with _prefetch_guard:
-        if _prefetch_running or (now - _last_prefetch_at) < 3 * 60:
+        _pending_keys.update(k for k in keys if k and now - _key_attempts.get(k, 0) >= 180)
+        if _prefetch_running or not _pending_keys:
             return 0
         _prefetch_running = True
-    try:
-        return _prefetch(list(dict.fromkeys(k for k in keys if k)))
-    finally:
+    total = 0
+    while True:
         with _prefetch_guard:
-            _prefetch_running = False
-            _last_prefetch_at = time.time()
+            batch = list(_pending_keys)
+            _pending_keys.clear()
+            if not batch:
+                _prefetch_running = False
+                return total
+        try:
+            total += _prefetch(batch) or 0
+        except Exception as exc:
+            logger.error('[SkyEPG] batch failed: %s' % type(exc).__name__)
+        finally:
+            with _prefetch_guard:
+                _last_prefetch_at = time.time()
+                _key_attempts.update((key, _last_prefetch_at) for key in batch)
+                # Requests received while this batch was running need no repeat.
+                _pending_keys.difference_update(batch)
+            _save_epg_disk()
+
+
+def attempted(keys):
+    with _prefetch_guard:
+        return all(time.time() - _key_attempts.get(key, 0) < 180 for key in keys)
+
+
+def _save_epg_disk():
+    try:
+        with _epg_lock:
+            snapshot = {k: v for k, v in _epg_cache.items() if v.get('until', 0) > _utc_now()}
+        path = os.path.join(config.get_data_path(), 'live_epg_programmes.json')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + '.tmp', 'w', encoding='utf-8') as stream:
+            json.dump(snapshot, stream)
+        os.replace(path + '.tmp', path)
+    except Exception:
+        pass
+
+
+def _load_epg_disk():
+    global _epg_disk_loaded
+    with _epg_lock:
+        if _epg_disk_loaded:
+            return
+        _epg_disk_loaded = True
+        try:
+            path = os.path.join(config.get_data_path(), 'live_epg_programmes.json')
+            with open(path, encoding='utf-8') as stream:
+                entries = json.load(stream)
+            for key, entry in entries.items():
+                if entry.get('until', 0) > _utc_now() and entry.get('prog'):
+                    _epg_cache.setdefault(key, entry)
+        except Exception:
+            pass
 
 
 def now_on(title):
@@ -614,6 +667,7 @@ def now_on(title):
     Returns {'prog','ep_info','ep_title','start','end','synopsis', plus
     'next_prog'/'next_start' and 'prev_prog'/'prev_start'} when a fresh programme is
     known; drops the entry once its end time has passed."""
+    _load_epg_disk()
     with _epg_lock:
         e = _epg_cache.get(_norm(title))
         if not e:
