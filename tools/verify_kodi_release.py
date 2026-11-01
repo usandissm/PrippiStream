@@ -31,7 +31,7 @@ def main():
     spec.loader.exec_module(notes)
     text = (ROOT / 'changelog.txt').read_text(encoding='utf-8-sig')
     approved = next(body for ver, body in notes.parse(text) if ver == version)
-    for previous in ('', '1.5.7', '2.0.1', '2.0.2', '2.0.3'):
+    for previous in ('', '1.5.7', '2.0.1', '2.0.2', '2.0.3', '2.0.4'):
         assert notes.pending_notes(previous, version, text) == approved, 'Popup includes old/unapproved history'
     news = addon.find('.//news').text or ''
     assert normal_notes(news) == normal_notes(approved), 'Metadata notes differ from popup'
@@ -39,7 +39,7 @@ def main():
         'platformcode/' + name + '.py' for name in (
             '_fourk', 'prippihome', 'skyepg', 'sportchannels', 'tvchannels', 'changelog',
             'taskpool', 'mediahosting', 'tgevents', 'eventavailability', 'eventcalendar',
-            'eventpresentation', 'eventquality', 'eventresolver', 'eventtime')]
+            'eventpresentation', 'eventquality', 'eventresolver', 'eventtime', 'eventartnet', 'liveepg')]
     for name in runtime:
         ast.parse((ROOT / name).read_text(encoding='utf-8-sig'), feature_version=(3, 8))
     archive = ROOT / 'docs/plugin.video.prippistream' / ('plugin.video.prippistream-' + version + '.zip')

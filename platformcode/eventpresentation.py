@@ -8,12 +8,68 @@ import time
 import unicodedata
 from datetime import datetime, timedelta
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request
+_ArtTemporaryError = BlockingIOError
+
+
+def _art_read(request, limit, timeout=5):
+    from platformcode.eventartnet import read
+    return read(request, limit, timeout=timeout)
+
+
+def _espn_logos(team):
+    """Search results no longer carry logos: read the matched team's details."""
+    logos = team.get('logos') or []
+    if logos:
+        return [logo for logo in logos if isinstance(logo, dict)
+                and str(logo.get('href') or '').startswith('https://')]
+    identity = str(team.get('id') or '')
+    league = team.get('defaultLeagueSlug') or team.get('league') or ''
+    if not identity.isdigit() or not re.fullmatch(r'[a-z0-9._-]+', league):
+        return []
+    request = Request('https://site.api.espn.com/apis/site/v2/sports/soccer/' + league + '/teams/' + identity,
+                      headers={'User-Agent': 'PrippiStream-event-art/1.0'})
+    details = json.loads(_art_read(request, 1024 * 1024).decode('utf-8')).get('team') or {}
+    if str(details.get('id') or '') != identity:
+        return []
+    return [logo for logo in details.get('logos') or []
+            if isinstance(logo, dict) and str(logo.get('href') or '').startswith('https://')]
 
 
 def canonical(value):
     value = unicodedata.normalize('NFKD', str(value)).encode('ascii', 'ignore').decode().casefold()
     return re.sub(r'[^a-z0-9]', '', value)
+
+
+def _club_key(value):
+    # Ignore institutional abbreviations, not cities, reserve suffixes or years.
+    tokens = str(value).split()
+    abbreviations = {'fc', 'sc', 'ac', 'afc', 'fk', 'nk', 'cf', 'cda', 'cd', 'sd',
+                     'sk', 'as', 'ks', 'kf', 'nd', 'gfk', 'hnk', 'ssv', 'sv', 'tsv'}
+    while len(tokens) > 1 and canonical(tokens[0]) in abbreviations:
+        tokens.pop(0)
+    while len(tokens) > 1 and canonical(tokens[-1]) in abbreviations:
+        tokens.pop()
+    return canonical(' '.join(tokens))
+
+
+def _matching_espn_teams(query, values):
+    exact, normalized = {}, {}
+    key = _club_key(query)
+    for team in values:
+        if team.get('sport') != 'soccer':
+            continue
+        names = [team.get(k) or '' for k in ('displayName', 'name', 'location', 'shortDisplayName')]
+        identity = str(team.get('id') or '')
+        if not identity.isdigit():
+            continue
+        if canonical(query) in {canonical(name) for name in names}:
+            exact[identity] = team
+        elif len(key) >= 4 and key in {_club_key(name) for name in names}:
+            normalized[identity] = team
+    matches = exact or normalized
+    # Never assign one crest to multiple different clubs sharing a short name.
+    return list(matches.values()) if len(matches) == 1 else []
 
 
 ALIASES = {'inter': 'Inter Milan', 'milan': 'AC Milan', 'psg': 'Paris SG',
@@ -26,6 +82,48 @@ ALIASES = {'inter': 'Inter Milan', 'milan': 'AC Milan', 'psg': 'Paris SG',
            'veres': 'Veres Rivne', 'araz': 'Araz Nakhchivan',
            'alhilalriad': 'Al Hilal',
            'beijingguoan': 'Beijing Guoan'}
+ALIASES.update({
+    'bayernmonaco': 'Bayern Munich', 'stoccarda': 'VfB Stuttgart',
+    'friburgo': 'SC Freiburg', 'herthaberlino': 'Hertha Berlin',
+    'norimberga': 'Nurnberg', 'magdeburgo': '1. FC Magdeburg',
+    'dynamodresda': 'Dynamo Dresden', 'siviglia': 'Sevilla', 'celta': 'Celta Vigo',
+    'porto': 'FC Porto', 'rbsalisburgo': 'FC Salzburg',
+    'olympiakos': 'Olympiacos', 'aek': 'AEK Athens', 'apoel': 'APOEL Nicosia',
+    'heart': 'Heart of Midlothian', 'malmoe': 'Malmo FF', 'haecken': 'BK Hacken',
+    'goeteborg': 'IFK Goteborg', 'lechiadanzica': 'Lechia Gdansk',
+    'spartapraga': 'Sparta Prague', 'banikostrava': 'Banik Ostrava',
+    'dinamobucarest': 'Dinamo Bucuresti', 'argespitesti': 'FC Arges',
+    'ucluj': 'Universitatea Cluj', 'spartakm': 'Spartak Moscow',
+    'rubin': 'Rubin Kazan', 'akron': 'Akron Tolyatti', 'seul': 'FC Seoul',
+    'alittihadgedda': 'Al-Ittihad', 'alahligedda': 'Al-Ahli',
+    'wolverhampton': 'Wolverhampton Wanderers', 'lyon': 'Lyon',
+    'barcellona': 'Barcelona', 'parigi': 'Paris FC', 'bodoglimt': 'Bodo/Glimt',
+    'bodoeglimt': 'Bodo/Glimt', 'bruges': 'Club Brugge', 'copenaghen': 'FC Copenhagen',
+    'legiavarsavia': 'Legia Warsaw', 'ludogorec': 'Ludogorets Razgrad',
+    'manchesterutd': 'Manchester United', 'arminia': 'Arminia Bielefeld',
+    'braunschweig': 'Eintracht Braunschweig', 'botafogorj': 'Botafogo',
+    'athleticopr': 'Athletico-PR', 'cruzeiromg': 'Cruzeiro',
+    'alshababriad': 'Al-Shabab', 'bberzurumspor': 'Erzurumspor FK',
+    'atlantautd': 'Atlanta United FC',
+    'nyredbulls': 'New York Red Bulls', 'minnesotautd': 'Minnesota United FC',
+    'intermiami': 'Inter Miami CF', 'newyorkcity': 'New York City FC',
+    'newengland': 'New England Revolution', 'cincinnati': 'FC Cincinnati',
+    'nashville': 'Nashville SC', 'austin': 'Austin FC', 'charlotte': 'Charlotte FC',
+    'tottenham': 'Tottenham Hotspur', 'rbsalisburgo': 'FC Salzburg',
+    'norimberga': '1. FC Nurnberg', 'ucluj': 'Universitatea Cluj',
+    'seul': 'FC Seoul', 'cracovie': 'Cracovia', 'ob': 'Odense Boldklub',
+    'sheffieldutd': 'Sheffield United', 'interrs': 'Internacional',
+    'santossp': 'Santos', 'rbbragantino': 'Red Bull Bragantino',
+    'chindia': 'Chindia Targoviste', 'excelsiorm': 'Excelsior Maassluis',
+    'golgohar': 'Gol Gohar Sirjan FC', 'isloch': 'Isloch Minsk',
+    'navalcarnero': 'CD Artistico Navalcarnero', 'polissya': 'Polissya Zhitomir',
+    'polesia': 'Polissya Zhitomir', 'zrinjski': 'Zrinjski Mostar',
+    'husa': 'Hassania Agadir', 'estudianteslp': 'Estudiantes de La Plata',
+    'rbsalisburgo': 'FC Red Bull Salzburg', 'nyredbulls': 'Red Bull New York',
+    # Confirmed against the federation fixture: Goa's ISL opponent is Sporting
+    # Club Delhi, not the separate club named Delhi FC.
+    'delhi': 'Sporting Club Delhi',
+})
 ALIASES.update({
     'amburgo': 'Hamburg SV', 'augusta': 'FC Augsburg', 'borussiam': 'Borussia Monchengladbach',
     'colonia': 'FC Cologne', 'eintracht': 'Eintracht Frankfurt', 'magonza05': 'Mainz',
@@ -75,6 +173,71 @@ WIKI_BADGES = {
     canonical('Fær Øer Under-17'): ('en', 'Faroe Islands national football team'),
 }
 WIKI_BADGES.update({
+    'asfar': ('en', 'AS FAR (football club)'), 'almokawloon': ('en', 'Al Mokawloon Al Arab SC'),
+    'alfaisalyamman': ('en', 'Al-Faisaly SC'), 'aljabalain': ('en', 'Al-Jabalain FC'),
+    'aljandal': ('en', 'Al-Jandal SC'), 'aljaziraamman': ('en', 'Al-Jazeera SC (Amman)'),
+    'alkhaldiya': ('en', 'Al-Khaldiya SC'), 'almuharraq': ('en', 'Al-Muharraq SC'),
+    'alnahda': ('en', 'Al-Nahda Club (Oman)'), 'alrayyan': ('en', 'Al-Rayyan SC'),
+    'alzulfi': ('en', 'Al-Zulfi FC'), 'argespitesti': ('en', 'FC Argeș Pitești'),
+    'arkadag': ('en', 'FK Arkadag'), 'belsyna': ('en', 'FC Belshina Bobruisk'),
+    'bichkei': ('en', 'Bicskei TC'), 'bursayildirimspor': ('en', 'Bursa Yıldırım Spor'),
+    'chernihiv': ('en', 'FC Chernihiv'), 'chindia': ('en', 'AFC Chindia Târgoviște'),
+    'college': ('en', 'College 1975 F.C.'), 'czarnisosnowiec': ('en', 'Czarni Sosnowiec'),
+    'deportivatarma': ('en', 'Asociación Deportiva Tarma'),
+    'epitsentr': ('en', 'FC Epitsentr Kamianets-Podilskyi'),
+    'excelsiorm': ('en', 'Excelsior Maassluis'), 'glacisunited': ('en', 'Glacis United F.C.'),
+    'goa': ('en', 'FC Goa'), 'golgohar': ('en', 'Gol Gohar Sirjan F.C.'),
+    'husa': ('en', 'Hassania Agadir'), 'independientejuniors': ('en', 'Independiente Juniors'),
+    'isloch': ('en', 'FC Isloch Minsk Raion'), 'ittihadtangeri': ('en', 'IR Tanger'),
+    'joswatergraafsmeer': ('en', 'JOS Watergraafsmeer'), 'jeddeloh': ('en', 'SSV Jeddeloh'),
+    'kapaz': ('en', 'Kapaz PFK'), 'krajinacazin': ('en', 'FK Krajina Cazin'),
+    'kuwaitsc': ('en', 'Kuwait SC'), 'lduportoviejo': ('en', 'L.D.U. Portoviejo'),
+    'lnzcherkasy': ('en', 'FC LNZ Cherkasy'), 'managua': ('en', 'Managua FC'),
+    'marko': ('en', 'Marko F.C.'), 'maxline': ('en', 'FC Maxline Vitebsk'),
+    'nasaf': ('en', 'FC Nasaf'), 'nationalbank': ('en', 'National Bank of Egypt SC'),
+    'navalcarnero': ('en', 'CDA Navalcarnero'), 'polissya': ('en', 'FC Polissya Zhytomyr'),
+    'rajaca': ('en', 'Raja CA'), 'rbsalisburgo': ('en', 'FC Red Bull Salzburg'),
+    'sakaryaspor': ('en', 'Sakaryaspor'), 'salamancauds': ('en', 'Salamanca CF UDS'),
+    'setedesetembro': ('en', 'Sete de Setembro Esporte Clube'), 'seul': ('en', 'FC Seoul'),
+    'slovenruma': ('en', 'GFK Sloven Ruma'), 'tarancon': ('en', 'CD Tarancón'),
+    'thecongviettel': ('en', 'The Cong-Viettel FC'), 'ucluj': ('en', 'FC Universitatea Cluj'),
+    'viseu': ('en', 'Académico de Viseu F.C.'), 'yeniorduspor': ('en', '52 Orduspor F.K.'),
+    'zamalek': ('en', 'Zamalek SC'), 'zrinjski': ('en', 'HŠK Zrinjski Mostar'),
+    'estudianteslp': ('en', 'Estudiantes de La Plata'),
+    'rukhlviv': ('en', 'FC Rukh Lviv'),
+    'metalurh': ('en', 'FC Metalurh Zaporizhzhia'),
+    'aluminij': ('en', 'NK Aluminij'), 'celje': ('en', 'NK Celje'),
+    'bistrica': ('en', 'NK Bistrica'), 'dravinja': ('en', 'ND Dravinja'),
+    'ndbeltinci': ('en', 'ND Beltinci'), 'nafta': ('en', 'NK Nafta Lendava'),
+    'triglavkranj': ('en', 'NK Triglav Kranj'), 'krskoposavje': ('en', 'NK Krško Posavje'),
+    'jesenice': ('en', 'NK Jesenice'),
+    'banikostrava': ('en', 'FC Baník Ostrava'), 'trencin': ('en', 'AS Trenčín'),
+    'dac1904': ('en', 'FC DAC 1904 Dunajská Streda'), 'kosice': ('en', 'FC Košice (2018)'),
+    'varazdin': ('en', 'NK Varaždin (2012)'), 'rudes': ('en', 'NK Rudeš'),
+    'lokomotiva': ('en', 'NK Lokomotiva Zagreb'), 'segesta': ('en', 'HNK Segesta'),
+    'partizan': ('en', 'FK Partizan'), 'novipazar': ('en', 'FK Novi Pazar'),
+    'radnickinis': ('en', 'FK Radnički Niš'), 'radnicki1923': ('en', 'FK Radnički 1923'),
+    'tscbackatopola': ('en', 'FK TSC'), 'smederevo': ('en', 'FK Smederevo 1924'),
+    'loznica': ('en', 'FK Loznica'), 'vrsac': ('en', 'OFK Vršac'),
+    'vozdovac': ('en', 'FK Voždovac'), 'jedinstvoub': ('en', 'FK Jedinstvo Ub'),
+    'imtnovibeograd': ('en', 'FK IMT'), 'bregenz': ('en', 'Schwarz-Weiß Bregenz'),
+    'wislaplock': ('en', 'Wisła Płock'), 'puszcza': ('en', 'Puszcza Niepołomice'),
+    'lechiadanzica': ('en', 'Lechia Gdańsk'), 'poloniasroda': ('en', 'Polonia Środa Wielkopolska'),
+    'slaskbreslaviaii': ('en', 'Śląsk Wrocław II'), 'siarka': ('en', 'Siarka Tarnobrzeg'),
+    'kairat': ('en', 'FC Kairat'), 'mtk': ('en', 'MTK Budapest FC'),
+    'zalaegerszeg': ('en', 'Zalaegerszegi TE'), 'gyorieto': ('en', 'Győri ETO FC'),
+    'brommapojkarna': ('en', 'IF Brommapojkarna'), 'halmstad': ('en', 'Halmstads BK'),
+    'brann': ('en', 'SK Brann'), 'esbjerg': ('en', 'Esbjerg fB'),
+    'roskilde': ('en', 'FC Roskilde'), 'nordsjaelland': ('en', 'FC Nordsjælland'),
+    'oulu': ('en', 'AC Oulu'), 'vps': ('en', 'Vaasan Palloseura'),
+    'paide': ('en', 'Paide Linnameeskond'), 'kuressaare': ('en', 'FC Kuressaare'),
+    'parnujkvaprus': ('en', 'Pärnu JK Vaprus'),
+    'omoniaaradippou': ('en', 'Omonia Aradippou'), 'digenisakritas': ('en', 'Digenis Akritas Morphou'),
+    'elbasani': ('en', 'AF Elbasani'), 'laci': ('en', 'KF Laçi'),
+    'skenderbeu': ('en', 'KF Skënderbeu Korçë'), 'korabi': ('en', 'KF Korabi Peshkopi'),
+    'pogradec': ('en', 'KS Pogradeci'), 'oriku': ('en', 'KF Oriku'),
+    'londoncitylionesses': ('en', 'London City Lionesses'),
+    'oudheverlee': ('en', 'Oud-Heverlee Leuven'),
     'arda': ('en', 'FC Arda Kardzhali'),
     'botosani': ('en', 'FC Botoșani'), 'corvinul': ('en', 'CS Corvinul Hunedoara'),
     'utaarad': ('en', 'FC UTA Arad'), 'rapidbucarest': ('en', 'FC Rapid București'),
@@ -105,7 +268,33 @@ _REVIEWED_CREST_NAMES = {'daejeoncitizen', 'shanghaiport', 'nikivolou', 'veres',
                          'gornikleczna', 'alseeb', 'levadia', 'macva', 'mura',
                          'radomlje', 'ndslovan', 'primorje', 'cernomore', 'rudar', 'mazidagi'}
 _REVIEWED_CREST_NAMES.update({'motor', 'maribor', 'kloetinge', 'lionsgibraltar', 'cuarte'})
+_REVIEWED_CREST_NAMES.update({'dravinja', 'ndbeltinci', 'nafta', 'triglavkranj',
+    'krskoposavje', 'jesenice', 'varazdin', 'rudes', 'lokomotiva', 'segesta',
+    'partizan', 'radnickinis', 'smederevo', 'loznica', 'londoncitylionesses', 'oudheverlee'})
+_REVIEWED_CREST_NAMES.update({'asfar', 'almokawloon', 'alfaisalyamman', 'aljabalain',
+    'aljaziraamman', 'alkhaldiya', 'almuharraq', 'alrayyan', 'argespitesti',
+    'glacisunited', 'goa', 'kapaz', 'rajaca', 'salamancauds', 'ucluj', 'zamalek',
+    'estudianteslp', 'vozdovac', 'jedinstvoub', 'puszcza', 'poloniasroda',
+    'mtk', 'skenderbeu', 'pogradec', 'roskilde', 'slaskbreslaviaii', 'ittihadtangeri'})
 DIRECT_BADGES = {
+    'excelsiorm': 'https://a.espncdn.com/i/teamlogos/soccer/500/10618.png',
+    'zrinjskiunder19': 'https://a.espncdn.com/i/teamlogos/soccer/500/5239.png',
+    'zrinjski': 'https://a.espncdn.com/i/teamlogos/soccer/500/5239.png',
+    'germania': 'https://flagcdn.com/w320/de.png', 'ghana': 'https://flagcdn.com/w320/gh.png',
+    'brasile': 'https://flagcdn.com/w320/br.png', 'marocco': 'https://flagcdn.com/w320/ma.png',
+    'polonia': 'https://flagcdn.com/w320/pl.png', 'venezuela': 'https://flagcdn.com/w320/ve.png',
+    'coreadelnord': 'https://flagcdn.com/w320/kp.png', 'messico': 'https://flagcdn.com/w320/mx.png',
+    'nigeria': 'https://flagcdn.com/w320/ng.png', 'kenya': 'https://flagcdn.com/w320/ke.png',
+    'spagna': 'https://flagcdn.com/w320/es.png', 'statiuniti': 'https://flagcdn.com/w320/us.png',
+    'cina': 'https://flagcdn.com/w320/cn.png', 'cipro': 'https://flagcdn.com/w320/cy.png',
+    'ravenna': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/ravenna.png',
+    'albinoleffe': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/Albinoleffe.png',
+    'desenzanocalvina': 'https://www.seriec.com/storage/app/media/loghi-squadre/Desenzano.png',
+    'dolomitibellunesi': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/dolomitibellunesi.png',
+    'unionbrescia': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/unionbrescia.png',
+    'campobasso': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/campobasso-trasp-logo.png',
+    'latina': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/cropped-images/LATINA-NEW-600.png',
+    'vispesaro': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/Vis%20Pesaro.png',
     'aral': 'https://aral-pfc.uz/wp-content/fnw-languages/team-logos/aral.png',
     'drenvrhinka': 'https://nkihan.si/wp-content/uploads/2021/11/148_Dren-Vrhnika.jpg',
     'etimesgut': 'https://www.futbollogo.com/resimler/logolar/etimesgutspor.png',
@@ -141,8 +330,7 @@ def _direct_badge(name, path):
     if not url:
         return ''
     try:
-        with urlopen(Request(url, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), timeout=6) as response:
-            data = response.read(2 * 1024 * 1024)
+        data = _art_read(Request(url, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), 2 * 1024 * 1024, timeout=6)
         if data.startswith(b'\xff\xd8\xff'):
             path = path[:-4] + '.jpg'
         elif not data.startswith(b'\x89PNG\r\n\x1a\n'):
@@ -151,6 +339,10 @@ def _direct_badge(name, path):
             stream.write(data)
         os.replace(path + '.tmp', path)
         return path
+    except _ArtTemporaryError:
+        raise
+    except (ValueError, UnicodeError) as exc:
+        raise _ArtTemporaryError('invalid artwork metadata') from exc
     except Exception:
         return ''
 
@@ -161,16 +353,14 @@ def _wiki_badge(name, path):
         return ''
     language, title = page
     try:
-        with urlopen(Request('https://' + language + '.wikipedia.org/api/rest_v1/page/summary/' + quote(title.replace(' ', '_')),
-                             headers={'User-Agent': 'PrippiStream-event-art/1.0'}), timeout=5) as response:
-            doc = json.loads(response.read(1024 * 1024).decode('utf-8'))
+        doc = json.loads(_art_read(Request('https://' + language + '.wikipedia.org/api/rest_v1/page/summary/' + quote(title.replace(' ', '_')),
+                             headers={'User-Agent': 'PrippiStream-event-art/1.0'}), 1024 * 1024).decode('utf-8'))
         image = (doc.get('thumbnail') or doc.get('originalimage') or {}).get('source', '')
         # A page image can be a stadium or a player: accept only named crests.
         if not image.startswith('https://') or not (canonical(name) in _REVIEWED_CREST_NAMES or
                 re.search(r'logo|stemma|crest|badge|escudo|emblem|marchio|herb', image, re.I)):
             return ''
-        with urlopen(Request(image, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), timeout=5) as response:
-            data = response.read(2 * 1024 * 1024)
+        data = _art_read(Request(image, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), 2 * 1024 * 1024)
         if data.startswith(b'\xff\xd8\xff'):
             path = path[:-4] + '.jpg'
         elif not data.startswith(b'\x89PNG\r\n\x1a\n'):
@@ -179,6 +369,10 @@ def _wiki_badge(name, path):
             output.write(data)
         os.replace(path + '.tmp', path)
         return path
+    except _ArtTemporaryError:
+        raise
+    except (ValueError, UnicodeError) as exc:
+        raise _ArtTemporaryError('invalid artwork metadata') from exc
     except Exception:
         return ''
 
@@ -239,20 +433,30 @@ def badge(name, fetch=False):
         existing = _cached_badge(alias_key)
         if existing:
             return existing
-    parent_name = re.sub(r'\s+(?:Under[ -]?(?:18|19|20|21|23)|U(?:18|19|20|21|23)|II)$', '', name, flags=re.I)
+    parent_name = re.sub(r'\s*\((?:D|W)\)', '', name, flags=re.I).strip()
+    parent_name = re.sub(r'\s+(?:Under[ -]?(?:16|17|18|19|20|21|23)|U(?:16|17|18|19|20|21|23)|II)$', '', parent_name, flags=re.I)
     if parent_name != name:
-        parent_image = badge(parent_name, fetch=False)
+        parent_image = badge(parent_name, fetch=fetch)
         if parent_image:
             return parent_image
     # New lookup generation retries misses made by the old league-only lookup.
-    marker = path + '.miss-v4'
+    mapping = repr((ALIASES.get(canonical(parent_name)), WIKI_BADGES.get(canonical(parent_name)),
+                    DIRECT_BADGES.get(canonical(name))))
+    marker = path + '.miss-v10-' + hashlib.sha256(mapping.encode()).hexdigest()[:8]
+    temporary = False
     if fetch and canonical(name) in DIRECT_BADGES:
-        direct = _direct_badge(name, path)
+        try:
+            direct = _direct_badge(name, path)
+        except _ArtTemporaryError:
+            direct, temporary = '', True
         if direct:
             return direct
     if not fetch or (os.path.exists(marker) and time.time() - os.path.getmtime(marker) < 86400):
         return ''
-    wiki_path = _wiki_badge(name, path)
+    try:
+        wiki_path = _wiki_badge(parent_name, path)
+    except _ArtTemporaryError:
+        wiki_path, temporary = '', True
     if wiki_path:
         return wiki_path
     try:
@@ -267,31 +471,27 @@ def badge(name, fetch=False):
             query = ALIASES.get(canonical(parent), parent)
         search = Request('https://site.web.api.espn.com/apis/common/v3/search?query=' + quote(query) + '&limit=10&type=team',
                          headers={'User-Agent': 'PrippiStream-event-art/1.0'})
-        with urlopen(search, timeout=5) as response:
-            search_doc = json.loads(response.read(1024 * 1024).decode('utf-8'))
-        for team in search_doc.get('items') or []:
-            names = [team.get(k, '') for k in ('displayName', 'name', 'location', 'shortDisplayName')]
-            if team.get('sport') != 'soccer' or canonical(query) not in {canonical(n) for n in names}:
-                continue
-            logos = team.get('logos') or []
+        search_doc = json.loads(_art_read(search, 1024 * 1024).decode('utf-8'))
+        for team in _matching_espn_teams(query, search_doc.get('items') or []):
+            logos = _espn_logos(team)
             if not logos:
                 continue
-            with urlopen(Request(logos[0]['href'], headers={'User-Agent': 'PrippiStream-event-art/1.0'}), timeout=5) as response:
-                data = response.read(2 * 1024 * 1024)
+            data = _art_read(Request(logos[0]['href'], headers={'User-Agent': 'PrippiStream-event-art/1.0'}), 2 * 1024 * 1024)
             if not data.startswith(b'\x89PNG\r\n\x1a\n'):
                 continue
             with open(path + '.tmp', 'wb') as output:
                 output.write(data)
             os.replace(path + '.tmp', path)
             return path
+    except (_ArtTemporaryError, ValueError, UnicodeError):
+        temporary = True
     except Exception:
         pass
     try:
-        query = ALIASES.get(canonical(name), name)
+        query = ALIASES.get(canonical(parent_name), parent_name)
         request = Request('https://www.thesportsdb.com/api/v1/json/123/searchteams.php?t=' + quote(query),
                           headers={'User-Agent': 'PrippiStream-event-art/1.0'})
-        with urlopen(request, timeout=5) as response:
-            doc = json.loads(response.read(1024 * 1024).decode('utf-8'))
+        doc = json.loads(_art_read(request, 1024 * 1024).decode('utf-8'))
         for team in doc.get('teams') or []:
             names = [team.get('strTeam', ''), team.get('strTeamShort', '')]
             names += (team.get('strAlternate') or '').split(',')
@@ -300,16 +500,19 @@ def badge(name, fetch=False):
             image = team.get('strBadge') or team.get('strTeamBadge') or ''
             if not image.startswith('https://'):
                 continue
-            with urlopen(Request(image, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), timeout=5) as response:
-                data = response.read(2 * 1024 * 1024)
+            data = _art_read(Request(image, headers={'User-Agent': 'PrippiStream-event-art/1.0'}), 2 * 1024 * 1024)
             if not data.startswith(b'\x89PNG\r\n\x1a\n'):
                 continue
             with open(path + '.tmp', 'wb') as output:
                 output.write(data)
             os.replace(path + '.tmp', path)
             return path
+    except (_ArtTemporaryError, ValueError, UnicodeError):
+        temporary = True
     except Exception:
         pass
+    if temporary:
+        return ''
     with open(marker, 'w') as output:
         output.write('no exact football-team badge match')
     return ''
@@ -368,14 +571,21 @@ def event_status(event, now=None, available=None, playing=False):
     return text + ' · ' + label
 
 
-def warm_badges(events):
-    """Small bounded background pool; never runs on the first-paint path."""
-    from concurrent.futures import ThreadPoolExecutor
-    names = set()
-    for event in prepare(events):
-        names.update(n for n in teams(event.get('teams') or '') if n)
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        list(pool.map(lambda name: badge(name, fetch=True), sorted(names)))
+def warm_badges(events, active=lambda: True):
+    """All calendar days, including past/future; cancellable daemon workers."""
+    from platformcode import taskpool
+    from platformcode.eventtime import now_rome
+    today = now_rome().strftime('%d/%m/%Y')
+    names, current = set(), set()
+    for event in events:
+        if not is_multigol(event.get('teams') or ''):
+            values = {n for n in teams(event.get('teams') or '') if n}
+            names.update(values)
+            if event.get('date') in (today, today[:5]):
+                current.update(values)
+    taskpool.map_background(lambda name: badge(name, fetch=True),
+                            sorted(names, key=lambda name: (name not in current, name)),
+                            workers=3, cancelled=lambda: not active())
 
 
 def country_for(league):

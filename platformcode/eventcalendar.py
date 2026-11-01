@@ -180,6 +180,50 @@ def source_failed(route):
     return verified_state(route) == 'unavailable'
 
 
+def verify_event(event, active=lambda: True):
+    """Shared startup/focus probe, with the same single-flight and playback guard."""
+    route = event.get('calendar_url') or ''
+    if not route or not active():
+        return None
+    token = begin_source_check(route)
+    if token is None:
+        return verified_state(route)
+    try:
+        candidates = list(event.get('sources') or [])
+        try:
+            extra = sources(route, timeout=3)
+            known = {source.get('url') for source in candidates}
+            candidates.extend(source for source in extra if source.get('url') not in known)
+        except Exception:
+            if not candidates:
+                raise
+        from platformcode import eventavailability, eventresolver
+        def resolve(source, budget):
+            path = (resolve_embed(source, timeout=3) if source.get('calendar_embed')
+                    else source['url'])
+            return eventresolver.resolve(path, source.get('headers') or {}, budget=budget,
+                                         active=active, request_timeout=3) if path else []
+        result = eventavailability.check(candidates, resolve, active=active)
+        finish_source_check(route, token, result, cancelled=not active())
+    except Exception:
+        finish_source_check(route, token, None, cancelled=not active())
+    return verified_state(route)
+
+
+def precheck_serie_a(events, active=lambda: True, on_result=lambda event, state: None):
+    """Today's Italian Serie A only; never scan the monthly playback catalogue."""
+    for event in merge(events):
+        if not active():
+            break
+        if art.competition_key(event.get('league')) != ('Italia', 'seriea'):
+            continue
+        if not event.get('calendar_url'):
+            continue
+        state = verify_event(event, active=active)
+        if active():
+            on_result(event, state)
+
+
 def sources(route, force=False, timeout=10):
     """Resolve only the selected fixture's catalogue. Never probe all 500 pages."""
     if not route:

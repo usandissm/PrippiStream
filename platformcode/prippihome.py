@@ -1409,11 +1409,22 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # restano comunque probate in background (_refresh_live_rows), così
         # riattivarle le mostra all'istante con i canali già in cache.
         _row_toggle = {'sky': 'show_sky_row', 'sport': 'show_sport_row', 'tv': 'show_tv_row'}
+        from platformcode import liveepg
+        _live_seed = {}
+        for _key in ('sky', 'sport', 'tv'):
+            if not _row_hidden(_row_toggle[_key]):
+                try:
+                    _live_seed[_key] = sportchannels.build_items(_key) or []
+                except Exception as exc:
+                    logger.error('[PrippiHome] EPG seed %s: %s' % (_key, str(exc)))
+                    _live_seed[_key] = []
+                liveepg.start(_live_seed[_key])
         for _row_key in ('sky', 'sport', 'tv'):
             _ch_items = []
             if not _row_hidden(_row_toggle[_row_key]):
                 try:
-                    _ch_items = sportchannels.build_items(_row_key) or []
+                    _ch_items = _live_seed.get(_row_key) or []
+                    liveepg.wait(_ch_items, active=lambda: self._alive and not _shutdown_event.is_set())
                     # Prefetch "now on air" for any disk-cached online channels so
                     # the hero shows EPG immediately on first focus.
                     if _ch_items:
@@ -1591,6 +1602,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             return
         from platformcode import perf
         _pt = perf.mark('home.load start')
+
+        self._event_precheck_lock = threading.Lock()
+        self._event_art_lock = threading.Lock()
+        self._start_event_prechecks()
+        self._start_event_art()
 
         # ── Refresh the live-channel lists (Sport + SKY) from the backend, then
         # swap the probed (online-only) result into the SKY/Sport rows live ──
@@ -1840,6 +1856,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def _start_bg_tasks(self, need_4k_fill, enrich=True):
         """Launch the non-blocking post-render background jobs."""
+        if not getattr(self, '_epg_poller_started', False):
+            self._epg_poller_started = True
+            def _refresh_guide_periodically():
+                while self._alive and not _shutdown_event.wait(180):
+                    if not self._alive:
+                        return
+                    with self._rows_lock:
+                        items = [item for _, row in self.rows_data for item in row
+                                 if getattr(item, 'is_live_channel', False)]
+                    self._prefetch_live_epg(items)
+            threading.Thread(target=_refresh_guide_periodically, daemon=True).start()
         # Import and refresh the optional 4K cache only after first paint.
         if self._alive:
             t4k_refresh = threading.Thread(target=_refresh_fourk_index, args=(_shutdown_event,))
@@ -2154,6 +2181,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         def _worker():
             try:
                 skyepg.prefetch(keys)
+                deadline = time.monotonic() + 60
+                while (self._alive and not _shutdown_event.is_set() and
+                       not skyepg.attempted(keys) and time.monotonic() < deadline):
+                    xbmc.sleep(100)
             except Exception as exc:
                 logger.error('[PrippiHome] EPG prefetch: %s' % str(exc))
                 return
@@ -2257,6 +2288,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 items = sportchannels.build_items(row_key)
             except Exception as exc:
                 logger.error('[PrippiHome] build %s: %s' % (row_key, exc))
+                return
+            from platformcode import liveepg
+            if not liveepg.wait(items, active=lambda: self._alive and not _shutdown_event.is_set()):
                 return
             with self._rows_lock:
                 self.rows_data[idx] = (label, items)
@@ -2448,6 +2482,43 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         self._hover_last = (-1, -1)
         self._schedule_hero(row_idx)
 
+    def _start_event_art(self):
+        lock = self._event_art_lock
+        if not lock.acquire(False):
+            return
+        shutdown = _shutdown_event
+        def worker():
+            try:
+                from platformcode import eventcalendar, eventpresentation, tgevents
+                eventpresentation.warm_badges(eventcalendar.cached() + list(tgevents.load_cached() or []),
+                                               active=lambda: self._alive and not shutdown.is_set())
+            except Exception as exc:
+                logger.debug('[Events] calendar artwork: %s' % str(exc))
+            finally:
+                lock.release()
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _start_event_prechecks(self):
+        """Start at home loading, not on focus; one bounded background batch."""
+        lock = self._event_precheck_lock
+        if not lock.acquire(False):
+            return
+        shutdown = _shutdown_event
+        def worker():
+            try:
+                from platformcode import eventcalendar, tgevents
+                def active():
+                    return self._alive and not shutdown.is_set()
+                def completed(event, state):
+                    logger.info('[Events] startup Serie A %s: %s' % (event.get('teams'), state))
+                eventcalendar.precheck_serie_a(tgevents.load_cached() or [],
+                                              active=active, on_result=completed)
+            except Exception as exc:
+                logger.debug('[Events] startup precheck: %s' % str(exc))
+            finally:
+                lock.release()
+        threading.Thread(target=worker, daemon=True).start()
+
     def _refresh_tg_events(self):
         """Background refresher for the "Eventi Calcio" row (TheGroove live
         football events).
@@ -2475,6 +2546,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             try:
                 from platformcode import eventcalendar
                 eventcalendar.refresh()
+                self._start_event_prechecks()
+                self._start_event_art()
                 cached_events = tgevents.load_cached() or []
                 calendar_items = tgevents.build_row_items(cached_events)
                 with self._rows_lock:
@@ -2535,7 +2608,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     self._rerender_live_row(idx, items)
                     try:
                         from platformcode import eventpresentation
-                        eventpresentation.warm_badges(eventcalendar.merge(events))
+                        self._start_event_prechecks()
+                        self._start_event_art()
                         if not self._alive or _shutdown_event.is_set():
                             return
                         items = tgevents.build_row_items(events)
@@ -2976,6 +3050,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 if epg.get('prev_prog'):
                     live_plot += u'\n\n[COLOR FF777777]Prima:  %s  ·  %s[/COLOR]' % (
                         epg.get('prev_start', ''), epg['prev_prog'])
+            else:
+                live_meta = u'DIRETTA'
+                live_plot = u'Guida momentaneamente non disponibile'
         try:
             img = fanart or thumb
             if '_tg_event_sources' in it.__dict__:

@@ -1,3 +1,10 @@
+## 2.0.5
+Novità dell’aggiornamento
+
+- Canali Live e guida TV preparati insieme, con attesa limitata e recupero automatico degli EPG mancanti.
+- Guida aggiornata in background e cache riutilizzata solo per programmi ancora validi.
+- Migliorati i loghi delle squadre e i controlli di disponibilità degli eventi.
+
 ## 2.0.4
 Novità dell’aggiornamento
 
