@@ -264,9 +264,14 @@ open class PlayerActivity : ComponentActivity() {
         contentJson = intent.getStringExtra("content_json").orEmpty()
         mediaTrackPreferenceKey = mediaPreferenceKey(contentJson)
         startPositionMs = intent.getLongExtra("start_position_ms", 0L).coerceAtLeast(0L)
-        liveRowItems = runCatching {
-            JSONArray(intent.getStringExtra("live_row_items_json").orEmpty())
-        }.getOrDefault(JSONArray())
+        val liveQueueKey = intent.getStringExtra("live_row_queue_key").orEmpty()
+        liveRowItems = if (liveQueueKey.isNotBlank()) {
+            LiveQueueStore.get(cacheDir, liveQueueKey)
+        } else {
+            // Compatibility with older internal callers only; new launches use a key.
+            runCatching { JSONArray(intent.getStringExtra("live_row_items_json").orEmpty()) }
+                .getOrDefault(JSONArray())
+        }
         liveRowIndex = intent.getIntExtra("live_row_index", -1)
         updateLiveGuideText(
             intent.getStringExtra("live_channel_title").orEmpty(),

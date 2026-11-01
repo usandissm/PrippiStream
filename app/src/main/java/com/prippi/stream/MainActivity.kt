@@ -573,6 +573,7 @@ private fun PrippiApp(
     var tvLiveFocusedItem by rememberSaveable { mutableStateOf("") }
     fun startPlayer(item: ContentItem, requests: List<PlaybackRequest>, startMs: Long) {
         val request = requests.first()
+        AppDiagnostics.event("player_launch live=${item.isLive} candidates=${requests.size}")
         context.startActivity(Intent(context, PlayerActivity::class.java).apply {
             putExtra("television_player", isTelevision)
             putExtra("url", request.url)
@@ -587,10 +588,14 @@ private fun PrippiApp(
                 val livePayload = item.toJson()
                 putExtra("live_channel_title", item.title)
                 putExtra("live_programme", item.plot)
-                putExtra(
-                    "live_row_items_json",
-                    livePayload.optJSONArray("_app_live_row_items")?.toString().orEmpty(),
-                )
+                val queue = livePayload.optJSONArray("_app_live_row_items") ?: JSONArray()
+                val queueKey = runCatching { LiveQueueStore.put(context.cacheDir, queue) }
+                    .getOrElse {
+                        AppDiagnostics.event("live_queue_save_failed", it)
+                        ""
+                    }
+                putExtra("live_row_queue_key", queueKey)
+                AppDiagnostics.event("live_queue_saved items=${queue.length()} stored=${queueKey.isNotBlank()}")
                 putExtra("live_row_index", livePayload.optInt("_app_live_row_index", -1))
             } else {
                 val episodePayload = item.toJson()

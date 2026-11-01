@@ -82,8 +82,8 @@ assert "isoformat(timespec='milliseconds')" in xbmc
 assert "first_newline = tail.find" in xbmc
 
 gradle = read("app/build.gradle.kts")
-assert 'versionCode = 95' in gradle
-assert 'versionName = "0.9.40"' in gradle
+assert 'versionCode = 96' in gradle
+assert 'versionName = "0.9.41"' in gradle
 assert "enableV1Signing = true" in gradle
 assert "enableV2Signing = true" in gradle
 assert "prippiRequireDiagnosticsRelay" in gradle

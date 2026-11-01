@@ -1,5 +1,5 @@
 Novità dell’aggiornamento
 
-- Correzioni di bug e miglioramenti generali alla stabilità e all’esperienza d’uso.
-- La riga DAZN è stata rimossa e non verrà più mostrata.
-- Al suo posto è stata aggiunta la nuova riga Eventi Calcio, dedicata agli eventi della giornata.
+- Corretto il trasferimento delle liste Live ed Eventi al player, evitando di inviare centinaia di schede attraverso il sistema di apertura Android.
+- Mantenuti il cambio canale e la navigazione tra gli eventi su telefono, tablet e TV.
+- Nessuna modifica ai contenuti scaricati o a Continua a guardare.
