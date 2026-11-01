@@ -631,6 +631,14 @@ def attempted(keys):
         return all(time.time() - _key_attempts.get(key, 0) < 180 for key in keys)
 
 
+def invalidate_requests():
+    """Manual refresh: keep valid programme fallback, but request fresh metadata."""
+    global _superguide_loaded_at
+    with _prefetch_guard:
+        _key_attempts.clear()
+    _superguide_loaded_at = 0
+
+
 def _save_epg_disk():
     try:
         with _epg_lock:

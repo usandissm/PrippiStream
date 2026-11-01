@@ -853,7 +853,7 @@ private fun PrippiApp(
                     state.homeRows,
                     state.loading,
                     { item ->
-                        model.openHomeItem(item, play)
+                        model.openHomeItem(item)
                     },
                     model::loadHome,
                     isTelevision,
@@ -878,7 +878,8 @@ private fun PrippiApp(
                     loading = state.loading,
                     onMacro = model::openBrowseItem,
                 )
-                AppPage.LIVE -> LivePage(
+                AppPage.LIVE -> LiveRefreshPanel(state.liveReloading, model::reloadLive, false) {
+                    LivePage(
                     rows = state.liveRows,
                     loading = state.loading,
                     onLive = { model.playLive(it, play) },
@@ -893,6 +894,7 @@ private fun PrippiApp(
                         AppDiagnostics.focus("live", rowId, itemKey)
                     },
                 )
+                    }
                 AppPage.DOWNLOADS -> DownloadsPage(
                     entries = state.downloads,
                     loading = state.loading,
@@ -1024,7 +1026,7 @@ private fun TelevisionApp(
                         rows = state.homeRows,
                         loading = state.loading,
                         onClick = { item ->
-                            model.openHomeItem(item, play)
+                            model.openHomeItem(item)
                         },
                         onPlay = { item -> model.play(item, false, play) },
                         onRetry = model::loadHome,
@@ -1048,7 +1050,8 @@ private fun TelevisionApp(
                         state.loading,
                         model::openBrowseItem,
                     )
-                    AppPage.LIVE -> TelevisionLive(
+                    AppPage.LIVE -> LiveRefreshPanel(state.liveReloading, model::reloadLive, true) {
+                        TelevisionLive(
                         rows = state.liveRows,
                         loading = state.loading,
                         onLive = { model.playLive(it, play) },
@@ -1057,6 +1060,7 @@ private fun TelevisionApp(
                         focusRecoveryNonce = focusRecoveryNonce,
                         onFocused = onLiveFocus,
                     )
+                        }
                     AppPage.DOWNLOADS -> DownloadsPage(
                         entries = state.downloads,
                         loading = state.loading,
@@ -1636,6 +1640,36 @@ private fun TelevisionMediaCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LiveRefreshPanel(
+    refreshing: Boolean,
+    onReload: () -> Unit,
+    television: Boolean,
+    content: @Composable () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val label = if (refreshing) "Aggiornamento Live…" else "Ricarica Live"
+            if (television) {
+                TelevisionDetailActionButton(label = label, icon = Icons.Default.Refresh,
+                    onClick = { if (!refreshing) onReload() })
+            } else {
+                Button(onClick = { if (!refreshing) onReload() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(label)
+                }
+            }
+        }
+        if (refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Box(Modifier.weight(1f)) { content() }
     }
 }
 
@@ -3021,7 +3055,10 @@ private fun DownloadsPage(
                 modifier = Modifier.tvFocusableFrame(
                     isTelevision,
                     RoundedCornerShape((10f * scale).dp),
-                ),
+                ).clickable(
+                    enabled = entry.isComplete,
+                    onClickLabel = "Riproduci offline",
+                ) { onPlay(entry) },
             )
             HorizontalDivider()
         }

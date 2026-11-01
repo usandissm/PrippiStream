@@ -1089,6 +1089,36 @@ def live_rows():
     return rows
 
 
+def reload_live_json():
+    """One refresh worker only; preserve usable rows until replacements are ready."""
+    global _LIVE_LOADING, _LIVE_REFRESHED_AT
+    init()
+    with _LIVE_LOCK:
+        started = not _LIVE_LOADING
+        if started:
+            _LIVE_LOADING = True
+            _LIVE_REFRESHED_AT = 0
+    if started:
+        try:
+            from platformcode import liveepg, skyepg, appevents
+            skyepg.invalidate_requests()
+            liveepg.reset()
+            appevents.start_refresh(force=True)
+            threading.Thread(target=_refresh_live_background, daemon=True).start()
+        except Exception:
+            with _LIVE_LOCK:
+                _LIVE_LOADING = False
+            raise
+    return json.dumps({'started': started, 'refreshing': True})
+
+
+def live_refresh_status_json():
+    from platformcode import appevents
+    with _LIVE_LOCK:
+        loading = _LIVE_LOADING
+    return json.dumps({'refreshing': loading or appevents.refreshing()})
+
+
 def resolve_4k(item_dict):
     """Candidato 4K dell'indice addon per un film TMDB, oppure dict vuoto."""
     init()

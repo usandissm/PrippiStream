@@ -53,13 +53,19 @@ def _refresh_sources_if_due():
     tgevents.fetch_events()
 
 
-def start_refresh():
+def start_refresh(force=False):
     global _LAST_REFRESH
     if time.time() - _LAST_REFRESH < 60 or not _LOCK.acquire(False):
         return
     _LAST_REFRESH = time.time()
     def worker():
         try:
+            if force:
+                with eventcalendar._LOCK:
+                    eventcalendar._LAST_ATTEMPT = 0
+                with eventcalendar._SOURCE_LOCK:
+                    eventcalendar._SOURCE_CACHE.clear()
+                    eventcalendar._SOURCE_RESULTS.clear()
             eventcalendar.refresh()
             _refresh_sources_if_due()
             # Independent of user focus, same real manifest/segment checks as Kodi.
@@ -70,6 +76,10 @@ def start_refresh():
         finally:
             _LOCK.release()
     threading.Thread(target=worker, daemon=True).start()
+
+
+def refreshing():
+    return _LOCK.locked()
 
 
 def build_items():

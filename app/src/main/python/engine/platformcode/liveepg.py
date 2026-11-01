@@ -8,6 +8,11 @@ _rows = {}
 WAIT_SECONDS = 5.0
 
 
+def reset():
+    with _lock:
+        _rows.clear()
+
+
 def keys_for(items):
     return tuple(sorted({key for item in items for key in (
         getattr(item, 'sport_par', ''), getattr(item, 'fulltitle', '') or getattr(item, 'title', '')

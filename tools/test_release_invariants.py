@@ -20,6 +20,14 @@ assert "repository.downloads()" in show_downloads
 assert "resumeInterrupted" not in show_downloads
 
 main = read("app/src/main/java/com/prippi/stream/MainActivity.kt")
+assert 'fun openHomeItem(item: ContentItem) = showDetail(item)' in view_model
+assert 'model.openHomeItem(item, play)' not in main
+downloads_page = main.split('private fun DownloadsPage(', 1)[1].split('private fun formatBytes', 1)[0]
+assert 'enabled = entry.isComplete' in downloads_page
+assert 'onClickLabel = "Riproduci offline"' in downloads_page
+assert ') { onPlay(entry) }' in downloads_page
+assert main.count('LiveRefreshPanel(state.liveReloading, model::reloadLive,') == 2
+assert 'fun reloadLive()' in view_model
 assert "restoreInterrupted = true" in main
 assert '"waiting_network" -> "In attesa della rete' in main
 assert "DiagnosticSanitizer.sanitize(reportBody)" in main
@@ -82,8 +90,8 @@ assert "isoformat(timespec='milliseconds')" in xbmc
 assert "first_newline = tail.find" in xbmc
 
 gradle = read("app/build.gradle.kts")
-assert 'versionCode = 97' in gradle
-assert 'versionName = "0.9.42"' in gradle
+assert 'versionCode = 98' in gradle
+assert 'versionName = "0.9.43"' in gradle
 assert "enableV1Signing = true" in gradle
 assert "enableV2Signing = true" in gradle
 assert "prippiRequireDiagnosticsRelay" in gradle

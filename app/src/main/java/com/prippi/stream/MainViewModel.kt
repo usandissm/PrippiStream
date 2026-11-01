@@ -34,6 +34,7 @@ data class AppUiState(
     val settings: List<SettingCategory> = emptyList(),
     val settingsChannel: String = "",
     val downloads: List<DownloadEntry> = emptyList(),
+    val liveReloading: Boolean = false,
     val selectedItem: ContentItem? = null,
     val selectedProgressItem: ContentItem? = null,
     val detailOverview: String = "",
@@ -151,7 +152,8 @@ class MainViewModel(
                     // lista (è ciò che può staccare il nodo focalizzato). Un update
                     // solo EPG/logo, con le stesse chiavi, è invece sicuro e deve
                     // arrivare subito: altrimenti la guida scaricata resta invisibile.
-                    if (contentChanged && (uiPaused || (focusedLiveVisible && structureChanged))) {
+                    if (contentChanged && (uiPaused ||
+                            (structureChanged && (focusedLiveVisible || state.liveReloading)))) {
                         pendingLiveRows = rows
                     } else if (contentChanged) {
                         state = state.copy(liveRows = rows)
@@ -174,6 +176,36 @@ class MainViewModel(
     }
 
     fun setQuery(value: String) { state = state.copy(query = value) }
+
+    fun reloadLive() {
+        if (state.liveReloading) return
+        state = state.copy(liveReloading = true, error = null)
+        liveFocusLocked = false
+        pendingLiveRows = null
+        viewModelScope.launch {
+            try {
+                engineReadySignal.await()
+                withContext(Dispatchers.IO) { PythonBridge.reloadLive() }
+                val deadline = android.os.SystemClock.elapsedRealtime() + 180_000L
+                while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                    val busy = withContext(Dispatchers.IO) { PythonBridge.liveRefreshStatus().optBoolean("refreshing") }
+                    if (!busy) break
+                    delay(1_500)
+                }
+                val rows = withContext(Dispatchers.IO) { repository.liveRows() }
+                if (rows.isNotEmpty()) {
+                    state = state.copy(liveRows = rows)
+                    pendingLiveRows = null
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                state = state.copy(error = error.message ?: "Aggiornamento Live non riuscito")
+            } finally {
+                state = state.copy(liveReloading = false)
+            }
+        }
+    }
 
     /**
      * Explicit user navigation to the root Home page.
@@ -672,16 +704,7 @@ class MainViewModel(
         state = state.copy(settings = settings, page = AppPage.SETTINGS)
     }
 
-    fun openHomeItem(item: ContentItem, onPlayback: (ContentItem, List<PlaybackRequest>, Long) -> Unit) {
-        val fromContinue = state.homeRows.any { row ->
-            row.id == CONTINUE_ROW_ID && row.items.any { it.stableKey == item.stableKey }
-        }
-        if (!fromContinue) { showDetail(item); return }
-        play(item, true) { current, requests, position ->
-            onPlayback(current, requests, position)
-            showDetail(current)
-        }
-    }
+    fun openHomeItem(item: ContentItem) = showDetail(item)
 
     fun showDetail(item: ContentItem) {
         val sourcePage = if (state.page == AppPage.DETAIL) state.returnPage else state.page
