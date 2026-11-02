@@ -622,8 +622,10 @@ def _write_bundle_playlists(bundle_dir, video, audios, subs):
         for s in subs:
             lines.append(
                 u'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",NAME="%s",LANGUAGE="%s",'
-                u'DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI="s%d.m3u8"'
-                % (s['label'], s.get('language') or 'und', s['idx']))
+                u'DEFAULT=NO,AUTOSELECT=YES,FORCED=%s,URI="s%d.m3u8"'
+                % (s['label'], s.get('language') or 'und',
+                   'YES' if s.get('forced') or 'forced' in s.get('label', '').lower() or
+                   'forzat' in s.get('label', '').lower() else 'NO', s['idx']))
     stream = u'#EXT-X-STREAM-INF:BANDWIDTH=%d' % int(video.get('bandwidth') or 4000000)
     if video.get('resolution'):
         stream += u',RESOLUTION=%s' % video['resolution']
@@ -1109,7 +1111,7 @@ class DownloadManager(object):
                     _os.path.join(bundle_dir, 'sub.%d.vtt' % i), http_get=_http_get)
                 if ok:
                     sub_metas.append({'idx': i, 'label': _lang_label(s),
-                                      'language': s.get('language', '')})
+                                      'language': s.get('language', ''), 'forced': bool(s.get('forced'))})
         except hls_downloader.DownloadCancelled:
             downloads_db.update_fields(key, status='paused')
             return

@@ -277,6 +277,14 @@ _REVIEWED_CREST_NAMES.update({'asfar', 'almokawloon', 'alfaisalyamman', 'aljabal
     'estudianteslp', 'vozdovac', 'jedinstvoub', 'puszcza', 'poloniasroda',
     'mtk', 'skenderbeu', 'pogradec', 'roskilde', 'slaskbreslaviaii', 'ittihadtangeri'})
 DIRECT_BADGES = {
+    'casarano': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/casarano.png',
+    'provercelli': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/provercelli.png',
+    'juventusngunder23': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/Juventus%20Next%20Gen.png',
+    'juventusng': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/Juventus%20Next%20Gen.png',
+    'novara': 'https://www.seriec.com/storage/app/media/2025-2026/loghi-societ%C3%A0/Novara.png',
+    canonical('Bulgaria (D) Under-17'): 'https://flagcdn.com/w320/bg.png',
+    canonical('Croazia (D) Under-17'): 'https://flagcdn.com/w320/hr.png',
+    canonical('Slovacchia (D) Under-17'): 'https://flagcdn.com/w320/sk.png',
     'excelsiorm': 'https://a.espncdn.com/i/teamlogos/soccer/500/10618.png',
     'zrinjskiunder19': 'https://a.espncdn.com/i/teamlogos/soccer/500/5239.png',
     'zrinjski': 'https://a.espncdn.com/i/teamlogos/soccer/500/5239.png',

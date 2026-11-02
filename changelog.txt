@@ -1,3 +1,12 @@
+## 2.0.6
+Novità dell’aggiornamento
+
+- Nuovi profili per sincronizzare Continua a guardare tra APK e Kodi usando lo stesso nome.
+- Primo accesso guidato: crea un profilo, accedi a uno esistente oppure continua solo sul dispositivo.
+- CW già presenti collegati automaticamente, con confronto di stagioni, episodi e avanzamento.
+- Sottotitoli Italiano (Forced) selezionati automaticamente quando disponibili, anche nei download.
+- Migliorata la copertura degli stemmi negli eventi e la gestione dei progressi offline.
+
 ## 2.0.5
 Novità dell’aggiornamento
 

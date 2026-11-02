@@ -19,6 +19,11 @@ from platformcode import config, logger, platformtools
 CHANNELNAME = "setting"
 
 
+def profile_setup(item):
+    from platformcode import profile_kodi
+    profile_kodi.setup()
+
+
 def menu_channels(item):
     logger.debug()
     itemlist = list()

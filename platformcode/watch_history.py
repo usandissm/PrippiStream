@@ -32,6 +32,13 @@ _FILENAME = 'continue_watching.json'
 
 def _get_path():
     from platformcode import config
+    from platformcode import profile_kodi
+    profile = profile_kodi.active()
+    if profile:
+        from platformcode import profile_sync
+        path = profile_sync.directory(profile)
+        os.makedirs(path, exist_ok=True)
+        return os.path.join(path, _FILENAME)
     return os.path.join(config.get_data_path(), _FILENAME)
 
 
@@ -143,10 +150,14 @@ def _read(safe=False):
 
 def _write(data):
     try:
-        with io.open(_get_path(), 'w', encoding='utf-8') as f:
+        path = _get_path()
+        with io.open(path + '.tmp', 'w', encoding='utf-8') as f:
             f.write(json.dumps(data, ensure_ascii=False, indent=2))
+        os.replace(path + '.tmp', path)
+        return True
     except Exception as exc:
         logger.error('[WatchHistory] write: %s' % str(exc))
+        return False
 
 
 def save_progress(key, title, thumbnail, fanart, time_watched, total_time, item_url,
@@ -216,6 +227,10 @@ def remove(key):
             return
         if key in data:
             title = data[key].get('title', key)
+            from platformcode import profile_kodi
+            # Persist the removal before deleting locally; offline devices must
+            # not resurrect completed/removed titles when they reconnect.
+            profile_kodi.record_removal(data[key])
             del data[key]
             _write(data)
             logger.info('[WatchHistory] removed "%s"' % title)

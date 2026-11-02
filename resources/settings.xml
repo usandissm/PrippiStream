@@ -150,6 +150,13 @@
         <setting id="view_mode_musicvideo" type="action" default="Default, 0" visible="false"/>
     </category>
 
+    <category label="Profilo CW">
+        <setting id="cw_profile" type="text" default="" visible="false"/>
+        <setting id="cw_profile_onboarding_done" type="bool" default="false" visible="false"/>
+        <setting id="cw_profile_setup" type="action" label="Collega o cambia profilo CW"
+                 action="RunPlugin(plugin://plugin.video.prippistream/?eyJhY3Rpb24iOiJwcm9maWxlX3NldHVwIiwiY2hhbm5lbCI6InNldHRpbmcifQ==)"/>
+    </category>
+
     <!-- Supporto -->
     <category label="Supporto">
         <setting label="Diagnostica" type="lsep"/>

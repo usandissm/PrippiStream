@@ -39,7 +39,8 @@ def main():
         'platformcode/' + name + '.py' for name in (
             '_fourk', 'prippihome', 'skyepg', 'sportchannels', 'tvchannels', 'changelog',
             'taskpool', 'mediahosting', 'tgevents', 'eventavailability', 'eventcalendar',
-            'eventpresentation', 'eventquality', 'eventresolver', 'eventtime', 'eventartnet', 'liveepg')]
+            'eventpresentation', 'eventquality', 'eventresolver', 'eventtime', 'eventartnet', 'liveepg',
+            'profile_sync', 'profile_kodi', 'watch_history', 'subtitlepolicy', 'download_manager')]
     for name in runtime:
         ast.parse((ROOT / name).read_text(encoding='utf-8-sig'), feature_version=(3, 8))
     archive = ROOT / 'docs/plugin.video.prippistream' / ('plugin.video.prippistream-' + version + '.zip')

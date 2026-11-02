@@ -1078,11 +1078,11 @@ def _build_cw_items():
         try:
             cw_time  = float(e.get('time_watched', 0))
             cw_total = float(e.get('total_time', 0))
-            if cw_total > 0 and (cw_time / cw_total) >= 0.97:
+            it = Item().fromurl(e['item_url'])
+            if cw_total > 0 and (cw_time / cw_total) >= 0.97 and not getattr(it, '_app_offline_completed', False):
                 completed_keys.append(e['key'])
                 logger.info('[CW] auto-removing completed: %s' % e.get('title', e['key']))
                 continue
-            it = Item().fromurl(e['item_url'])
             # Live channels have no resumable timeline.  Older TV provider
             # launches passed through the generic VOD watcher and could leak a
             # channel (for example Rete 4) into Continue Watching.
@@ -1856,6 +1856,33 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def _start_bg_tasks(self, need_4k_fill, enrich=True):
         """Launch the non-blocking post-render background jobs."""
+        if not getattr(self, '_profile_onboarding_offered', False):
+            self._profile_onboarding_offered = True
+            try:
+                from platformcode import profile_kodi
+                profile_kodi.offer_onboarding()
+                self._cw_refresh_pending = True
+            except Exception as exc:
+                logger.info('[Profile] onboarding deferred: %s' % type(exc).__name__)
+        if not getattr(self, '_profile_poller_started', False):
+            self._profile_poller_started = True
+            def _sync_profiles_periodically():
+                from platformcode import profile_kodi
+                previous_profile = profile_kodi.active()
+                while self._alive and not _shutdown_event.is_set():
+                    try:
+                        current_profile = profile_kodi.active()
+                        changed = current_profile != previous_profile
+                        previous_profile = current_profile
+                        if current_profile:
+                            changed = profile_kodi.sync() or changed
+                        if changed:
+                            self._cw_refresh_pending = True
+                    except Exception as exc:
+                        logger.info('[Profile] sync deferred: %s' % type(exc).__name__)
+                    if _shutdown_event.wait(20):
+                        return
+            threading.Thread(target=_sync_profiles_periodically, daemon=True).start()
         if not getattr(self, '_epg_poller_started', False):
             self._epg_poller_started = True
             def _refresh_guide_periodically():
@@ -4876,7 +4903,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             li = xbmcgui.ListItem(title or u'Download', path=play_url)
             li.setMimeType(mime)
             li.setContentLookup(False)
-            xbmc.Player().play(play_url, li)
+            offline_player = _AvReadyPlayer()
+            offline_player.play(play_url, li)
+            def _offline_forced_subtitles():
+                offline_player.av_started.wait(timeout=15)
+                from platformcode import subtitlepolicy
+                subtitlepolicy.apply_default(offline_player)
+            threading.Thread(target=_offline_forced_subtitles, daemon=True).start()
         except Exception as exc:
             logger.error('[PrippiHome] _play_local_file: %s' % str(exc))
             xbmcgui.Dialog().notification(
@@ -6894,13 +6927,8 @@ def _apply_audio_sub_pref(player, item, av_started_event=None):
         tmdb_id = str(item.infoLabels.get('tmdb_id') or '').strip()
         key     = tmdb_id or re.sub(r'[^a-z0-9]', '',
                                     (item.fulltitle or item.show or '').lower())
-        if not key:
-            return
-
         audio_pref = addon.getSetting('audiolang_%s' % key) or ''
         sub_pref   = addon.getSetting('sublang_%s'   % key) or ''
-        if not sub_pref:
-            return   # no subtitle preference → leave as-is
 
         # Wait for A/V pipeline ready before touching subtitle tracks
         if av_started_event is not None:
@@ -6916,6 +6944,11 @@ def _apply_audio_sub_pref(player, item, av_started_event=None):
         if not player.isPlaying():
             return
 
+        from platformcode import subtitlepolicy
+        if subtitlepolicy.apply_default(player):
+            return
+        if not sub_pref:
+            return
         # ── Subtitles ──
         if sub_pref == u'Nessun sottotitolo':
             player.showSubtitles(False)

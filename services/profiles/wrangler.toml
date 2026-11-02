@@ -1,0 +1,13 @@
+name = "prippistream-profiles"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+account_id = "6c6fb5ace83625de95e64f94c942b0be"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "PROFILES"
+class_name = "Profile"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Profile"]
