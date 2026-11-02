@@ -9,6 +9,13 @@
         <item name="android:windowLightStatusBar">false</item>
     </style>
 
+    <style name="Theme.PrippiStream.Player" parent="Theme.PrippiStream">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:colorBackground">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+    </style>
+
     <style name="Theme.PrippiStream.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#0A0E13</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/prippistream_icon</item>

@@ -10,6 +10,7 @@ internal data class TrackDescriptor(
     val language: String = "",
     val label: String = "",
     val roleFlags: Int = 0,
+    val selectionFlags: Int = 0,
 )
 
 internal data class StoredTrackPreference(
@@ -31,6 +32,15 @@ internal data class TrackCandidate(
 
 /** Stable media identity and conservative matching shared by the player and JVM tests. */
 internal object MediaTrackPreferencePolicy {
+    fun italianForced(candidates: List<TrackCandidate>): TrackCandidate? = candidates.firstOrNull { candidate ->
+        val label = candidate.descriptor.label.lowercase(Locale.ROOT)
+        val italian = normalizeLanguage(candidate.descriptor.language) == "it" ||
+            Regex("\\b(?:italian[oa]?|ita|it)\\b").containsMatchIn(label)
+        val forced = candidate.descriptor.selectionFlags and 2 != 0 ||
+            Regex("\\b(?:forced|forzat[ioae])\\b").containsMatchIn(label)
+        candidate.supported && italian && forced
+    }
+
     fun keyFor(item: ContentItem): String? {
         if (item.isLive) return null
         val identity = ContinueWatchingPolicy.keyFor(item).trim()
@@ -70,6 +80,7 @@ internal object MediaTrackPreferencePolicy {
                     (if (languageMatches) 100 else 0) +
                         (if (labelMatches) 40 else 0) +
                         (if (roleMatches) 20 else 0) +
+                        (if (candidate.descriptor.selectionFlags == preferred.selectionFlags) 10 else 0) +
                         (if (candidate.descriptor.roleFlags == preferred.roleFlags) 5 else 0)
                 candidate to score
             }
@@ -140,6 +151,7 @@ internal class MediaTrackPreferenceStore(context: Context) {
             put("language", descriptor.language)
             put("label", descriptor.label)
             put("role_flags", descriptor.roleFlags)
+            put("selection_flags", descriptor.selectionFlags)
         }
     }
 
@@ -157,6 +169,7 @@ internal class MediaTrackPreferenceStore(context: Context) {
                 language = value.optString("language"),
                 label = value.optString("label"),
                 roleFlags = value.optInt("role_flags"),
+                selectionFlags = value.optInt("selection_flags"),
             )
         } else null
         return StoredTrackPreference(mode, descriptor)

@@ -104,9 +104,12 @@ open class PlayerActivity : ComponentActivity() {
     private lateinit var progressStore: WatchProgressStore
     private lateinit var mediaTrackPreferenceStore: MediaTrackPreferenceStore
     private var mediaTrackPreferenceKey: String? = null
+    private var subtitlesChangedByUser = false
+    private var timelinePreview: TimelinePreviewController? = null
     private var progressKey = ""
     private var contentJson = ""
     private var offlineDownloadKey = ""
+    private var profilePlayerRegistered = false
     private var startPositionMs = 0L
     private var downloadItemJson = ""
     private var downloadTargetHeight = 0
@@ -234,6 +237,10 @@ open class PlayerActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         if (!downloadPreparationMode) {
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.BLACK))
+            window.decorView.setBackgroundColor(Color.BLACK)
+            window.statusBarColor = Color.BLACK
+            window.navigationBarColor = Color.BLACK
             // Una riproduzione video è attività utente: impedisce al timeout
             // di sistema di spegnere lo schermo finché il player è aperto.
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -251,6 +258,10 @@ open class PlayerActivity : ComponentActivity() {
             }
         }
         if (!downloadPreparationMode) enterImmersiveMode()
+        if (!downloadPreparationMode) {
+            ProfilePlaybackGuard.players.incrementAndGet()
+            profilePlayerRegistered = true
+        }
 
         val url = intent.getStringExtra("url") ?: return finish()
         val bootstrapUrl = intent.getStringExtra("bootstrap_url").orEmpty()
@@ -288,6 +299,8 @@ open class PlayerActivity : ComponentActivity() {
         episodeQueueIndex = intent.getIntExtra("episode_queue_index", -1)
 
         playerView = PlayerView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            setShutterBackgroundColor(Color.BLACK)
             isFocusable = true
             isFocusableInTouchMode = true
             // L'immagine resta sempre intera: nessun crop, zoom o stretch.
@@ -329,7 +342,7 @@ open class PlayerActivity : ComponentActivity() {
         }
         trackControlsView = buildPrippiControls()
         rootView = FrameLayout(this).apply {
-            if (downloadPreparationMode) setBackgroundColor(Color.TRANSPARENT)
+            setBackgroundColor(if (downloadPreparationMode) Color.TRANSPARENT else Color.BLACK)
             addView(
                 playerView,
                 FrameLayout.LayoutParams(
@@ -573,7 +586,12 @@ open class PlayerActivity : ComponentActivity() {
         }
         controlsHandler.removeCallbacks(hideTelevisionControls)
         val handled = seekBy(delta)
-        if (handled) scheduleTelevisionControlsHide()
+        if (handled) {
+            val current = player
+            val bar = televisionSeekBar
+            if (current != null && bar != null) timelinePreview?.show(current.currentPosition, current.duration, bar, true)
+            scheduleTelevisionControlsHide()
+        }
         return handled
     }
 
@@ -937,6 +955,7 @@ open class PlayerActivity : ComponentActivity() {
                                         ?: return
                                     televisionPositionView?.text =
                                         formatPlaybackTime(duration * progress / bar.max)
+                                    timelinePreview?.show(duration * progress / bar.max, duration, bar)
                                 }
 
                                 override fun onStartTrackingTouch(bar: SeekBar) {
@@ -951,6 +970,7 @@ open class PlayerActivity : ComponentActivity() {
                                         player?.seekTo(duration * bar.progress / bar.max)
                                     }
                                     televisionSeeking = false
+                                    timelinePreview?.hide()
                                     scheduleTelevisionControlsHide()
                                 }
                             },
@@ -1145,7 +1165,7 @@ open class PlayerActivity : ComponentActivity() {
                                             val position = duration * progress / bar.max
                                             televisionPositionView?.text =
                                                 formatPlaybackTime(position)
-                                            player?.seekTo(position)
+                                            timelinePreview?.show(position, duration, bar)
                                         }
 
                                         override fun onStartTrackingTouch(bar: SeekBar) {
@@ -1160,6 +1180,7 @@ open class PlayerActivity : ComponentActivity() {
                                                 player?.seekTo(duration * bar.progress / bar.max)
                                             }
                                             televisionSeeking = false
+                                            timelinePreview?.hide()
                                             scheduleTelevisionControlsHide()
                                         }
                                     },
@@ -1476,6 +1497,7 @@ open class PlayerActivity : ComponentActivity() {
             scheduleTelevisionControlsHide()
         } else {
             controlsHandler.removeCallbacks(updateTelevisionTimeline)
+            timelinePreview?.hide()
             trackControlsView.animate()
                 .alpha(0f)
                 .translationY((12f * televisionUiScale()).toInt().dp().toFloat())
@@ -1586,6 +1608,7 @@ open class PlayerActivity : ComponentActivity() {
         overrides: Map<androidx.media3.common.TrackGroup, TrackSelectionOverride>,
         groups: List<Tracks.Group>,
     ) {
+        if (trackType == C.TRACK_TYPE_TEXT) subtitlesChangedByUser = true
         val key = mediaTrackPreferenceKey ?: return
         val preference = when {
             trackType == C.TRACK_TYPE_TEXT && disabled ->
@@ -1605,6 +1628,7 @@ open class PlayerActivity : ComponentActivity() {
                             language = format.language.orEmpty(),
                             label = format.label.orEmpty(),
                             roleFlags = format.roleFlags,
+                            selectionFlags = format.selectionFlags,
                         ),
                     )
                 }.firstOrNull() ?: StoredTrackPreference(TrackPreferenceMode.AUTO)
@@ -1622,8 +1646,8 @@ open class PlayerActivity : ComponentActivity() {
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun applyPersistedTrackPreferences(current: ExoPlayer, tracks: Tracks) {
-        val key = mediaTrackPreferenceKey ?: return
-        val preferences = mediaTrackPreferenceStore.get(key) ?: return
+        val key = mediaTrackPreferenceKey
+        val preferences = mediaTrackPreferenceStore.get(key)
         val original = current.trackSelectionParameters
         val builder = original.buildUpon()
 
@@ -1651,6 +1675,7 @@ open class PlayerActivity : ComponentActivity() {
                                     language = format.language.orEmpty(),
                                     label = format.label.orEmpty(),
                                     roleFlags = format.roleFlags,
+                                    selectionFlags = format.selectionFlags,
                                 ),
                                 supported = group.isTrackSupported(trackIndex),
                             )
@@ -1675,8 +1700,19 @@ open class PlayerActivity : ComponentActivity() {
             }
         }
 
-        apply(C.TRACK_TYPE_AUDIO, preferences.audio)
-        apply(C.TRACK_TYPE_TEXT, preferences.subtitles)
+        apply(C.TRACK_TYPE_AUDIO, preferences?.audio)
+        val textGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        val forced = if (subtitlesChangedByUser) null else MediaTrackPreferencePolicy.italianForced(
+            textGroups.flatMapIndexed { groupIndex, group -> (0 until group.length).map { index ->
+                val format = group.getTrackFormat(index)
+                TrackCandidate(groupIndex, index, TrackDescriptor(format.language.orEmpty(),
+                    format.label.orEmpty(), format.roleFlags, format.selectionFlags), group.isTrackSupported(index))
+            } })
+        if (forced != null) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            builder.setOverrideForType(TrackSelectionOverride(textGroups[forced.groupIndex].mediaTrackGroup,
+                listOf(forced.trackIndex)))
+        } else apply(C.TRACK_TYPE_TEXT, preferences?.subtitles)
         val updated = builder.build()
         if (updated != original) {
             current.trackSelectionParameters = updated
@@ -2351,6 +2387,13 @@ open class PlayerActivity : ComponentActivity() {
         generation: Long,
     ) {
         if (!isPlaybackGenerationActive(generation) || player != null) return
+        subtitlesChangedByUser = false
+        timelinePreview?.close()
+        timelinePreview = if (!downloadPreparationMode && runCatching {
+            JSONObject(contentJson).optString("channel") == "streamingcommunity"
+        }.getOrDefault(false)) TimelinePreviewController(this, rootView).apply {
+            configure(url, manifest, headers)
+        } else null
         val http = DefaultHttpDataSource.Factory().apply {
             if (headers.isNotEmpty()) setDefaultRequestProperties(headers)
             setAllowCrossProtocolRedirects(true)
@@ -2369,7 +2412,10 @@ open class PlayerActivity : ComponentActivity() {
                     MediaItem.SubtitleConfiguration.Builder(Uri.parse(subtitleUrl))
                         .setMimeType(mime)
                         .setLanguage(currentRequest?.textLanguage.orEmpty().ifBlank { "it" })
-                        .setLabel("Sottotitoli ${index + 1}")
+                        .setLabel(if (Regex("forced|forzat", RegexOption.IGNORE_CASE).containsMatchIn(subtitleUrl))
+                            "Italiano (Forced)" else "Sottotitoli ${index + 1}")
+                        .setSelectionFlags(if (Regex("forced|forzat", RegexOption.IGNORE_CASE).containsMatchIn(subtitleUrl))
+                            C.SELECTION_FLAG_FORCED else 0)
                         .build()
                 },
             )
@@ -3305,6 +3351,7 @@ open class PlayerActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        timelinePreview?.hide()
         val pictureInPictureClosed =
             pictureInPictureSessionActive || isInPictureInPictureMode
         activityStarted = false
@@ -3365,6 +3412,12 @@ open class PlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        timelinePreview?.close()
+        timelinePreview = null
+        if (profilePlayerRegistered) {
+            ProfilePlaybackGuard.players.decrementAndGet()
+            profilePlayerRegistered = false
+        }
         nextPlaybackGeneration()
         nextAsyncOperationGeneration()
         progressHandler.removeCallbacksAndMessages(null)

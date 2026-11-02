@@ -136,6 +136,9 @@ object PythonBridge {
     fun liveRows(): List<JSONObject> =
         toList(bridge.callAttr("live_rows_json").toString())
 
+    fun profileExchange(profile: String, snapshot: String, connect: Boolean = false, seed: String = "{}", mode: String = "auto"): JSONObject =
+        JSONObject(bridge.callAttr("profile_exchange_json", profile, snapshot, connect, seed, mode).toString())
+
     fun reloadLive(): JSONObject = JSONObject(bridge.callAttr("reload_live_json").toString())
 
     fun liveRefreshStatus(): JSONObject = JSONObject(bridge.callAttr("live_refresh_status_json").toString())

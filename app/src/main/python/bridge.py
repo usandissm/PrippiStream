@@ -1089,6 +1089,15 @@ def live_rows():
     return rows
 
 
+def profile_exchange_json(profile, snapshot_json='{}', connect=False, seed_json='{}', mode='auto'):
+    init()
+    from platformcode import profile_sync
+    snapshot = json.loads(snapshot_json or '{}')
+    entries = list(snapshot.get('entries') or []) + list(snapshot.get('deletions') or [])
+    seed = json.loads(seed_json or '{}').get('entries') if connect else None
+    return json.dumps(profile_sync.exchange(profile, entries, connect=bool(connect), seed=seed, mode=str(mode)), ensure_ascii=False)
+
+
 def reload_live_json():
     """One refresh worker only; preserve usable rows until replacements are ready."""
     global _LIVE_LOADING, _LIVE_REFRESHED_AT

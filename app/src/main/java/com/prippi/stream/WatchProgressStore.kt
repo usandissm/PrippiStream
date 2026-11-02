@@ -21,9 +21,62 @@ data class WatchProgress(
 
 /** Cronologia locale versionata. I token di playback non vengono mai salvati:
  * alla ripresa il resolver genera una sorgente fresca dall'Item originale. */
-class WatchProgressStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    internal val offlineStore = OfflineWatchStore(context)
+class WatchProgressStore(context: Context, profileOverride: String? = null) {
+    private val appContext = context.applicationContext
+    var profileName: String = normalizeProfile(profileOverride ?: appContext
+        .getSharedPreferences("cw_profile_selection", Context.MODE_PRIVATE).getString("name", "").orEmpty())
+        private set
+    private fun preferences(name: String) = appContext.getSharedPreferences(
+        if (name.isBlank()) PREFS else PREFS + "_profile_" + java.security.MessageDigest.getInstance("SHA-256")
+            .digest(name.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }, Context.MODE_PRIVATE)
+    private var prefs = preferences(profileName)
+    internal val offlineStore get() = OfflineWatchStore(appContext, profileName)
+
+    fun forProfile(name: String): WatchProgressStore = WatchProgressStore(appContext, name)
+
+    val profileOnboardingDone: Boolean get() = appContext.getSharedPreferences("cw_profile_selection", Context.MODE_PRIVATE)
+        .getBoolean("onboarding_done", false)
+
+    fun finishProfileOnboarding() { check(appContext.getSharedPreferences("cw_profile_selection", Context.MODE_PRIVATE)
+        .edit().putBoolean("onboarding_done", true).commit()) }
+
+    @Synchronized fun activateProfile(name: String) {
+        val normalized = normalizeProfile(name)
+        check(appContext.getSharedPreferences("cw_profile_selection", Context.MODE_PRIVATE)
+            .edit().putString("name", normalized).commit()) { "Impossibile salvare il profilo" }
+        profileName = normalized
+        prefs = preferences(profileName)
+    }
+
+    /** Snapshot also includes durable removal events. No network here. */
+    @Synchronized fun profileSnapshot(): String = JSONObject().apply {
+        // Never treat a broken local DB/journal as an empty history to replace.
+        val stored = JSONArray(prefs.getString(KEY_ENTRIES, "[]").orEmpty())
+        for (index in 0 until stored.length()) {
+            val row = stored.getJSONObject(index)
+            check(row.getString("key").isNotBlank()) { "CW locali non leggibili" }
+            JSONObject(row.getString("item"))
+        }
+        put("entries", JSONArray().apply { readAll().values.forEach { entry -> put(JSONObject()
+            .put("item", JSONObject(entry.rawJson)).put("position_ms", entry.positionMs)
+            .put("duration_ms", entry.durationMs).put("updated_at", entry.updatedAt)) } })
+        val deletions = JSONObject(prefs.getString("profile_deletions", "{}").orEmpty())
+        put("deletions", JSONArray().apply { deletions.keys().forEach { put(deletions.getJSONObject(it)) } })
+    }.toString()
+
+    /** Compare-and-apply: never overwrite a save/remove made while HTTP was in flight. */
+    @Synchronized fun applyProfileResponse(response: JSONObject, expectedSnapshot: String): Boolean {
+        if (!response.optBoolean("complete") || profileSnapshot() != expectedSnapshot) return false
+        val rows = response.optJSONArray("entries") ?: return false
+        val imported = (0 until rows.length()).map { index ->
+            val row = rows.getJSONObject(index)
+            val item = ContentItem.fromJson(row.getJSONObject("item"))
+            WatchProgress(item.continueWatchingKey, ContinueWatchingPolicy.cleanMetadata(item.rawJson),
+                row.optLong("position_ms"), row.optLong("duration_ms"), row.optLong("updated_at"))
+        }
+        return writeAll(ContinueWatchingPolicy.normalizeProgress(imported).take(MAX_ITEMS),
+            synchronous = true, clearDeletions = true)
+    }
 
     @Synchronized
     fun list(): List<WatchProgress> = readAll().values
@@ -108,7 +161,17 @@ class WatchProgressStore(context: Context) {
     @Synchronized
     fun remove(key: String) {
         val all = readAll().toMutableMap()
-        if (all.remove(key) != null) writeAll(all.values)
+        val removed = all.remove(key)
+        if (removed != null) {
+            if (profileName.isNotBlank()) {
+                val deletions = runCatching { JSONObject(prefs.getString("profile_deletions", "{}").orEmpty()) }
+                    .getOrDefault(JSONObject())
+                deletions.put(key, JSONObject().put("item", JSONObject(removed.rawJson)).put("deleted", true)
+                    .put("updated_at", System.currentTimeMillis()))
+                check(prefs.edit().putString("profile_deletions", deletions.toString()).commit())
+            }
+            writeAll(all.values)
+        }
     }
 
     @Synchronized
@@ -217,7 +280,8 @@ class WatchProgressStore(context: Context) {
         }
     }
 
-    private fun writeAll(entries: Collection<WatchProgress>, synchronous: Boolean = false) {
+    private fun writeAll(entries: Collection<WatchProgress>, synchronous: Boolean = false,
+                         clearDeletions: Boolean = false): Boolean {
         val array = JSONArray()
         entries.forEach { progress ->
             array.put(JSONObject().apply {
@@ -230,16 +294,21 @@ class WatchProgressStore(context: Context) {
             })
         }
         val editor = prefs.edit().putString(KEY_ENTRIES, array.toString())
+        if (clearDeletions) editor.remove("profile_deletions")
         if (synchronous) {
             if (!editor.commit()) {
                 android.util.Log.e("Prippi", "Salvataggio sincrono CW non riuscito")
+                return false
             }
         } else {
             editor.apply()
         }
+        return true
     }
 
     private companion object {
+        fun normalizeProfile(name: String): String = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFKC)
+            .trim().lowercase(java.util.Locale.ROOT).replace(Regex("\\s+"), " ")
         const val PREFS = "prippi_watch_progress"
         const val KEY_ENTRIES = "entries_v1"
         const val SCHEMA_VERSION = 2

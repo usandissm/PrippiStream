@@ -330,6 +330,7 @@ open class MainActivity : ComponentActivity() {
         if (::model.isInitialized) {
             model.setUiPaused(false)
             model.refreshContinueWatching()
+            model.syncProfileOnResume()
         }
     }
 
@@ -563,7 +564,9 @@ private fun PrippiApp(
 ) {
     val state = model.state
     val context = androidx.compose.ui.platform.LocalContext.current
-    UpdateReminderDialog()
+    if (!state.profileOnboarding) UpdateReminderDialog()
+    if (state.profileOnboarding) ProfileAccessDialog(state.profileName, state.profileBusy, state.profileError,
+        onSelect = model::changeProfile, onLocal = { model.changeProfile("") }, onDismiss = {}, onboarding = true)
     val isTelevision = deviceProfile.isTelevision
     val compactTvLandscape = isTelevision &&
         LocalConfiguration.current.screenHeightDp < 540
@@ -911,7 +914,8 @@ private fun PrippiApp(
                     onRemove = model::removeDownload,
                 )
                 AppPage.BROWSE -> ResultList(state.browseItems, state.loading, model::openBrowseItem)
-                AppPage.SETTINGS -> SettingsPage(state.settings, model::updateSetting)
+                AppPage.SETTINGS -> SettingsPage(state.settings, model::updateSetting,
+                    state.profileName, state.profileStatus, state.profileBusy, model::changeProfile, state.profileError)
                 AppPage.DETAIL -> state.selectedItem?.let { selected ->
                     DetailPage(
                         item = selected,
@@ -1084,6 +1088,7 @@ private fun TelevisionApp(
                     AppPage.SETTINGS -> TelevisionSettingsPage(
                         state.settings,
                         model::updateSetting,
+                        state.profileName, state.profileStatus, state.profileBusy, model::changeProfile, state.profileError,
                     )
                     AppPage.DETAIL -> state.selectedItem?.let { item ->
                         var previewUrls by remember(item.stableKey) {
@@ -3123,6 +3128,7 @@ private fun ChannelPage(
 private fun TelevisionSettingsPage(
     categories: List<SettingCategory>,
     onChange: (AppSetting, Any) -> Unit,
+    profileName: String, profileStatus: String, profileBusy: Boolean, onProfile: (String, String) -> Unit, profileError: String?,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val dimensions = LocalPrippiDimensions.current
@@ -3160,6 +3166,7 @@ private fun TelevisionSettingsPage(
             )
         }
         item(key = "settings-update") { AppUpdatePanel() }
+        item(key = "settings-profile") { ProfilePanel(profileName, profileStatus, profileBusy, onProfile, true, profileError) }
         categories.forEach { category ->
             item(key = "tv-category:${category.label}") {
                 Text(
@@ -3250,6 +3257,7 @@ private fun TelevisionSettingRow(
 private fun SettingsPage(
     categories: List<SettingCategory>,
     onChange: (AppSetting, Any) -> Unit,
+    profileName: String, profileStatus: String, profileBusy: Boolean, onProfile: (String, String) -> Unit, profileError: String?,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     fun runAction(setting: AppSetting) {
@@ -3270,6 +3278,7 @@ private fun SettingsPage(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item(key = "app-update") { AppUpdatePanel() }
+        item(key = "profile-sync") { ProfilePanel(profileName, profileStatus, profileBusy, onProfile, false, profileError) }
         categories.forEach { category ->
             item(key = "category:${category.label}") {
                 Text(

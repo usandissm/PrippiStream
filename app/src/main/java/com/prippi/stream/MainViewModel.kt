@@ -35,6 +35,11 @@ data class AppUiState(
     val settingsChannel: String = "",
     val downloads: List<DownloadEntry> = emptyList(),
     val liveReloading: Boolean = false,
+    val profileName: String = "",
+    val profileStatus: String = "Solo questo dispositivo",
+    val profileBusy: Boolean = false,
+    val profileOnboarding: Boolean = false,
+    val profileError: String? = null,
     val selectedItem: ContentItem? = null,
     val selectedProgressItem: ContentItem? = null,
     val detailOverview: String = "",
@@ -61,6 +66,8 @@ class MainViewModel(
     var state by mutableStateOf(
         AppUiState(
             homeRows = withContinueWatching(initialHomeRows),
+            profileName = progressStore.profileName,
+            profileOnboarding = !progressStore.profileOnboardingDone,
             loading = initialHomeRows.isEmpty(),
         ),
     )
@@ -75,6 +82,76 @@ class MainViewModel(
     private var pendingLiveRows: List<HomeRow>? = null
     private var engineReady = false
     private val engineReadySignal = CompletableDeferred<Unit>()
+    private var profileLoop: Job? = null
+
+    private fun startProfileLoop() {
+        if (profileLoop?.isActive == true) return
+        profileLoop = viewModelScope.launch {
+            while (true) {
+                if (progressStore.profileName.isNotBlank() && !state.profileBusy) syncProfile()
+                delay(20_000)
+            }
+        }
+    }
+
+    private suspend fun syncProfile() {
+        val profile = progressStore.profileName
+        if (profile.isBlank() || state.profileBusy) return
+        state = state.copy(profileBusy = true)
+        try {
+            val before = progressStore.profileSnapshot()
+            val response = withContext(Dispatchers.IO) { PythonBridge.profileExchange(profile, before) }
+            if (progressStore.profileName == profile) {
+                val applied = progressStore.applyProfileResponse(response, before)
+                if (applied) refreshContinueWatching()
+                state = state.copy(profileStatus = if (applied) response.optString("status", "Sincronizzato")
+                    else "Progressi cambiati durante il controllo · nuovo tentativo automatico")
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            state = state.copy(profileStatus = "Offline o servizio non disponibile · modifiche conservate sul dispositivo")
+        } finally { state = state.copy(profileBusy = false) }
+    }
+
+    fun syncProfileOnResume() {
+        if (engineReady) viewModelScope.launch { syncProfile() }
+    }
+
+    fun changeProfile(name: String, mode: String = "auto") {
+        if (state.profileBusy) return
+        if (ProfilePlaybackGuard.players.get() > 0) {
+            state = state.copy(profileError = "Interrompi la riproduzione o chiudi il PiP prima di cambiare profilo")
+            return
+        }
+        viewModelScope.launch {
+            state = state.copy(profileBusy = true, profileError = null)
+            try {
+                if (name.isBlank()) {
+                    progressStore.activateProfile("")
+                    state = state.copy(profileName = "", profileStatus = "Solo questo dispositivo")
+                } else {
+                    engineReadySignal.await()
+                    val target = progressStore.forProfile(name)
+                    val expected = target.profileSnapshot()
+                    val seed = if (mode == "join" && progressStore.profileName.isNotBlank() &&
+                        progressStore.profileName != target.profileName) expected else progressStore.profileSnapshot()
+                    val response = withContext(Dispatchers.IO) { PythonBridge.profileExchange(name, expected, true, seed, mode) }
+                    check(response.optBoolean("complete")) { "Sincronizzazione già in corso: riprova tra qualche secondo" }
+                    check(ProfilePlaybackGuard.players.get() == 0) { "Interrompi la riproduzione prima di cambiare profilo" }
+                    check(target.applyProfileResponse(response, expected)) { "I progressi sono cambiati: riprova" }
+                    progressStore.activateProfile(response.getString("profile"))
+                    state = state.copy(profileName = progressStore.profileName, profileStatus = "Sincronizzato")
+                }
+                progressStore.finishProfileOnboarding()
+                state = state.copy(profileOnboarding = false, profileError = null)
+                refreshContinueWatching()
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                state = state.copy(profileError = "Profilo non collegato: ${error.message}")
+            } finally { state = state.copy(profileBusy = false) }
+        }
+    }
 
     private fun rowsStructureSignature(rows: List<HomeRow>): String =
         rows.joinToString("|") { row ->
@@ -102,6 +179,7 @@ class MainViewModel(
         val pendingUserAction = foregroundTaskJob?.isActive == true
         engineReady = true
         engineReadySignal.complete(Unit)
+        startProfileLoop()
         viewModelScope.launch {
             // Il registry/redirect SC va validato prima del primo caricamento
             // remoto della Home: cosi' anche i CW ricostruiti dal motore usano

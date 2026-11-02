@@ -49,7 +49,7 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
             android:supportsPictureInPicture="true"
-            android:theme="@style/Theme.PrippiStream" />
+            android:theme="@style/Theme.PrippiStream.Player" />
 
         <activity
             android:name=".DownloadPreparationActivity"

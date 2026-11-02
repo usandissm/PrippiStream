@@ -30,8 +30,10 @@ internal object OfflinePlaybackPolicy {
 }
 
 /** A per-file bookmark, independent of the single series-level CW entry. */
-internal class OfflineWatchStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("offline_watch", Context.MODE_PRIVATE)
+internal class OfflineWatchStore(context: Context, profile: String = "") {
+    private val prefs = context.applicationContext.getSharedPreferences("offline_watch" +
+        if (profile.isBlank()) "" else "_" + java.security.MessageDigest.getInstance("SHA-256")
+            .digest(profile.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }, Context.MODE_PRIVATE)
     fun find(key: String): JSONObject? = runCatching {
         JSONObject(prefs.getString(key, "").orEmpty())
     }.getOrNull()
