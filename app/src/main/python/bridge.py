@@ -482,6 +482,7 @@ def _playback_preferences():
         'max_video_height': height,
         'autoplay_next': config.get_setting('app_autoplay_next', default=True) is not False,
         'fallback_enabled': config.get_setting('app_player_fallback', default=True) is not False,
+        'live_timeshift_enabled': config.get_setting('app_live_timeshift', default=False) is True,
     }
     return payload
 
@@ -1645,6 +1646,7 @@ def settings_schema():
          ['Italiani', 'Automatici', 'Disattivati']),
         ('app_autoplay_next', 'Avvia automaticamente il prossimo episodio', 'bool', True, []),
         ('app_player_fallback', 'Prova automaticamente la sorgente successiva', 'bool', True, []),
+        ('app_live_timeshift', 'Timeline canali live (fino a 2 ore, se disponibili; esclusi eventi)', 'bool', False, []),
         ('app_allow_4k_metered', 'Consenti 4K su reti a consumo', 'bool', False, []),
         ('app_treat_wifi_metered', 'Tratta il Wi-Fi come hotspot/rete a consumo', 'bool', False, []),
     ]

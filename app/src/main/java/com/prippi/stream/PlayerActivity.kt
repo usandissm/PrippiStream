@@ -132,7 +132,12 @@ open class PlayerActivity : ComponentActivity() {
     private var televisionSeekBar: SeekBar? = null
     private var televisionPositionView: TextView? = null
     private var televisionDurationView: TextView? = null
+    private var returnToLiveAction: View? = null
     private var televisionSeeking = false
+    private var timeshiftRecoveryAttempted = false
+    private var timeshiftBufferingStarted = 0L
+    private var timeshiftRequestedBehind = 0L
+    private var timeshiftTraceAtMs = 0L
     private var mobileLivePositionView: TextView? = null
     private var televisionPlayer = false
     private var tabletPlayer = false
@@ -560,12 +565,70 @@ open class PlayerActivity : ComponentActivity() {
         if (downloadPreparationMode) overridePendingTransition(0, 0)
     }
 
+    private fun isChannelPlayback(): Boolean = liveRowItems.length() > 0 || liveGuideText.isNotBlank()
+
+    private fun liveTimeshiftEnabled(): Boolean =
+        playbackCandidates.getOrNull(currentCandidateIndex)?.liveTimeshiftEnabled == true &&
+            isChannelPlayback() && !runCatching { JSONObject(contentJson).optBoolean("_app_event") }.getOrDefault(false)
+
+    private fun canUseLiveTimeline(): Boolean {
+        val current = player ?: return false
+        return LiveTimeshiftPolicy.available(liveTimeshiftEnabled(), isChannelPlayback(),
+            runCatching { JSONObject(contentJson).optBoolean("_app_event") }.getOrDefault(false),
+            current.isCurrentMediaItemSeekable, current.duration)
+    }
+
+    private fun liveEdgePosition(duration: Long): Long = runCatching {
+        val current = player ?: return@runCatching duration
+        if (current.currentTimeline.isEmpty) return@runCatching duration
+        current.currentTimeline.getWindow(current.currentMediaItemIndex, androidx.media3.common.Timeline.Window())
+            .defaultPositionMs.takeIf { it > 0 && it <= duration } ?: duration
+    }.getOrDefault(duration)
+
+    private fun timelineTarget(progress: Int, max: Int, duration: Long): Long =
+        if (isChannelPlayback()) LiveTimeshiftPolicy.target(progress, max, liveEdgePosition(duration))
+        else duration * progress / max.coerceAtLeast(1)
+
+    private fun timelinePositionLabel(position: Long, duration: Long): String =
+        if (isChannelPlayback()) {
+            val behind = LiveTimeshiftPolicy.behind(position, liveEdgePosition(duration))
+            if (behind <= LiveTimeshiftPolicy.LIVE_TOLERANCE_MS) "LIVE" else "−${formatPlaybackTime(behind)}"
+        } else formatPlaybackTime(position)
+
+    private fun seekTimeline(position: Long) {
+        val current = player ?: return
+        if (isChannelPlayback()) {
+            if (!canUseLiveTimeline()) return
+            timeshiftRecoveryAttempted = false
+            val duration = liveEdgePosition(current.duration)
+            val target = position.coerceIn(LiveTimeshiftPolicy.start(duration), duration)
+            timeshiftRequestedBehind = LiveTimeshiftPolicy.behind(target, duration)
+            if (LiveTimeshiftPolicy.behind(target, duration) <= LiveTimeshiftPolicy.LIVE_TOLERANCE_MS) {
+                current.seekToDefaultPosition()
+            } else current.seekTo(target)
+            AppDiagnostics.event("live_timeshift_seek behind_ms=${LiveTimeshiftPolicy.behind(target, duration)} window_ms=$duration")
+        } else current.seekTo(position)
+    }
+
+    private fun recoverLiveTimeshift(current: ExoPlayer, reason: String): Boolean {
+        if (!liveTimeshiftEnabled() || timeshiftRecoveryAttempted) return false
+        timeshiftRecoveryAttempted = true
+        timeshiftRequestedBehind = 0L
+        AppDiagnostics.event("live_timeshift_recover reason=$reason")
+        statusView.text = "Punto arretrato non disponibile. Torno alla diretta…"
+        statusView.visibility = View.VISIBLE
+        current.seekToDefaultPosition()
+        current.prepare()
+        return true
+    }
+
     private fun seekBy(deltaMs: Long): Boolean {
         val current = player ?: return false
+        if (isChannelPlayback() && !canUseLiveTimeline()) return false
         if (!current.isCurrentMediaItemSeekable) return false
         val duration = current.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
         val target = (current.currentPosition + deltaMs).coerceIn(0L, duration)
-        current.seekTo(target)
+        seekTimeline(target)
         refreshTelevisionTimeline()
         statusView.text = if (deltaMs < 0) "−10 secondi" else "+10 secondi"
         statusView.visibility = View.VISIBLE
@@ -954,8 +1017,8 @@ open class PlayerActivity : ComponentActivity() {
                                         ?.takeIf { it > 0 && it != C.TIME_UNSET }
                                         ?: return
                                     televisionPositionView?.text =
-                                        formatPlaybackTime(duration * progress / bar.max)
-                                    timelinePreview?.show(duration * progress / bar.max, duration, bar)
+                                        timelinePositionLabel(timelineTarget(progress, bar.max, duration), duration)
+                                    timelinePreview?.show(timelineTarget(progress, bar.max, duration), duration, bar)
                                 }
 
                                 override fun onStartTrackingTouch(bar: SeekBar) {
@@ -967,7 +1030,7 @@ open class PlayerActivity : ComponentActivity() {
                                     val duration = player?.duration
                                         ?.takeIf { it > 0 && it != C.TIME_UNSET }
                                     if (duration != null) {
-                                        player?.seekTo(duration * bar.progress / bar.max)
+                                        seekTimeline(timelineTarget(bar.progress, bar.max, duration))
                                     }
                                     televisionSeeking = false
                                     timelinePreview?.hide()
@@ -1030,6 +1093,9 @@ open class PlayerActivity : ComponentActivity() {
             })
         }
         addBottomAction(action("▤  Audio e sottotitoli") { showAudioSubtitleMenu() })
+        if (live) addBottomAction(action("●  Torna alla diretta") {
+            if (canUseLiveTimeline()) player?.seekToDefaultPosition()
+        }.also { returnToLiveAction = it; it.visibility = View.GONE })
         if (!live && episodeQueueLength() > 1) {
             addBottomAction(action("▶|  Episodio successivo") { switchToNextEpisode() }.also {
                 nextEpisodeActionView = it
@@ -1162,9 +1228,9 @@ open class PlayerActivity : ComponentActivity() {
                                             val duration = player?.duration
                                                 ?.takeIf { it > 0 && it != C.TIME_UNSET }
                                                 ?: return
-                                            val position = duration * progress / bar.max
+                                            val position = timelineTarget(progress, bar.max, duration)
                                             televisionPositionView?.text =
-                                                formatPlaybackTime(position)
+                                                timelinePositionLabel(position, duration)
                                             timelinePreview?.show(position, duration, bar)
                                         }
 
@@ -1177,7 +1243,7 @@ open class PlayerActivity : ComponentActivity() {
                                             val duration = player?.duration
                                                 ?.takeIf { it > 0 && it != C.TIME_UNSET }
                                             if (duration != null) {
-                                                player?.seekTo(duration * bar.progress / bar.max)
+                                                seekTimeline(timelineTarget(bar.progress, bar.max, duration))
                                             }
                                             televisionSeeking = false
                                             timelinePreview?.hide()
@@ -1387,6 +1453,9 @@ open class PlayerActivity : ComponentActivity() {
             liveSwitching.get() -> "CAMBIO CANALE…"
             playbackState == Player.STATE_BUFFERING -> "CARICAMENTO…"
             playbackState == Player.STATE_ENDED -> "TERMINATO"
+            current?.isPlaying == true && canUseLiveTimeline() &&
+                LiveTimeshiftPolicy.behind(current.currentPosition, liveEdgePosition(current.duration)) > LiveTimeshiftPolicy.LIVE_TOLERANCE_MS ->
+                "IN DIFFERITA  •  ${timelinePositionLabel(current.currentPosition, current.duration)}"
             current?.isPlaying == true && effectiveLive && liveRowItems.length() > 0 ->
                 "● IN DIRETTA  •  ${liveRowIndex + 1}/${liveRowItems.length()}"
             current?.isPlaying == true && effectiveLive -> "● IN DIRETTA"
@@ -1425,12 +1494,13 @@ open class PlayerActivity : ComponentActivity() {
 
     private fun refreshTelevisionTimeline() {
         val current = player
+        returnToLiveAction?.visibility = if (canUseLiveTimeline()) View.VISIBLE else View.GONE
         val livePlayback =
             liveRowIndex >= 0 ||
                 liveRowItems.length() > 0 ||
                 liveGuideText.isNotBlank() ||
                 current?.isCurrentMediaItemLive == true
-        if (livePlayback) {
+        if (livePlayback && !canUseLiveTimeline()) {
             televisionTimelineView?.visibility = View.GONE
             televisionPositionView?.text = ""
             televisionDurationView?.text = "LIVE"
@@ -1442,14 +1512,30 @@ open class PlayerActivity : ComponentActivity() {
         televisionTimelineView?.visibility = if (available) View.VISIBLE else View.GONE
         if (!available || duration == null || televisionSeeking) return
         val position = current.currentPosition.coerceIn(0L, duration)
-        televisionPositionView?.text = formatPlaybackTime(position)
-        televisionDurationView?.text = formatPlaybackTime(duration)
+        televisionPositionView?.text = timelinePositionLabel(position, duration)
+        if (livePlayback && current.isPlaying) televisionStateView?.text =
+            if (LiveTimeshiftPolicy.behind(position, liveEdgePosition(duration)) > LiveTimeshiftPolicy.LIVE_TOLERANCE_MS)
+                "IN DIFFERITA  •  ${timelinePositionLabel(position, duration)}"
+            else "● IN DIRETTA"
+        televisionDurationView?.text = if (livePlayback) "LIVE ↻" else formatPlaybackTime(duration)
+        televisionDurationView?.apply {
+            isFocusable = televisionPlayer && livePlayback
+            isClickable = livePlayback
+            contentDescription = if (livePlayback) "Torna alla diretta" else text
+            setOnClickListener { if (canUseLiveTimeline()) player?.seekToDefaultPosition() }
+            setOnFocusChangeListener { view, focused ->
+                view.setBackgroundColor(if (focused) Color.rgb(229, 9, 20) else Color.TRANSPARENT)
+            }
+        }
+        val end = if (livePlayback) liveEdgePosition(duration) else duration
+        val timelineDuration = if (livePlayback) LiveTimeshiftPolicy.length(end) else duration
+        val timelinePosition = if (livePlayback) (position - LiveTimeshiftPolicy.start(end)).coerceAtLeast(0) else position
         televisionSeekBar?.keyProgressIncrement =
-            ((10_000L * (televisionSeekBar?.max ?: 10_000)) / duration)
+            ((10_000L * (televisionSeekBar?.max ?: 10_000)) / timelineDuration)
                 .toInt()
                 .coerceAtLeast(1)
         televisionSeekBar?.progress =
-            ((position * (televisionSeekBar?.max ?: 10_000)) / duration)
+            ((timelinePosition * (televisionSeekBar?.max ?: 10_000)) / timelineDuration)
                 .toInt()
                 .coerceIn(0, televisionSeekBar?.max ?: 10_000)
     }
@@ -2388,6 +2474,8 @@ open class PlayerActivity : ComponentActivity() {
     ) {
         if (!isPlaybackGenerationActive(generation) || player != null) return
         subtitlesChangedByUser = false
+        timeshiftRecoveryAttempted = false
+        timeshiftRequestedBehind = 0L
         timelinePreview?.close()
         timelinePreview = if (!downloadPreparationMode && runCatching {
             JSONObject(contentJson).optString("channel") == "streamingcommunity"
@@ -2494,6 +2582,18 @@ open class PlayerActivity : ComponentActivity() {
                 mediaSession = MediaSession.Builder(this, current).build()
                 view.player = current
                 current.addListener(object : Player.Listener {
+                    override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                        if (!isPlaybackGenerationActive(generation) || player !== current ||
+                            !liveTimeshiftEnabled() || timeline.isEmpty) return
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now - timeshiftTraceAtMs < 30_000) return
+                        timeshiftTraceAtMs = now
+                        val window = timeline.getWindow(current.currentMediaItemIndex, androidx.media3.common.Timeline.Window())
+                        AppDiagnostics.event("live_timeshift_window start_ms=${window.windowStartTimeMs} " +
+                            "duration_ms=${current.duration} position_ms=${current.currentPosition} " +
+                            "buffer_ms=${current.totalBufferedDuration} behind_ms=${LiveTimeshiftPolicy.behind(current.currentPosition, liveEdgePosition(current.duration))}")
+                    }
+
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (!isPlaybackGenerationActive(generation) || player !== current) return
                         status.visibility = when (playbackState) {
@@ -2502,6 +2602,7 @@ open class PlayerActivity : ComponentActivity() {
                         }
                         when (playbackState) {
                             Player.STATE_READY -> {
+                                timeshiftBufferingStarted = 0L
                                 timelinePreview?.prepareTimeline(current.duration, current.currentPosition)
                                 liveSwitching.set(false)
                                 if (liveRetryCount > 0) {
@@ -2513,7 +2614,21 @@ open class PlayerActivity : ComponentActivity() {
                                     }, 30_000)
                                 }
                             }
-                            Player.STATE_BUFFERING -> status.text = "Caricamento…"
+                            Player.STATE_BUFFERING -> {
+                                status.text = "Caricamento…"
+                                if (canUseLiveTimeline() && LiveTimeshiftPolicy.behind(
+                                        current.currentPosition, liveEdgePosition(current.duration)) > LiveTimeshiftPolicy.LIVE_TOLERANCE_MS) {
+                                    val bufferingStarted = android.os.SystemClock.elapsedRealtime()
+                                    timeshiftBufferingStarted = bufferingStarted
+                                    progressHandler.postDelayed({
+                                        if (isPlaybackGenerationActive(generation) && player === current &&
+                                            current.playbackState == Player.STATE_BUFFERING &&
+                                            timeshiftBufferingStarted == bufferingStarted && current.playWhenReady) {
+                                            recoverLiveTimeshift(current, "buffer_timeout")
+                                        }
+                                    }, 20_000)
+                                }
+                            }
                             Player.STATE_ENDED -> {
                                 if (offlineDownloadKey.isNotBlank()) persistProgress(synchronous = true)
                                 val completedItem = runCatching {
@@ -2553,6 +2668,11 @@ open class PlayerActivity : ComponentActivity() {
 
                     override fun onPlayerError(error: PlaybackException) {
                         if (!isPlaybackGenerationActive(generation) || player !== current) return
+                        if (liveTimeshiftEnabled() && (timeshiftRequestedBehind > LiveTimeshiftPolicy.LIVE_TOLERANCE_MS ||
+                                error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ||
+                                canUseLiveTimeline() && LiveTimeshiftPolicy.behind(current.currentPosition, liveEdgePosition(current.duration)) >
+                                LiveTimeshiftPolicy.LIVE_TOLERANCE_MS) &&
+                            recoverLiveTimeshift(current, error.errorCodeName)) return
                         persistProgress()
                         val detail = error.cause?.message ?: error.message ?: error.errorCodeName
                         android.util.Log.e("Prippi", "Errore Media3: ${error.errorCodeName}", error)
