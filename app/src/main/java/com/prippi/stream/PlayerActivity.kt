@@ -2392,7 +2392,11 @@ open class PlayerActivity : ComponentActivity() {
         timelinePreview = if (!downloadPreparationMode && runCatching {
             JSONObject(contentJson).optString("channel") == "streamingcommunity"
         }.getOrDefault(false)) TimelinePreviewController(this, rootView).apply {
-            configure(url, manifest, headers)
+            val cacheIdentity = runCatching { ContentItem.fromJson(JSONObject(contentJson)).stableKey }
+                .getOrDefault(url.substringBefore('?'))
+            configure(url, manifest, headers, cacheIdentity, offlineDownloadKey.isNotBlank()) {
+                player?.isPlaying == true && (player?.totalBufferedDuration ?: 0L) >= 8000L
+            }
         } else null
         val http = DefaultHttpDataSource.Factory().apply {
             if (headers.isNotEmpty()) setDefaultRequestProperties(headers)
@@ -2498,6 +2502,7 @@ open class PlayerActivity : ComponentActivity() {
                         }
                         when (playbackState) {
                             Player.STATE_READY -> {
+                                timelinePreview?.prepareTimeline(current.duration, current.currentPosition)
                                 liveSwitching.set(false)
                                 if (liveRetryCount > 0) {
                                     progressHandler.postDelayed({
@@ -3351,7 +3356,7 @@ open class PlayerActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        timelinePreview?.hide()
+        timelinePreview?.suspend()
         val pictureInPictureClosed =
             pictureInPictureSessionActive || isInPictureInPictureMode
         activityStarted = false
