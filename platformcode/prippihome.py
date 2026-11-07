@@ -3279,6 +3279,25 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             self._populate_navigation_window(i)
             self._schedule_hero(i)
 
+    def _focus_first_content_row(self):
+        """Leave the header through a real populated row, never a fixed CW slot."""
+        for row in range(min(self._num_rows, len(self.rows_data))):
+            if not self.rows_data[row][1]:
+                continue
+            control_id = ROW_WRAPLIST_BASE + row * ROW_STEP
+            try:
+                self.getControl(control_id)
+                self._populate_navigation_window(row)
+                self.setFocusId(control_id)
+            except Exception as exc:
+                logger.debug('[PrippiHome] header navigation row=%s: %s' % (
+                    row, type(exc).__name__))
+                continue
+            self._last_focused_row = row
+            self._schedule_hero(row)
+            return True
+        return False
+
     def onAction(self, action):
         aid = action.getId()
         _note_touch_action(aid)
@@ -3473,6 +3492,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
         if aid == ACTION_DOWN:
             fid = self.getFocusId()
+            if fid in (SEARCH_BTN_HOME, BROWSE_BTN_HOME, SETTINGS_BTN, CLOSE_BTN):
+                self._focus_first_content_row()
+                return
             i = self._row_from_nav_fid(fid)
             if i >= 0:
                 # Check both: more rows in data AND next XML slot actually exists
@@ -3522,15 +3544,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     t = threading.Thread(target=_down_loop_back)
                     t.daemon = True
                     t.start()
-                return
-            # DOWN from EXIT → first real row
-            if fid == CLOSE_BTN:
-                cw_empty = not (self.rows_data and self.rows_data[0][1])
-                new_row = 1 if (cw_empty and self._num_rows > 1) else 0
-                self._populate_navigation_window(new_row)
-                self.setFocusId(ROW_WRAPLIST_BASE + new_row * ROW_STEP)
-                self._last_focused_row = new_row
-                self._schedule_hero(new_row)
                 return
         # Mouse/touch: Kodi muove GIÀ nativamente la selezione della riga sotto
         # il puntatore/dito (l'overlay che glielo impediva è disattivato in

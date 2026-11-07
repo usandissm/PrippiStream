@@ -1,3 +1,9 @@
+## 2.0.8
+Novità dell’aggiornamento
+
+- Corretta la navigazione con frecce e telecomando dalla barra superiore alle righe della Home.
+- Il tasto Giù ora torna alla prima riga disponibile, anche quando Continua a guardare è vuota.
+
 ## 2.0.7
 Novità dell’aggiornamento
 

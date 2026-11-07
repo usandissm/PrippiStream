@@ -87,7 +87,8 @@
             <aligny>center</aligny>
             <textoffsetx>14</textoffsetx>
             <onright>106</onright>
-            <ondown>2000</ondown>
+            <!-- Python chooses the first nonempty row; prevent an early XML jump. -->
+            <ondown>109</ondown>
         </control>
 
         <!-- Browse (categories) button -->
@@ -103,7 +104,7 @@
             <align>center</align>
             <onleft>109</onleft>
             <onright>107</onright>
-            <ondown>2000</ondown>
+            <ondown>106</ondown>
         </control>
 
         <!-- Settings button -->
@@ -119,7 +120,7 @@
             <align>center</align>
             <onleft>106</onleft>
             <onright>108</onright>
-            <ondown>2000</ondown>
+            <ondown>107</ondown>
         </control>
 
         <!-- EXIT button -->
@@ -134,6 +135,7 @@
             <focusedcolor>FFFFFFFF</focusedcolor>
             <align>center</align>
             <onleft>107</onleft>
+            <ondown>108</ondown>
             <animation effect="zoom" start="100" end="110" center="auto" time="120" tween="sine" easing="out">Focus</animation>
             <animation effect="zoom" start="110" end="100" center="auto" time="90" tween="sine" easing="in">Unfocus</animation>
         </control>

@@ -59,6 +59,9 @@ def main():
         for name in runtime:
             assert same_text(package.read(prefix + name), (ROOT / name).read_bytes()), 'Stale packaged runtime: ' + name
         assert same_text(package.read(prefix + 'changelog.txt'), (ROOT / 'changelog.txt').read_bytes())
+        home_xml = 'resources/skins/Default/1080i/PrippiHome.xml'
+        ET.parse(ROOT / home_xml)
+        assert same_text(package.read(prefix + home_xml), (ROOT / home_xml).read_bytes()), 'Stale Home navigation skin'
         assert b'IPTV_LIVE_ENABLED = False' in package.read(prefix + 'platformcode/sportchannels.py'), 'IPTV unexpectedly enabled'
     stable = ROOT / 'docs/plugin.video.prippistream.zip'
     assert hashlib.sha256(stable.read_bytes()).digest() == hashlib.sha256(archive.read_bytes()).digest(), 'Stable direct ZIP is stale'

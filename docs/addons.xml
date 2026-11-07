@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <addons>
-<addon id="plugin.video.prippistream" name="PrippiStream" version="2.0.7" provider-name="usandissm">
+<addon id="plugin.video.prippistream" name="PrippiStream" version="2.0.8" provider-name="usandissm">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
     <!-- <import addon="script.module.libtorrent" optional="true"/> -->
@@ -43,9 +43,8 @@
     </assets>
       <news>Novità dell’aggiornamento
 
-• Ripristinato l’avvio dei contenuti SC su Kodi nei casi in cui catalogo ed episodi si caricavano ma il video non partiva.
-• Messaggi di errore più precisi: gli errori del server video non vengono più indicati come “Prossimamente”.
-• Migliorata la gestione delle sorgenti tra un episodio e il successivo.</news>
+• Corretta la navigazione con frecce e telecomando dalla barra superiore alle righe della Home.
+• Il tasto Giù ora torna alla prima riga disponibile, anche quando Continua a guardare è vuota.</news>
     <description lang="it">Naviga velocemente sul web e guarda i contenuti presenti</description>
     <disclaimer>[COLOR red]The owners and submitters to this addon do not host or distribute any of the content displayed by these addons nor do they have any affiliation with the content providers.[/COLOR]
     [COLOR yellow]Kodi ┬® is a registered trademark of the XBMC Foundation. We are not connected to or in any other way affiliated with Kodi, Team Kodi, or the XBMC Foundation. Furthermore, any software, addons, or products offered by us will receive no support in official Kodi channels, including the Kodi forums and various social networks.[/COLOR]</disclaimer>

@@ -33,3 +33,5 @@ jobs:
           python-version: '3.11'
       - name: Verify update feed, ZIP, runtime and approved popup notes
         run: python tools/verify_kodi_release.py
+      - name: Verify Home header keyboard navigation
+        run: python tools/test_home_header_navigation.py
