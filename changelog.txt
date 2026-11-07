@@ -1,3 +1,10 @@
+## 2.0.7
+Novità dell’aggiornamento
+
+- Ripristinato l’avvio dei contenuti SC su Kodi nei casi in cui catalogo ed episodi si caricavano ma il video non partiva.
+- Messaggi di errore più precisi: gli errori del server video non vengono più indicati come “Prossimamente”.
+- Migliorata la gestione delle sorgenti tra un episodio e il successivo.
+
 ## 2.0.6
 Novità dell’aggiornamento
 

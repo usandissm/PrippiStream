@@ -35,7 +35,7 @@ def main():
         assert notes.pending_notes(previous, version, text) == approved, 'Popup includes old/unapproved history'
     news = addon.find('.//news').text or ''
     assert normal_notes(news) == normal_notes(approved), 'Metadata notes differ from popup'
-    runtime = ['channels/animeunity.py', 'core/tmdb.py', 'specials/setting.py'] + [
+    runtime = ['channels/animeunity.py', 'core/tmdb.py', 'specials/setting.py', 'servers/streamingcommunityws.py'] + [
         'platformcode/' + name + '.py' for name in (
             '_fourk', 'prippihome', 'skyepg', 'sportchannels', 'tvchannels', 'changelog',
             'taskpool', 'mediahosting', 'tgevents', 'eventavailability', 'eventcalendar',
