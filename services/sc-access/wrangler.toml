@@ -1,0 +1,16 @@
+name = "prippistream-sc-access"
+main = "worker.mjs"
+compatibility_date = "2026-11-08"
+account_id = "6c6fb5ace83625de95e64f94c942b0be"
+workers_dev = true
+
+[observability]
+enabled = false
+
+[[durable_objects.bindings]]
+name = "SESSION"
+class_name = "PremiumSession"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PremiumSession"]
