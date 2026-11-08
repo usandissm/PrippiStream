@@ -682,6 +682,12 @@ private fun PrippiApp(
                 ).show()
                 context.startActivity(Intent(context, DownloadPreparationActivity::class.java).apply {
                     putExtra("url", request.url)
+                    putExtra("playback_candidates_json", org.json.JSONArray().apply {
+                        put(request.toJson())
+                        if (request.scFreeFallbackJson.isNotBlank()) put(request.copy(
+                            url = "", bootstrapUrl = "", manifest = "sc_free_fallback",
+                        ).toJson())
+                    }.toString())
                     putExtra("bootstrap_url", request.bootstrapUrl)
                     putExtra("manifest", request.manifest)
                     putExtra("headers", request.headersJson)

@@ -346,6 +346,7 @@ data class PlaybackRequest(
     val autoplayNext: Boolean = true,
     val fallbackEnabled: Boolean = true,
     val liveTimeshiftEnabled: Boolean = false,
+    val scFreeFallbackJson: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("url", url)
@@ -365,6 +366,7 @@ data class PlaybackRequest(
         put("autoplay_next", autoplayNext)
         put("fallback_enabled", fallbackEnabled)
         put("live_timeshift_enabled", liveTimeshiftEnabled)
+        if (scFreeFallbackJson.isNotBlank()) put("sc_free_fallback_json", scFreeFallbackJson)
     }
 
     companion object {
@@ -388,6 +390,7 @@ data class PlaybackRequest(
             autoplayNext = json.optBoolean("autoplay_next", true),
             fallbackEnabled = json.optBoolean("fallback_enabled", true),
             liveTimeshiftEnabled = json.optBoolean("live_timeshift_enabled", false),
+            scFreeFallbackJson = json.optString("sc_free_fallback_json"),
         )
 
         private fun parseSubtitleUrls(raw: Any?): List<String> {

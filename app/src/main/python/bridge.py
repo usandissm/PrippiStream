@@ -1739,7 +1739,8 @@ def _download_content(entry):
     try:
         item = Item().fromurl(entry['item_url']) if entry.get('item_url') else None
         if item and getattr(item, 'title', ''):
-            for key in ('_app_media_url', '_app_media_headers', '_app_subtitle_urls'):
+            for key in ('_app_media_url', '_app_media_headers', '_app_subtitle_urls',
+                        '_app_sc_access_download', '_app_sc_download_height', '_app_media_prepared_at'):
                 item.__dict__.pop(key, None)
             return _from_item(item)
     except Exception:
@@ -1795,6 +1796,19 @@ def download_enqueue_resolved(item_dict, media_url, headers=None, target_height=
                               subtitle_urls=None):
     """Accoda usando la playlist già autorizzata dal WebView Android."""
     prepared = dict(item_dict or {})
+    init()
+    from platformcode import download_manager, downloads_db
+    from sc_access import candidate
+    key = download_manager._entry_from_item(_to_item(prepared)).get('key')
+    existing = downloads_db.get(key)
+    if existing:
+        # An existing file/partial must retain ITS old source and quality contract.
+        if existing.get('status') in ('paused', 'error') and existing.get('item_url'):
+            return download_resume(key)
+        return _jsonable(existing)
+    if candidate(prepared, {}):
+        prepared['_app_sc_access_download'] = True
+        prepared['_app_media_prepared_at'] = time.time()
     prepared['_app_media_url'] = media_url
     prepared['_app_media_headers'] = dict(headers or {})
     prepared['_app_subtitle_urls'] = list(subtitle_urls or [])
@@ -1925,6 +1939,24 @@ def channel_methods_json(channel_id):
 
 def resolve_json(item_json='{}'):
     return json.dumps(resolve(json.loads(item_json or '{}')), ensure_ascii=False)
+
+
+def sc_access_json(item_json='{}', endpoint='', client_key=''):
+    init()
+    from sc_access import playback
+    return json.dumps(playback(json.loads(item_json or '{}'), endpoint, client_key,
+                               _playback_preferences()), ensure_ascii=False)
+
+
+def configure_sc_access(endpoint='', client_key=''):
+    from sc_access import configure
+    configure(endpoint, client_key)
+
+
+def sc_access_candidate_json(item_json='{}'):
+    init()
+    from sc_access import candidate
+    return json.dumps(candidate(json.loads(item_json or '{}'), _playback_preferences()), ensure_ascii=False)
 
 
 def event_playback_candidates(item_dict):

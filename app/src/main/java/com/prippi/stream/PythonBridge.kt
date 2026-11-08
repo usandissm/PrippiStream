@@ -37,6 +37,7 @@ object PythonBridge {
         val dataDir = context.filesDir.absolutePath          // storage privato scrivibile
         // runtime_dir = cartella dati copiata; import dei .py da Chaquopy (sys.path nel bridge).
         bridge.callAttr("init", runtimeDir.absolutePath, dataDir, null)
+        bridge.callAttr("configure_sc_access", BuildConfig.SC_ACCESS_ENDPOINT, BuildConfig.SC_ACCESS_CLIENT_KEY)
         initialized = true
     }
 
@@ -239,6 +240,14 @@ object PythonBridge {
     /** Item riproducibile → dati per il player nativo. */
     fun resolve(item: JSONObject): JSONObject =
         JSONObject(bridge.callAttr("resolve_json", item.toString()).toString())
+
+    fun authorizedScPlayback(item: JSONObject): JSONObject = JSONObject(
+        bridge.callAttr("sc_access_json", item.toString(),
+            BuildConfig.SC_ACCESS_ENDPOINT, BuildConfig.SC_ACCESS_CLIENT_KEY).toString(),
+    )
+
+    fun authorizedScCandidate(item: JSONObject): JSONObject =
+        JSONObject(bridge.callAttr("sc_access_candidate_json", item.toString()).toString())
 
     fun eventPlaybackCandidates(item: JSONObject): List<JSONObject> =
         toList(bridge.callAttr("event_playback_candidates_json", item.toString()).toString())

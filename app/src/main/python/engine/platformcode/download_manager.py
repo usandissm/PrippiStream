@@ -458,6 +458,18 @@ def _resolve_media(page_url, channel='', item=None):
     # la playlist già autorizzata, mantenendo invariata tutta la coda/download.
     if item is not None:
         prepared_url = getattr(item, '_app_media_url', '') or ''
+        if getattr(item, '_app_sc_access_download', False) and channel == 'streamingcommunity':
+            import time as _time
+            from sc_access import download_media
+            age = _time.time() - float(getattr(item, '_app_media_prepared_at', 0) or 0)
+            if not prepared_url or not 0 <= age <= 15:
+                fresh = download_media(item.__dict__)
+                if fresh:
+                    return fresh[0], 'hls', fresh[1]
+                # Public playback is still available after expiry. The height lock
+                # below forbids appending a different rendition to an existing file.
+                u = _resolve_master(page_url)
+                return u, _kind_for(u), _default_headers(u)
         if prepared_url:
             prepared_headers = getattr(item, '_app_media_headers', {}) or {}
             return prepared_url, _kind_for(prepared_url), dict(prepared_headers)
@@ -998,9 +1010,20 @@ class DownloadManager(object):
         variants = info.get('variants') or []
         if not variants:
             raise RuntimeError('no playable variant (resolve failed)')
-        variant = _pick_variant(variants, job['target_height'])
+        marked = bool(getattr(item, '_app_sc_access_download', False))
+        if marked:
+            from sc_access import locked_download_height, validate_download_variant
+            locked_height = locked_download_height(item)
+        else:
+            locked_height = 0
+        variant = _pick_variant(variants, locked_height or job['target_height'])
         if not variant:
             raise RuntimeError('no playable variant')
+        if marked:
+            validate_download_variant(item, variant)
+            if not locked_height and variant.get('height'):
+                item._app_sc_download_height = int(variant['height'])
+                downloads_db.update_fields(key, item_url=item.tourl())
         headers = info.get('headers') or _default_headers(variant['url'])
         quality_lbl = ('%dp' % variant['height']) if variant.get('height') else 'auto'
 
@@ -1074,14 +1097,23 @@ class DownloadManager(object):
         """Re-resolve (channel-aware) and return a fresh (url, headers) for the
         given track after a token expiry."""
         item = job['item']
+        marked = bool(getattr(item, '_app_sc_access_download', False))
+        if marked:
+            from sc_access import locked_download_height, validate_download_variant
+            item._app_media_prepared_at = 0
         info = probe_tracks(item.url, channel=getattr(item, 'channel', '') or '',
                             item=item)
         hdrs = info.get('headers')
+        if marked:
+            locked = _pick_variant(info.get('variants') or [], locked_download_height(item) or job['target_height'])
+            if not locked:
+                raise RuntimeError('Sorgente download non disponibile')
+            validate_download_variant(item, locked)
         if kind == 'audio':
             a = (info.get('audios') or [])[idx]
             return a['url'], hdrs or _default_headers(a['url'])
         variants = info.get('variants') or []
-        v = _pick_variant(variants, job['target_height'])
+        v = _pick_variant(variants, locked_download_height(item) or job['target_height']) if marked else _pick_variant(variants, job['target_height'])
         if not v:
             raise RuntimeError('no variant on re-resolve')
         return v['url'], hdrs or _default_headers(v['url'])

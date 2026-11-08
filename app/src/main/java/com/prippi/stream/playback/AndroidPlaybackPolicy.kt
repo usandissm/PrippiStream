@@ -46,7 +46,7 @@ fun planAndroidPlayback(
             maxHeight = inferVideoHeight(request),
             codec = inferVideoCodec(request),
             type = when (request.manifest.lowercase()) {
-                "hls", "m3u8" -> SourceType.HLS
+                "hls", "m3u8", "sc_authorized", "sc_free_fallback" -> SourceType.HLS
                 "dash", "mpd" -> SourceType.DASH
                 else -> SourceType.PROGRESSIVE
             },

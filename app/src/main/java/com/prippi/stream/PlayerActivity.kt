@@ -2424,7 +2424,7 @@ open class PlayerActivity : ComponentActivity() {
             val array = JSONArray(value)
             (0 until array.length()).mapNotNull { index ->
                 array.optJSONObject(index)?.let(PlaybackRequest::fromJson)
-            }.filter { it.url.isNotBlank() }
+            }.filter { it.url.isNotBlank() || (it.manifest == "sc_free_fallback" && it.scFreeFallbackJson.isNotBlank()) }
         }.getOrDefault(emptyList())
     }
 
@@ -2439,6 +2439,36 @@ open class PlayerActivity : ComponentActivity() {
         currentCandidateIndex = index
         liveAacOverrideApplied = false
         val request = playbackCandidates[index]
+        if (request.manifest in setOf("sc_authorized", "sc_free_fallback") && request.scFreeFallbackJson.isNotBlank()) {
+            statusView.text = "Preparazione video…"
+            statusView.visibility = View.VISIBLE
+            Thread {
+                val result = runCatching {
+                    val raw = JSONObject(request.scFreeFallbackJson)
+                    val resolved = if (request.manifest == "sc_authorized") PythonBridge.authorizedScPlayback(raw)
+                        else PythonBridge.resolve(raw)
+                    PlaybackRequest.fromJson(resolved).let { actual ->
+                        actual.copy(maxVideoHeight = if (request.maxVideoHeight > 0 &&
+                            (actual.maxVideoHeight == 0 || request.maxVideoHeight < actual.maxVideoHeight))
+                            request.maxVideoHeight else actual.maxVideoHeight)
+                    }
+                }.getOrNull()?.takeIf { it.url.isNotBlank() }
+                runOnUiThread {
+                    if (!isPlaybackGenerationActive(generation)) return@runOnUiThread
+                    if (result == null) {
+                        if (request.manifest == "sc_authorized" && index + 1 in playbackCandidates.indices) {
+                            startPlaybackCandidate(index + 1)
+                            return@runOnUiThread
+                        }
+                        statusView.text = "Sorgente non disponibile"
+                        return@runOnUiThread
+                    }
+                    playbackCandidates = playbackCandidates.toMutableList().apply { set(index, result) }
+                    startPlaybackCandidate(index)
+                }
+            }.start()
+            return
+        }
         currentSubtitleUrls = request.subtitleUrls
         if (playbackCandidates.size > 1) {
             statusView.text = "Preparazione video ${index + 1}/${playbackCandidates.size}"
@@ -3180,7 +3210,8 @@ open class PlayerActivity : ComponentActivity() {
         }
         root.addView(web, FrameLayout.LayoutParams(2, 2, Gravity.BOTTOM or Gravity.END))
         var bootstrapAttempt = 1
-        val maxBootstrapAttempts = 3
+        val hasAuthorizedFallback = playbackCandidates.getOrNull(currentCandidateIndex + 1)?.manifest == "sc_free_fallback"
+        val maxBootstrapAttempts = if (hasAuthorizedFallback) 1 else 3
 
         fun loadBootstrapAttempt() {
             if (completed.get() || !isPlaybackGenerationActive(generation)) return
@@ -3209,6 +3240,14 @@ open class PlayerActivity : ComponentActivity() {
                         "Bootstrap VixCloud scaduto: tentativo $bootstrapAttempt/$maxBootstrapAttempts",
                     )
                     loadBootstrapAttempt()
+                } else if (!completed.get() && isPlaybackGenerationActive(generation) && hasAuthorizedFallback) {
+                    completed.set(true)
+                    clearBootstrapCallbacks()
+                    web.stopLoading()
+                    root.removeView(web)
+                    web.destroy()
+                    bootstrapWebView = null
+                    startPlaybackCandidate(currentCandidateIndex + 1)
                 } else if (!completed.get() &&
                     isPlaybackGenerationActive(generation) &&
                     downloadItemJson.isNotBlank()

@@ -142,7 +142,7 @@ class ContentRepository {
         return playbackCandidates(item)
     }
 
-    fun playbackCandidates(item: ContentItem): List<PlaybackRequest> {
+    fun playbackCandidates(item: ContentItem, useAuthorizedSc: Boolean = true): List<PlaybackRequest> {
         if (item.isEvent) {
             return runCatching {
                 PythonBridge.eventPlaybackCandidates(item.toJson()).map { PlaybackRequest.fromJson(it) }
@@ -169,12 +169,24 @@ class ContentRepository {
             }.forEach { candidates += channel to it }
         }
 
-        val raw = item.toJson()
+        val raw = item.toJson().apply { put("channel", item.channel) }
         if (!item.isLive && !item.isSeries && !item.isEpisode && item.tmdbId.isNotBlank()) {
             runCatching { PythonBridge.resolve4k(raw) }
                 .getOrNull()
                 ?.takeIf { it.optString("url").isNotBlank() }
                 ?.let { preResolved += PlaybackRequest.fromJson(it) }
+        }
+        if (useAuthorizedSc && !item.isLive && item.channel == "streamingcommunity") {
+            val authorized = runCatching { PythonBridge.authorizedScCandidate(raw) }.getOrNull()
+            if (authorized != null && authorized.optString("url").isNotBlank()) {
+                // Resolve the public source only if needed, so its signed URL is still fresh.
+                val freeItem = org.json.JSONObject(raw.toString()).apply {
+                    remove("_app_episode_queue")
+                    remove("_app_fallback_items")
+                }
+                val primary = PlaybackRequest.fromJson(authorized).copy(scFreeFallbackJson = freeItem.toString())
+                return preResolved + listOf(primary, primary.copy(url = "", bootstrapUrl = "", manifest = "sc_free_fallback"))
+            }
         }
         if (preResolved.isNotEmpty() && raw.optString("url").isBlank()) {
             val fhd = runCatching { PythonBridge.fhdFor4k(raw) }.getOrNull()

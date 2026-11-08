@@ -19,6 +19,14 @@ val releaseKeystore = Properties().apply {
         releaseKeystoreFile.inputStream().use(::load)
     }
 }
+// Local deployment configuration only. Never load account credentials into the APK.
+val scAccess = Properties().apply {
+    val file = rootProject.file("../Riservato/Android/premium-client.properties")
+    if (file.isFile) file.inputStream().use(::load)
+}
+fun scAccessValue(property: String, environment: String): String =
+    (System.getenv(environment) ?: scAccess.getProperty(property, ""))
+        .replace("\\", "\\\\").replace("\"", "\\\"")
 val prippiAbis = providers.gradleProperty("prippiAbis")
     .orNull
     ?.split(',')
@@ -50,9 +58,11 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 103
-        versionName = "0.9.48"
+        versionCode = 104
+        versionName = "0.9.49"
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
+        buildConfigField("String", "SC_ACCESS_ENDPOINT", "\"${scAccessValue("endpoint", "PRIPPI_SC_ACCESS_ENDPOINT")}\"")
+        buildConfigField("String", "SC_ACCESS_CLIENT_KEY", "\"${scAccessValue("clientKey", "PRIPPI_SC_ACCESS_CLIENT_KEY")}\"")
 
         // Release universale per box Android 32-bit e dispositivi ARM64.
         // `-PprippiAbis=x86_64` produce una build separata per l'emulatore.
