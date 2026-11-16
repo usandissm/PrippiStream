@@ -1391,9 +1391,23 @@ def build_items(row):
     sport_* payload used by the home's click handler to play them directly.
     infoLabels['_enr']=1 makes the home's TMDB-enrichment loops skip them."""
     items = []
-    if row in ('sky', 'sport') and not row_ready(row):
-        return []
     channel_rows = list(get_channels(row))
+    if row in ('sky', 'sport'):
+        from platformcode import live_catalog, live_channel_name
+        import xbmcvfs
+        native = live_catalog.apply(channel_rows) if row_ready(row) else []
+        remote = live_catalog.online_rows(row)
+        for ch in remote:
+            key = live_channel_name.channel_key(ch['title'])
+            aliases = {'skytg24': 'tg24', 'skymtv': 'mtv', 'daznmh': 'dazn'}
+            for option in (aliases.get(key, key), ch['_catalog_id']):
+                asset = _poster(option)
+                if xbmcvfs.exists(asset):
+                    ch['logo'] = asset
+                    break
+            ch['title'] = live_channel_name.channel_name(ch['title']) or ch['title']
+        channel_rows = ([ch for ch in remote if ch['kind'] != 'iptv_vm'] + native
+                        + [ch for ch in remote if ch['kind'] == 'iptv_vm'])
     if not IPTV_LIVE_ENABLED:
         channel_rows = [ch for ch in channel_rows if ch.get('kind') not in ('iptv', 'iptvorg')]
     if IPTV_LIVE_ENABLED and row == 'sky':
@@ -1907,6 +1921,16 @@ def resolve_listitem(item):
     title = item.fulltitle or item.title or par
     art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
            'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
+
+    if kind == 'iptv_vm':
+        from platformcode import live_iptv_direct_local
+        url = live_iptv_direct_local.open_url(par)
+        if not url:
+            return None
+        li = xbmcgui.ListItem(label=title, path=url, offscreen=True)
+        li.setMimeType('video/mp2t')
+        li.setArt(art)
+        return li
 
     if kind == 'mediahosting':
         from platformcode import mediahosting

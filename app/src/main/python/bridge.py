@@ -1035,6 +1035,9 @@ def live_rows():
     rows = []
     built_rows = [(key, sportchannels.build_items(key) or [])
                   for key in ('sky', 'sport')]
+    from platformcode.live_iptv_direct_local import start_row_probe
+    start_row_probe(getattr(item, 'sport_par', '') for _, items in built_rows for item in items
+                    if getattr(item, 'sport_kind', '') == 'iptv_vm')
     try:
         from platformcode import appevents
         appevents.start_refresh()

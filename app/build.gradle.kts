@@ -58,8 +58,8 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 104
-        versionName = "0.9.49"
+        versionCode = 105
+        versionName = "0.9.50"
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
         buildConfigField("String", "SC_ACCESS_ENDPOINT", "\"${scAccessValue("endpoint", "PRIPPI_SC_ACCESS_ENDPOINT")}\"")
         buildConfigField("String", "SC_ACCESS_CLIENT_KEY", "\"${scAccessValue("clientKey", "PRIPPI_SC_ACCESS_CLIENT_KEY")}\"")

@@ -3172,6 +3172,7 @@ private fun TelevisionSettingsPage(
             )
         }
         item(key = "settings-update") { AppUpdatePanel() }
+        item(key = "settings-live-access") { LiveAccessPanel() }
         item(key = "settings-profile") { ProfilePanel(profileName, profileStatus, profileBusy, onProfile, true, profileError) }
         categories.forEach { category ->
             item(key = "tv-category:${category.label}") {
@@ -3284,6 +3285,7 @@ private fun SettingsPage(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item(key = "app-update") { AppUpdatePanel() }
+        item(key = "live-access") { LiveAccessPanel() }
         item(key = "profile-sync") { ProfilePanel(profileName, profileStatus, profileBusy, onProfile, false, profileError) }
         categories.forEach { category ->
             item(key = "category:${category.label}") {
@@ -3298,6 +3300,51 @@ private fun SettingsPage(
                 SettingRow(setting, onChange, ::runAction)
                 HorizontalDivider()
             }
+        }
+    }
+}
+
+@Composable
+private fun LiveAccessPanel() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Accesso Live", style = MaterialTheme.typography.titleMedium)
+            Text("Associa il dispositivo al catalogo privato con un codice di accesso.")
+            Button(onClick = {
+                val input = android.widget.EditText(context).apply {
+                    isSingleLine = true
+                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                    importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+                    hint = "Codice di accesso"
+                }
+                val dialog = android.app.AlertDialog.Builder(context)
+                    .setTitle("Associa accesso Live").setView(input)
+                    .setNegativeButton("Annulla", null).setPositiveButton("Salva", null)
+                    .create()
+                dialog.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val parts = input.text.toString().trim().split(':')
+                        val token = Regex("[A-Za-z0-9_-]{43}")
+                        if (parts.size != 2 || parts.any { !token.matches(it) }) {
+                            input.error = "Codice non valido"
+                        } else if (runCatching {
+                                java.io.File(context.filesDir, "live-catalog.token").writeText(parts[0])
+                                java.io.File(context.filesDir, "live-play.token").writeText(parts[1])
+                            }.isSuccess) {
+                            input.text.clear()
+                            dialog.dismiss()
+                            android.widget.Toast.makeText(context, "Accesso salvato. Ricarica la sezione Live.",
+                                android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            input.error = "Impossibile salvare l’accesso"
+                        }
+                    }
+                }
+                dialog.show()
+            }) { Text("Configura accesso Live") }
         }
     }
 }
