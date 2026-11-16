@@ -40,7 +40,8 @@ def main():
             '_fourk', 'prippihome', 'skyepg', 'sportchannels', 'tvchannels', 'changelog',
             'taskpool', 'mediahosting', 'tgevents', 'eventavailability', 'eventcalendar',
             'eventpresentation', 'eventquality', 'eventresolver', 'eventtime', 'eventartnet', 'liveepg',
-            'profile_sync', 'profile_kodi', 'watch_history', 'subtitlepolicy', 'download_manager')]
+            'profile_sync', 'profile_kodi', 'watch_history', 'subtitlepolicy', 'download_manager',
+            'live_catalog', 'live_channel_name', 'live_iptv_direct_local', 'live_zap_toast')]
     for name in runtime:
         ast.parse((ROOT / name).read_text(encoding='utf-8-sig'), feature_version=(3, 8))
     archive = ROOT / 'docs/plugin.video.prippistream' / ('plugin.video.prippistream-' + version + '.zip')
@@ -52,7 +53,7 @@ def main():
             parts = Path(name).parts
             assert name.startswith(prefix) and '..' not in parts, 'Unexpected archive path'
             assert not set(parts).intersection({'private_iptv', 'userdata', '.git', '.codex-artifacts', 'tools', 'tizen'}), 'Private/development payload'
-            assert not name.lower().endswith(('.log', '.dmp', '.apk', '.pyc')), 'Diagnostic/build payload: ' + name
+            assert not name.lower().endswith(('.log', '.dmp', '.apk', '.pyc', '.token', '.jks')), 'Diagnostic/build payload: ' + name
             assert Path(name).name not in {'iptv_accounts.json', 'iptv_catalog.json'}, 'Private IPTV catalogue'
         assert any('/event_team_badges/' in name for name in names), 'Portable event badges missing'
         assert ET.fromstring(package.read(prefix + 'addon.xml')).attrib['version'] == version
@@ -63,6 +64,8 @@ def main():
         ET.parse(ROOT / home_xml)
         assert same_text(package.read(prefix + home_xml), (ROOT / home_xml).read_bytes()), 'Stale Home navigation skin'
         assert b'IPTV_LIVE_ENABLED = False' in package.read(prefix + 'platformcode/sportchannels.py'), 'IPTV unexpectedly enabled'
+        transport = package.read(prefix + 'platformcode/live_iptv_direct_local.py')
+        assert b'OpenSSH' not in transport and b'172.16.' not in transport, 'Private SSH bridge in release'
     stable = ROOT / 'docs/plugin.video.prippistream.zip'
     assert hashlib.sha256(stable.read_bytes()).digest() == hashlib.sha256(archive.read_bytes()).digest(), 'Stable direct ZIP is stale'
     print('Kodi ' + version + ': feed, checksum, artwork, runtime, Python 3.8 syntax and latest-only popup verified.')

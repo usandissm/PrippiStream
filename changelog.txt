@@ -1,3 +1,10 @@
+## 2.0.9
+Novità dell’aggiornamento
+
+- Corretto un crash durante l’aggiornamento degli eventi live.
+- Cambio canale più rapido, con meno passaggi visibili dalla home.
+- Loghi dei canali mostrati nelle proporzioni originali.
+
 ## 2.0.8
 Novità dell’aggiornamento
 

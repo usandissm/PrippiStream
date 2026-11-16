@@ -437,6 +437,10 @@ class _LivePlayer(xbmc.Player):
         self.user_stopped = False
         self.playback_ended = False
         self.playback_error = False
+        self.av_started = False
+
+    def onAVStarted(self):
+        self.av_started = True
 
     def onPlayBackStopped(self):
         self.user_stopped = True
@@ -2237,6 +2241,104 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
     # re-probe all ~46 channels and hammer the already-flaky backend.
     _LIVE_PROBE_THROTTLE = 120  # seconds
 
+    def _check_iptv_device_startup(self):
+        """Check cached live candidates from this device without delaying Home."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+        from platformcode.live_iptv_direct_local import probe_on_device
+
+        generation = getattr(self, '_play_gen', 0)
+        deadline = time.monotonic() + 10
+
+        def active():
+            return (self._alive and not _shutdown_event.is_set()
+                    and not _app_monitor.abortRequested()
+                    and getattr(self, '_play_gen', 0) == generation
+                    and time.monotonic() < deadline)
+
+        with self._rows_lock:
+            if getattr(self, '_iptv_startup_check_started', False):
+                return
+            targets = {item.sport_par: (item.fulltitle or item.title)
+                       for _, entries in self.rows_data for item in entries
+                       if getattr(item, 'sport_kind', '') == 'iptv_vm' and item.sport_par}
+            if not targets:
+                return
+            self._iptv_startup_check_started = True
+        checked = {'playable': 0, 'hidden': 0, 'inconclusive': 0}
+        pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='iptv-startup')
+        jobs = {pool.submit(probe_on_device, par, active): title
+                for par, title in targets.items()}
+        try:
+            for job in as_completed(jobs, timeout=10):
+                if not active():
+                    break
+                result = job.result()
+                if result is True:
+                    checked['playable'] += 1
+                elif result is False:
+                    checked['hidden'] += 1
+                    sportchannels.hide_failed_iptv(jobs[job])
+                else:
+                    checked['inconclusive'] += 1
+        except TimeoutError:
+            pass
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+        if checked['hidden'] and self._alive and getattr(self, '_play_gen', 0) == generation:
+            changed = []
+            with self._rows_lock:
+                for i, (label, entries) in enumerate(self.rows_data):
+                    kept = self._filter_device_iptv(entries)
+                    if len(kept) != len(entries):
+                        self.rows_data[i] = (label, kept)
+                        changed.append((i, kept))
+            for i, kept in changed:
+                self._rerender_live_row(i, kept)
+        logger.info('[PrippiHome] startup IPTV device check: %s of %d' % (checked, len(targets)))
+
+    @staticmethod
+    def _filter_device_iptv(items):
+        from platformcode.live_iptv_direct_local import channel_unlisted
+        return [item for item in items
+                if getattr(item, 'sport_kind', '') != 'iptv_vm'
+                or (not channel_unlisted(getattr(item, 'sport_par', ''))
+                    and not sportchannels.iptv_hidden_on_device(item.fulltitle or item.title))]
+
+    def _watch_live_catalog(self):
+        from platformcode import live_catalog
+        previous = live_catalog.revision()
+        while self._alive and not _shutdown_event.is_set():
+            if _app_monitor.waitForAbort(15):
+                return
+            if not self._alive or _shutdown_event.is_set():
+                return
+            live_catalog.refresh()
+            revision = live_catalog.revision()
+            if not revision or revision == previous or self._live_remote_active:
+                continue
+            generation = getattr(self, '_play_gen', 0)
+            for key in ('sky', 'sport'):
+                label = sportchannels.row_label(key)
+                with self._rows_lock:
+                    index = next((i for i, (name, _) in enumerate(self.rows_data)
+                                  if name == label), None)
+                if index is None:
+                    continue
+                try:
+                    updated = sportchannels.build_items(key)
+                    with self._rows_lock:
+                        if (self._live_remote_active or getattr(self, '_play_gen', 0) != generation
+                                or index >= len(self.rows_data) or self.rows_data[index][0] != label):
+                            break
+                        updated = self._filter_device_iptv(updated)
+                        self.rows_data[index] = (label, updated)
+                    self._rerender_live_row(index, updated, skip_gate=True)
+                except Exception as exc:
+                    logger.error('[PrippiHome] live catalogue update: %s' % type(exc).__name__)
+                    break
+            else:
+                previous = revision
+
     def _refresh_live_rows(self):
         """Probe SKY and Sport live channels in parallel.  Each row rerenders as
         soon as its own probe completes — no waiting for the other row."""
@@ -2246,6 +2348,10 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # never start when a remote was used regularly (1.9.972 box log).
         if not self._first_paint.wait(timeout=30):
             return
+        threading.Thread(target=self._check_iptv_device_startup, daemon=True).start()
+        if not getattr(self, '_live_catalog_watcher_started', False):
+            self._live_catalog_watcher_started = True
+            threading.Thread(target=self._watch_live_catalog, daemon=True).start()
         grace = 8.0 if self._low_power else 1.0
         deadline = time.time() + grace
         while time.time() < deadline:
@@ -2320,6 +2426,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             if not liveepg.wait(items, active=lambda: self._alive and not _shutdown_event.is_set()):
                 return
             with self._rows_lock:
+                items = self._filter_device_iptv(items)
                 self.rows_data[idx] = (label, items)
             # The private IPTV pool is validated on acquisition, so a merged
             # catalog entry is a candidate, not a pre-probed live channel.
@@ -2350,14 +2457,29 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             for t in threads:
                 while t.is_alive() and not _shutdown_event.is_set():
                     t.join(timeout=0.2)
+        # A cold start may not have had any saved SKY/SPORT candidates.
+        if not getattr(self, '_iptv_startup_check_started', False):
+            self._check_iptv_device_startup()
 
-    def _rerender_live_row(self, i, items):
+    def _rerender_live_row(self, i, items, skip_gate=False):
         """Replace the contents of an already-painted live row with *items*.
         Empty *items* hides both the list and the label entirely."""
         if i not in self._populated:
             # First paint hasn't happened yet — let _populate_single_row do it.
             return
-        self._bg_gate(15)
+        if not skip_gate:
+            with self._rows_lock:
+                if i >= len(self.rows_data):
+                    return
+                if (self.rows_data[i][0] == u'Eventi Calcio'
+                        and (self._live_remote_active
+                             or xbmc.getCondVisibility('Window.IsActive(fullscreenvideo)'))):
+                    if not hasattr(self, '_live_pending_repaints'):
+                        self._live_pending_repaints = set()
+                    self._live_pending_repaints.add(i)
+                    return
+        if not skip_gate:
+            self._bg_gate(15)
         if not self._alive or _shutdown_event.is_set():
             return
         wl_id  = ROW_WRAPLIST_BASE + i * ROW_STEP
@@ -2404,7 +2526,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             logger.error('[PrippiHome] _rerender_live_row %d: %s' % (i, str(exc)))
 
     def _event_ui_tick(self):
-        """Refresh clocks/art in-place; never reset the carousel to update a label."""
+        """Refresh event data; never mutate a ListItem borrowed from Kodi."""
         if not self._first_paint.wait(timeout=30):
             return
         while self._alive and not _shutdown_event.is_set():
@@ -2413,25 +2535,39 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     return
                 xbmc.sleep(500)
             try:
+                if (self._live_remote_active or xbmc.getCondVisibility('Window.IsActive(fullscreenvideo)')):
+                    continue
                 from platformcode import eventpresentation
                 with self._rows_lock:
-                    rows = [(i, list(items)) for i, (label, items) in enumerate(self.rows_data)
+                    rows = [(i, items) for i, (label, items) in enumerate(self.rows_data)
                             if label == u'Eventi Calcio']
                 for i, items in rows:
                     if i not in self._populated:
                         continue
-                    wl = self.getControl(ROW_WRAPLIST_BASE + i * ROW_STEP)
-                    for pos, item in enumerate(items):
+                    updates = []
+                    for item in items:
                         fixture = dict(item.__dict__.get('event_fixture') or {})
                         fixture.update(sources=item.__dict__.get('_tg_event_sources') or [],
                                        calendar_url=item.__dict__.get('event_calendar_url') or '')
-                        item.event_status = eventpresentation.event_status(
+                        status = eventpresentation.event_status(
                             fixture, playing=bool(item.__dict__.get('event_is_playing')))
-                        li = wl.getListItem(pos)
-                        li.setProperty('event_status', item.event_status)
-                        for side, team in zip(('home', 'away'), eventpresentation.teams(item.title or '')):
-                            li.setProperty('event_' + side + '_badge', eventpresentation.badge(team))
-                    if self._row_from_fid(self.getFocusId()) == i:
+                        badges = [eventpresentation.badge(team)
+                                  for team in eventpresentation.teams(item.title or '')]
+                        updates.append((item, status, badges))
+                    changed = False
+                    with self._rows_lock:
+                        if i >= len(self.rows_data) or self.rows_data[i][1] is not items:
+                            continue
+                        for item, status, badges in updates:
+                            updates_by_key = zip(('event_status', 'event_home_badge', 'event_away_badge'),
+                                                 [status] + badges)
+                            for key, value in updates_by_key:
+                                if item.__dict__.get(key, '') != value:
+                                    setattr(item, key, value)
+                                    changed = True
+                    if changed:
+                        self._rerender_live_row(i, items)
+                    if changed and not self._live_remote_active and self._row_from_fid(self.getFocusId()) == i:
                         self._update_hero(i)
             except Exception as exc:
                 logger.debug('[Events] UI tick: %s' % str(exc))
@@ -3051,6 +3187,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         # back to the channel's normal look when no EPG is cached for it.
         live_meta = None
         live_plot = None
+        self.setProperty('live_hero_logo', thumb if getattr(it, 'is_live_channel', False) else '')
         if getattr(it, 'is_live_channel', False):
             try:
                 # Look up by the stable 'par' (must match the key prefetch used).
@@ -3108,12 +3245,6 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                calendar_url=it.__dict__.get('event_calendar_url') or '')
                 live_meta = eventpresentation.event_status(
                     fixture, playing=bool(it.__dict__.get('event_is_playing')))
-                it.event_status = live_meta
-                try:
-                    self.getControl(ROW_WRAPLIST_BASE + row_idx * ROW_STEP).getListItem(pos).setProperty(
-                        'event_status', live_meta)
-                except Exception:
-                    pass
                 live_plot = (it.__dict__.get('event_league', '') +
                              '\nOrari italiani · Stato evento basato sul calendario.' +
                              '\nDisponibilità verificata sul flusso, non sul solo link.' +
@@ -3300,6 +3431,11 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
 
     def onAction(self, action):
         aid = action.getId()
+        if self.getProperty('prippi_zap_transition') == '1':
+            if aid in (ACTION_EXIT, ACTION_BACK, xbmcgui.ACTION_BACKSPACE):
+                self._play_gen = getattr(self, '_play_gen', 0) + 1
+                self._end_live_remote_session()
+            return
         _note_touch_action(aid)
         # Sonda diagnostica touch (solo build di test, setting perf_log): logga
         # ogni azione NON-mouse-move per capire cosa genera davvero il telefono
@@ -3819,6 +3955,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         super(PrippiHomeWindow, self).close()
 
     def onClick(self, control_id):
+        if self.getProperty('prippi_zap_transition') == '1':
+            return
         if control_id == CLOSE_BTN:
             self._alive = False
             self.close()
@@ -4106,6 +4244,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         """Bring this dialog back to front and restore keyboard focus to the last row+position."""
         try:
             self.show()
+            with self._rows_lock:
+                pending = getattr(self, '_live_pending_repaints', set())
+                self._live_pending_repaints = set()
+                repaints = [(i, self.rows_data[i][1]) for i in pending
+                            if 0 <= i < len(self.rows_data)]
+            for i, items in repaints:
+                self._rerender_live_row(i, items, skip_gate=True)
             row   = self._last_focused_row
             wl_id = ROW_WRAPLIST_BASE + row * ROW_STEP
             try:
@@ -5194,14 +5339,32 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             logger.error('[LiveRemote] start session: %s' % str(exc))
 
     def _end_live_remote_session(self):
+        self.clearProperty('prippi_zap_transition')
         self._live_remote_active = False
         self._live_remote_gen += 1
         self._live_zap_busy = False
         try:
-            from platformcode import live_remote
+            from platformcode import live_remote, live_zap_toast
+            live_zap_toast.clear()
             live_remote.clear_session()
         except Exception:
             pass
+
+    def _finish_live_transition(self, player, generation):
+        # Playback may be reported started before Kodi has switched windows.
+        # Keep covering Home until fullscreen is stable for two UI ticks.
+        fullscreen_ticks = 0
+        for _ in range(24):
+            if not self._alive or generation != self._play_gen:
+                return
+            if player.isPlayingVideo() and xbmc.getCondVisibility('Window.IsActive(fullscreenvideo)'):
+                fullscreen_ticks += 1
+                if fullscreen_ticks >= 2:
+                    self.clearProperty('prippi_zap_transition')
+                    return
+            else:
+                fullscreen_ticks = 0
+            xbmc.sleep(100)
 
     def _zap_live_channel(self, direction, attempt=0):
         if not self._live_remote_active:
@@ -5219,6 +5382,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             # la scansione lasciando non provati i canali successivi.
             if len(items) < 2 or attempt >= max(64, len(items) * 2):
                 self._live_zap_busy = False
+                self.clearProperty('prippi_zap_transition')
                 xbmcgui.Dialog().notification('PrippiStream', 'Nessun altro canale disponibile',
                                               xbmcgui.NOTIFICATION_WARNING, 2500)
                 return
@@ -5229,14 +5393,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
             from platformcode import live_remote
             live_remote.update_session_index(pos)
             item = items[pos]
+            self.setProperty('prippi_zap_transition', '1')
             logger.info('[LiveRemote] %s -> %s (%d/%d), tentativo=%d'
                         % (direction, item.fulltitle or item.title, pos + 1, len(items), attempt))
             if config.get_setting('live_remote_overlay', default=True):
-                xbmcgui.Dialog().notification(
+                from platformcode import live_zap_toast
+                live_zap_toast.show(
                     item.fulltitle or item.title or 'Canale live',
                     '%s · %d/%d · Connessione…' %
                     ('AVANTI' if direction == 'next' else 'INDIETRO', pos + 1, len(items)),
-                    item.thumbnail or xbmcgui.NOTIFICATION_INFO, 2500)
+                    item.thumbnail or '', 2500)
             if getattr(item, '_app_live_provider', False):
                 self._play_provider_live(item, row_idx, pos, _from_zap=True,
                                          _zap_direction=direction,
@@ -5246,6 +5412,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                           _zap_direction=direction, _zap_attempt=attempt)
         except Exception as exc:
             self._live_zap_busy = False
+            self.clearProperty('prippi_zap_transition')
             logger.error('[LiveRemote] zap: %s' % str(exc))
 
     def _play_provider_live(self, item, row_idx, pos, _from_zap=False,
@@ -5268,7 +5435,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         my_gen = self._play_gen
         def _watch_provider():
             from platformcode import tvchannels
-            player = xbmc.Player()
+            player = _LivePlayer()
             monitor = xbmc.Monitor()
             try:
                 self._bg_ui_pause.clear()
@@ -5290,7 +5457,7 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if (not self._alive or monitor.abortRequested()
                             or my_gen != self._play_gen):
                         return
-                    if player.isPlaying():
+                    if player.isPlaying() and (not _from_zap or player.av_started):
                         started = True
                         break
                     xbmc.sleep(500)
@@ -5303,13 +5470,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     else:
                         self._end_live_remote_session()
                     return
+                if _from_zap:
+                    self._finish_live_transition(player, my_gen)
                 if _from_zap and config.get_setting('live_remote_overlay', default=True):
-                    xbmcgui.Dialog().notification(
+                    from platformcode import live_zap_toast
+                    live_zap_toast.show(
                         item.fulltitle or item.title or 'Canale TV',
                         '%d/%d · In riproduzione' %
                         (self._live_remote_pos + 1,
                          len(self.rows_data[row_idx][1])),
-                        item.thumbnail or xbmcgui.NOTIFICATION_INFO, 1800)
+                        item.thumbnail or '', 1800)
                 while player.isPlaying():
                     if (not self._alive or monitor.abortRequested()
                             or my_gen != self._play_gen):
@@ -5319,6 +5489,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     self._end_live_remote_session()
                     self._restore_home()
             finally:
+                if my_gen == self._play_gen:
+                    self.clearProperty('prippi_zap_transition')
                 self._live_zap_busy = False
                 self._bg_ui_pause.set()
 
@@ -5355,10 +5527,27 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
         def _worker():
             busy = None
 
-            def _remove_dead():
+            def _remove_dead(remove_cache=True):
                 """Remove the channel from cache + re-render its row."""
                 par = getattr(item, 'sport_par', None)
                 if not par or row_idx is None:
+                    return
+                if not remove_cache:
+                    # A device-specific failure is already persisted by
+                    # hide_failed_iptv. Never resolve the catalogue or wait on
+                    # the background UI gate in the hot zapping path.
+                    with self._rows_lock:
+                        if row_idx >= len(self.rows_data):
+                            return
+                        label, entries = self.rows_data[row_idx]
+                        kept = self._filter_device_iptv(entries)
+                        self.rows_data[row_idx] = (label, kept)
+                        if _from_zap:
+                            if not hasattr(self, '_live_pending_repaints'):
+                                self._live_pending_repaints = set()
+                            self._live_pending_repaints.add(row_idx)
+                    if not _from_zap:
+                        self._rerender_live_row(row_idx, kept, skip_gate=True)
                     return
                 lbl = None
                 with self._rows_lock:
@@ -5368,7 +5557,8 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                                 if lbl == sportchannels.row_label(rk)), None)
                 if not row_key:
                     return
-                sportchannels.remove_channel(row_key, par)
+                if remove_cache:
+                    sportchannels.remove_channel(row_key, par)
                 new_items = sportchannels.build_items(row_key)
                 with self._rows_lock:
                     if row_idx < len(self.rows_data):
@@ -5376,11 +5566,12 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 self._rerender_live_row(row_idx, new_items)
 
             try:
-                try:
-                    busy = xbmcgui.DialogBusy()
-                    busy.create()
-                except Exception:
-                    busy = None
+                if not _from_zap:
+                    try:
+                        busy = xbmcgui.DialogBusy()
+                        busy.create()
+                    except Exception:
+                        busy = None
                 par  = getattr(item, 'sport_par', None)
                 kind = getattr(item, 'sport_kind', '')
                 logger.info('[PrippiHome] live resolve start: %s kind=%s' %
@@ -5417,22 +5608,23 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     so we never deny-list/remove a working channel.
                     Returns True/False, or None if aborted/superseded."""
                     clearkey = bool(_li.getProperty('inputstream.adaptive.drm_legacy'))
+                    direct_iptv = bool(_li.getProperty('prippi.iptv.slot'))
                     player.reset_flags()
                     _dismiss_error_dialog()                   # clear a leftover modal from a prior candidate
                     player.play(_li.getPath(), _li)
                     mon = xbmc.Monitor()
                     opened = False
-                    for _ in range(12):                       # ≤6 s to open
+                    for _ in range(60 if direct_iptv else 12):  # ≤6 s to open
                         if not self._alive or mon.abortRequested() or my_gen != self._play_gen:
                             return None
-                        if player.isPlaying():
+                        if player.playback_error or player.playback_ended:
+                            return False
+                        if player.isPlaying() and (not direct_iptv or player.av_started):
                             opened = True
                             break
-                        if player.user_stopped:
+                        if player.user_stopped and not direct_iptv:
                             return True                       # user backed out — not a failure
-                        if player.playback_error or player.playback_ended:
-                            return False                      # open failed fast → fall through to the next candidate now
-                        xbmc.sleep(500)
+                        xbmc.sleep(100 if direct_iptv else 500)
                     if not opened:
                         # Never opened.  A user exit during buffering isn't a failure;
                         # give the callback a beat so the exit isn't misread as one.
@@ -5440,7 +5632,17 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                             if player.user_stopped or player.playback_error or player.playback_ended:
                                 break
                             xbmc.sleep(100)
-                        return True if player.user_stopped else False
+                        return bool(player.user_stopped and not direct_iptv)
+                    if direct_iptv:
+                        # onAVStarted means the new stream has opened. Do not
+                        # wait for unstable live timestamps (or 3 s of HLS).
+                        xbmc.sleep(180)
+                        if my_gen != self._play_gen or not self._alive or mon.abortRequested():
+                            return None
+                        if player.user_stopped and not player.playback_error:
+                            return True
+                        return (player.isPlayingVideo() and not player.playback_error
+                                and not player.playback_ended)
                     base_t = None
                     stable = 0
                     # The ARM box can finish parsing the MPD quickly but need
@@ -5516,6 +5718,13 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     # non-IPTV Daddy decoders when the channel has a mapping.
                     candidates = [_prim, _fresh, _dad, _dadf]
 
+                rejected_slots = set()
+                release_lease = None
+                if kind == 'iptv_vm':
+                    def _direct():
+                        return sportchannels.vm_iptv_listitem(item, rejected_slots, release_lease)
+                    candidates = [('fresh_primary', _direct), ('alternate_iptv', _direct)]
+
                 played = False
                 for _src, _resolve in candidates:
                     if my_gen != self._play_gen:
@@ -5530,12 +5739,22 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     if not _li:
                         logger.info('[PrippiHome] live source unavailable: %s via %s' %
                                     (par or item.fulltitle or item.title, _src))
+                        if kind == 'iptv_vm':
+                            break  # allocator has already checked the available candidates
                         continue                              # this source unavailable → next
                     _close_busy()                             # reveal the player
                     logger.info('[PrippiHome] play %s via %s' % (par, _src))
                     res = _play_and_verify(_li)
                     if res is None:
                         return                                # superseded/aborted
+                    if not res and kind == 'iptv_vm':
+                        from platformcode.live_iptv_direct_local import mark_slot_rejected
+                        slot = _li.getProperty('prippi.iptv.slot')
+                        rejected_slots.add(slot)
+                        mark_slot_rejected(slot)
+                        release_lease = _li.getProperty('prippi.iptv.lease')
+                    logger.info('[PrippiHome] live playback %s: %s via %s' %
+                                ('started' if res else 'failed', par, _src))
                     if res:
                         played = True
                         # Learn what actually worked so next play starts there.
@@ -5558,9 +5777,20 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                 if not played:
                     # Every source failed → deny-list + remove from the row.  Notify
                     # only if the user is still waiting on this channel.
-                    if par:
-                        sportchannels.mark_dead(par)
-                    _remove_dead()
+                    removed = False
+                    if my_gen == self._play_gen:
+                        if kind == 'iptv_vm':
+                            from platformcode.live_iptv_direct_local import channel_unlisted
+                            if rejected_slots:
+                                sportchannels.hide_failed_iptv(item.fulltitle or item.title)
+                            if rejected_slots or channel_unlisted(par):
+                                _remove_dead(remove_cache=False)
+                                removed = True
+                        else:
+                            if par:
+                                sportchannels.mark_dead(par)
+                            _remove_dead()
+                            removed = True
                     _dismiss_error_dialog()                   # hide Kodi's own 'playback failed' modal; we show our toast instead
                     if my_gen == self._play_gen:
                         if _from_zap:
@@ -5570,12 +5800,20 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                             # saltare il successivo.
                             with self._rows_lock:
                                 remaining = len(self.rows_data[row_idx][1]) if row_idx < len(self.rows_data) else 0
-                            if remaining:
+                            if remaining and removed:
                                 if _zap_direction == 'next':
                                     self._live_remote_pos = max(-1, pos - 1)
                                 else:
                                     self._live_remote_pos = min(pos, remaining)
                             self._live_zap_busy = False
+                            if kind == 'iptv_vm' and _zap_attempt + 1 >= remaining - 1:
+                                self.clearProperty('prippi_zap_transition')
+                                if not player.isPlaying():
+                                    self._end_live_remote_session()
+                                    self._restore_home()
+                                xbmcgui.Dialog().notification('PrippiStream', 'Nessun altro canale disponibile',
+                                                              xbmcgui.NOTIFICATION_WARNING, 2500)
+                                return
                             self._zap_live_channel(_zap_direction, _zap_attempt + 1)
                         else:
                             self._end_live_remote_session()
@@ -5585,14 +5823,16 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     return
 
                 if _from_zap:
+                    self._finish_live_transition(player, my_gen)
                     self._live_zap_busy = False
                     if config.get_setting('live_remote_overlay', default=True):
-                        xbmcgui.Dialog().notification(
+                        from platformcode import live_zap_toast
+                        live_zap_toast.show(
                             item.fulltitle or item.title or 'Canale live',
                             '%d/%d · In riproduzione' %
                             (self._live_remote_pos + 1,
                              len(self.rows_data[row_idx][1]) if row_idx is not None else 0),
-                            item.thumbnail or xbmcgui.NOTIFICATION_INFO, 1800)
+                            item.thumbnail or '', 1800)
 
                 # Good channel — wait for it to end, then restore the home (never
                 # remove a channel the user actually watched).
@@ -5608,6 +5848,9 @@ class PrippiHomeWindow(xbmcgui.WindowXML):
                     self._restore_home()
             except Exception as exc:
                 logger.error('[PrippiHome] _play_channel_stream: %s' % str(exc))
+                if _from_zap and my_gen == self._play_gen:
+                    self.clearProperty('prippi_zap_transition')
+                    self._live_zap_busy = False
                 if busy:
                     try:
                         busy.close()
@@ -7212,6 +7455,8 @@ def _item_to_li(item):
     li = xbmcgui.ListItem(title)
     li.setArt({'thumb': thumb, 'poster': thumb, 'fanart': fanart})
     li.setProperty('thumbnail',    thumb)
+    if getattr(item, 'is_live_channel', False):
+        li.setProperty('prippi_live_logo', '1')
     li.setProperty('fanart_image', fanart)
     li.setProperty('title',        title)
     li.setProperty('year',         str(item.year or ''))

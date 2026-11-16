@@ -8,10 +8,10 @@ requires a resolver update; never pretend an expired source is still online.
 import re
 from urllib.parse import urlencode
 
-# Provider's published resolver snapshot, 2026-10-24. This is a source URL token,
-# not a user's password/account or a DRM key. Do not log complete signed URLs.
-STREAM_TEMPLATE = ('https://p7.streamhostingcdn.top/stream/{stream}/index.m3u8'
-                   '?token=o_mnFDukW1rajOBK2cJPcw&ark_r=p7')
+# Provider playback observed on 2026-11-12: this route no longer uses the old
+# signed p7 URL. Continue to validate the playlist before publishing the row.
+STREAM_TEMPLATE = ('https://p5.streamhostingcdn.top/stream/{stream}/index.m3u8'
+                   '?token=&exp=0')
 REFERER = 'https://prohostmedia.top/'
 UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 OPR/133.0.0.0')

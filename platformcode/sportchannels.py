@@ -30,10 +30,11 @@ import time
 try:
     from urllib.request import Request, urlopen
     from urllib.error import URLError, HTTPError
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlencode
     PY3 = True
 except ImportError:  # py2
     from urllib2 import Request, urlopen, URLError, HTTPError
+    from urllib import urlencode
     from urlparse import urlparse
     PY3 = False
 
@@ -80,6 +81,21 @@ def _logo_for(par, backend_logo=''):
     """Prefer our bundled portrait poster; fall back to the backend's logo for
     channels we don't ship art for (e.g. ones added upstream after release)."""
     return _poster(par) if par in _KNOWN_POSTERS else (backend_logo or '')
+
+
+def _catalog_logo(channel):
+    from platformcode.live_channel_name import channel_key
+    import xbmcvfs
+
+    title_key = channel_key(channel.get('title'))
+    aliases = {'skytg24': 'tg24', 'skymtv': 'mtv', 'daznmh': 'dazn'}
+    for key in (channel.get('_catalog_id'), aliases.get(title_key, title_key)):
+        if key:
+            key = aliases.get(key, 'dazn' if key == 'dazn_mh' else key)
+            path = _poster(key)
+            if xbmcvfs.exists(path):
+                return path
+    return channel.get('logo') or ''
 
 
 # ── Static bundled lists — instant + resilient ───────────────────────────────
@@ -414,6 +430,23 @@ def _is_dead(par):
         if until:
             _dead_until.pop(par, None)  # expired → allow re-probe
     return False
+
+
+def _iptv_device_key(title):
+    from platformcode.live_channel_name import channel_key
+    key = channel_key(title)
+    return 'device_iptv:' + key if key else ''
+
+
+def hide_failed_iptv(title):
+    """Local playback verdict, not a global outage or a provider rule."""
+    key = _iptv_device_key(title)
+    if key:
+        mark_dead(key, ttl=300)
+
+
+def iptv_hidden_on_device(title):
+    return _is_dead(_iptv_device_key(title))
 
 
 # ── adaptive resolver preference (self-healing) ──────────────────────────────
@@ -772,14 +805,13 @@ def _strip_color(s):
 def _parse_sport_backend():
     """Rebuild the Sport list from the live backend (A1A165 + A1A165A)."""
     raw_sky = _backend_get(_CODE_SPORT_SKY)
-    if not raw_sky:
-        return None
     try:
-        sky_items = json.loads(raw_sky).get('items', [])
-    except Exception:
-        return None
+        sky_items = json.loads(raw_sky or '{}').get('items') or []
+    except (ValueError, AttributeError):
+        sky_items = []
 
     fs_map = {}
+    fs_channels = {}
     dazn = None
     dazn_mh = None
     raw_sky2 = _backend_get(_CODE_SPORT_SKY2)
@@ -797,6 +829,8 @@ def _parse_sport_backend():
                     continue
                 if mr.startswith('freeshot@@'):
                     code = mr.split('@@', 1)[1]
+                    if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', code):
+                        continue
                     if code == 'ZonaDAZN':
                         dazn = {"title": u"Zona DAZN", "kind": "freeshot",
                                 "par": "ZonaDAZN", "fs": None,
@@ -806,24 +840,31 @@ def _parse_sport_backend():
                     if norm.endswith('it'):
                         norm = norm[:-2]
                     fs_map[norm] = code
+                    title = re.sub(r'\s*\[FS\]\s*$', '', _strip_color(it.get('title', '')), flags=re.I)
+                    fs_channels[norm] = {'title': title or code, 'kind': 'freeshot',
+                                         'par': norm, 'fs': code,
+                                         'logo': _logo_for(norm, it.get('thumbnail', ''))}
         except Exception:
             pass
 
     channels = [dazn_mh] if dazn_mh else []
+    primary_codes = set()
     for it in sky_items:
         mr = it.get('myresolve', '') or ''
         if not mr.startswith('sky@@'):
             continue
         par = mr.split('@@', 1)[1]
+        primary_codes.add(par.lower())
         channels.append({
             "title": _strip_color(it.get('info') or it.get('title') or par),
-            "kind": "sky", "par": par, "fs": fs_map.get(par),
+            "kind": "sky", "par": par, "fs": fs_map.get(par.lower()),
             "logo": _logo_for(par, it.get('thumbnail', '')),
         })
-    if not channels:
-        return None
+    channels.extend(ch for code, ch in fs_channels.items() if code not in primary_codes)
     if dazn:
         channels.append(dazn)
+    if not channels:
+        return None
     # New DaddyLive sport channels with no sky@@ equivalent (Eurosport, Rai Sport).
     channels.extend(_daddy_channels('sport'))
 
@@ -1382,9 +1423,23 @@ def build_items(row):
     sport_* payload used by the home's click handler to play them directly.
     infoLabels['_enr']=1 makes the home's TMDB-enrichment loops skip them."""
     items = []
-    if row in ('sky', 'sport') and not row_ready(row):
-        return []
-    channel_rows = list(get_channels(row))
+    remote_rows = []
+    if row in ('sky', 'sport'):
+        from platformcode import live_catalog
+        live_catalog.refresh()
+        remote_rows = live_catalog.online_rows(row)
+        for ch in remote_rows:
+            ch['logo'] = _catalog_logo(ch)
+        if not row_ready(row) and not remote_rows:
+            return []
+    channel_rows = ([ch for ch in remote_rows if ch['kind'] != 'iptv_vm']
+                    + list(get_channels(row))
+                    + [ch for ch in remote_rows if ch['kind'] == 'iptv_vm'])
+    if row in ('sky', 'sport'):
+        channel_rows = [ch for ch in channel_rows if ch.get('_catalog_id') or live_catalog.channel_allowed(ch)]
+        from platformcode.live_channel_name import channel_name
+        channel_rows = [dict(ch, title=channel_name(ch.get('title')) or ch.get('title'))
+                        for ch in channel_rows]
     if IPTV_LIVE_ENABLED and row == 'sky':
         for cat in ('cinema', 'intrattenimento', 'documentari'):
             channel_rows += _parse_iptv_row('iptv_' + cat)
@@ -1399,7 +1454,9 @@ def build_items(row):
     # than a URL/catalog entry.  This also makes the persisted 30-minute
     # deny-list effective for private IPTV entries merged into SKY/Sport.
     channel_rows = [ch for ch in channel_rows
-                    if not _is_dead(ch.get('par', ''))]
+                    if not _is_dead(ch.get('par', ''))
+                    and not (ch.get('kind') == 'iptv_vm'
+                             and iptv_hidden_on_device(ch.get('title')))]
     # Merge by visible title while preserving native ClearKey/Daddy priority.
     seen = set()
     def _dedupe_key(ch):
@@ -1518,19 +1575,25 @@ def resolve_sky(channel_id):
 
 
 def resolve_freeshot(code, quiet=False):
-    """Return an HLS m3u8 URL for a freeshot channel, or None.
-    Goes through cloudscraper (popcdn.day is behind a Cloudflare challenge)."""
-    page = _cf_get("https://popcdn.day/player/" + code,
-                   headers={'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER},
-                   timeout=10, quiet=quiet)
-    if not page:
+    """Resolve a SKY 2 channel with a fresh grant from its current player."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', str(code or '')):
         return None
-    m = re.search(r'currentToken:\s*"(.*?)"', page)
+    headers = {'User-Agent': _NOWTV_UA, 'Referer': _FREESHOT_REFERER}
+    try:
+        with urlopen(Request('https://wideiptv.top/player/' + code,
+                             headers=headers), timeout=8) as response:
+            page = response.read(256 * 1024).decode('utf-8', 'replace')
+    except (OSError, ValueError) as exc:
+        (logger.debug if quiet else logger.error)(
+            '[Sport] resolve_freeshot %s: player unavailable (%s)' % (code, type(exc).__name__))
+        return None
+    m = re.search(r'currentToken:\s*"([^"\r\n]+)"', page)
     if not m:
         (logger.debug if quiet else logger.error)(
             '[Sport] resolve_freeshot %s: no token' % code)
         return None
-    return "https://lovely.lovetier.bz/%s/tracks-v1a1/mono.m3u8?token=%s" % (code, m.group(1))
+    return 'https://ds169.bluetier.top/%s/tracks-v1a1/mono.m3u8?%s' % (
+        code, urlencode({'token': m.group(1)}))
 
 
 def resolve_daddycode(code):
@@ -1854,6 +1917,26 @@ def _ffmpeg_listitem(url, title, art, referer=None):
         li.setArt(art)
     return li
 
+def vm_iptv_listitem(item, rejected=(), release=None):
+    from platformcode import live_iptv_direct_local
+    grant = live_iptv_direct_local.open_grant(str(getattr(item, 'sport_par', '') or ''),
+                                             rejected, release)
+    if not grant:
+        return None
+    url, slot, lease = grant
+    li = xbmcgui.ListItem(label=item.fulltitle or item.title, path=url, offscreen=True)
+    li.setContentLookup(False)
+    li.setMimeType('video/mp2t')
+    li.setProperty('inputstream', 'inputstream.ffmpegdirect')
+    li.setProperty('inputstream.ffmpegdirect.is_realtime_stream', 'true')
+    li.setProperty('inputstream.ffmpegdirect.open_mode', 'curl')
+    li.setProperty('prippi.iptv.slot', slot)
+    li.setProperty('prippi.iptv.lease', lease)
+    li.setArt({'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
+               'poster': item.thumbnail or '', 'fanart': item.fanart or ''})
+    return li
+
+
 def _iptv_listitem(url, title, art):
     """Xtream MPEG-TS item matching TheGroove's known-good VLC transport."""
     ua = 'VLC/3.0.21 LibVLC/3.0.21'
@@ -1901,6 +1984,9 @@ def resolve_listitem(item):
     art = {'thumb': item.thumbnail or '', 'icon': item.thumbnail or '',
            'poster': item.thumbnail or '', 'fanart': item.fanart or ''}
 
+    if kind == 'iptv_vm':
+        return vm_iptv_listitem(item)
+
     if kind == 'mediahosting':
         from platformcode import mediahosting
         return mediahosting.listitem(getattr(item, 'sport_source_code', '') or
@@ -1925,7 +2011,7 @@ def resolve_listitem(item):
         return None   # DaddyLive fallback is tried separately by the play worker
 
     if kind == 'freeshot':
-        url = resolve_freeshot(par)
+        url = resolve_freeshot(getattr(item, 'sport_fs', None) or par)
         if url:
             return _hls_listitem(url, title, art, referer=_FREESHOT_REFERER)
         return None   # DaddyLive fallback is tried separately by the play worker

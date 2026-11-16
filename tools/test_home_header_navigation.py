@@ -40,6 +40,7 @@ class Window:
 
     def _mark_nav(self): pass
     def getFocusId(self): return self.fid
+    def getProperty(self, key): return ''
     def setFocusId(self, value): self.fid = value
     def getControl(self, value):
         if value in self.missing: raise RuntimeError('Missing XML slot')
