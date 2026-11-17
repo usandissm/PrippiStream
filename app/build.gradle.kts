@@ -44,6 +44,20 @@ val requireDiagnosticsRelay = providers.gradleProperty("prippiRequireDiagnostics
     .map { it.equals("true", ignoreCase = true) }
     .getOrElse(false)
 
+// Explicit opt-in; these credentials never enter the standard release variant.
+val embedPrivateLive = providers.gradleProperty("prippiEmbedLiveTokens")
+    .map { it.equals("true", ignoreCase = true) }.getOrElse(false)
+fun privateLiveToken(environment: String): String {
+    if (!embedPrivateLive) return ""
+    val token = providers.environmentVariable(environment).getOrElse("").trim()
+    if (!Regex("[A-Za-z0-9_-]{43}").matches(token)) {
+        throw GradleException("Token Live mancante o non valido: $environment")
+    }
+    return token
+}
+val privateLiveCatalog = privateLiveToken("PRIPPI_PRIVATE_LIVE_CATALOG")
+val privateLivePlayback = privateLiveToken("PRIPPI_PRIVATE_LIVE_PLAY")
+
 if (requireDiagnosticsRelay && diagnosticsRelayUrl.isBlank()) {
     throw GradleException(
         "La build richiede il relay diagnostico, ma PRIPPI_DIAGNOSTICS_RELAY_URL non è configurato.",
@@ -58,8 +72,10 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 105
-        versionName = "0.9.50"
+        versionCode = 107
+        versionName = "0.9.52"
+        buildConfigField("String", "PRIVATE_LIVE_CATALOG", "\"\"")
+        buildConfigField("String", "PRIVATE_LIVE_PLAY", "\"\"")
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")
         buildConfigField("String", "SC_ACCESS_ENDPOINT", "\"${scAccessValue("endpoint", "PRIPPI_SC_ACCESS_ENDPOINT")}\"")
         buildConfigField("String", "SC_ACCESS_CLIENT_KEY", "\"${scAccessValue("clientKey", "PRIPPI_SC_ACCESS_CLIENT_KEY")}\"")
@@ -88,6 +104,12 @@ android {
         getByName("release") {
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
+        }
+        create("privateLive") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("String", "PRIVATE_LIVE_CATALOG", "\"$privateLiveCatalog\"")
+            buildConfigField("String", "PRIVATE_LIVE_PLAY", "\"$privateLivePlayback\"")
         }
     }
 

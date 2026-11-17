@@ -4,11 +4,12 @@ import re
 import threading
 import time
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 URL = 'https://prippistream-live.prippistream-profiles.workers.dev/v1/catalog'
 LOCK = threading.Lock()
-STATE = {'rules': {}, 'due': 0.0, 'received': 0.0}
+STATE = {'rules': {}, 'due': 0.0, 'received': 0.0, 'loading': False, 'status': None}
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -16,14 +17,19 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def refresh(reserved=False):
+def start_refresh(force=False):
     with LOCK:
-        current = time.monotonic()
-        if not reserved and current < STATE['due']:
+        if STATE['loading'] or (not force and time.monotonic() < STATE['due']):
             return
-        STATE['due'] = current + 60
+        STATE['loading'] = True
+    threading.Thread(target=_refresh, daemon=True).start()
+
+
+def _refresh():
+    from platformcode import config, logger
+    retry_after = 60
+    status = ('not_configured',)
     try:
-        from platformcode import config
         token = (Path(config.get_data_path()) / 'live-catalog.token').read_text(encoding='ascii').strip()
         if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
             return
@@ -33,11 +39,27 @@ def refresh(reserved=False):
         rules = payload['rules']
         channels = payload.get('channels', [])
         if payload['version'] != 1 or not isinstance(rules, dict) or not isinstance(channels, list):
+            status = ('unexpected_format',)
             return
+        status = ('ok', len(channels))
         with LOCK:
             STATE.update(rules=rules, channels=channels, received=time.monotonic())
-    except (OSError, ValueError, KeyError, TypeError):
+    except HTTPError as error:
+        status = ('http', error.code)
+        if error.code not in (401, 403):
+            retry_after = 8
+        error.close()
+    except FileNotFoundError:
         pass
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        status = ('error', type(error).__name__)
+        retry_after = 8
+    finally:
+        with LOCK:
+            changed = STATE['status'] != status
+            STATE.update(loading=False, due=time.monotonic() + retry_after, status=status)
+        if changed:
+            logger.info('[LiveCatalog] ' + ' '.join(map(str, status)))
 
 
 def channel_allowed(ch, rules=None):
@@ -59,12 +81,6 @@ def channel_allowed(ch, rules=None):
 
 
 def apply(rows):
-    # Do not block home rendering or replace the native Live fallback.
-    if time.monotonic() >= STATE['due']:
-        with LOCK:
-            if time.monotonic() >= STATE['due']:
-                STATE['due'] = time.monotonic() + 60
-                threading.Thread(target=refresh, args=(True,), daemon=True).start()
     with LOCK:
         snapshot = dict(STATE['rules']) if time.monotonic() - STATE['received'] < 86400 else {}
     return [ch for ch in rows if channel_allowed(ch, snapshot)]

@@ -83,7 +83,7 @@ object AppDiagnostics {
             registerLifecycleCallbacks(app)
             installed = true
             appendEvent(
-                "process_start version=${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE} " +
+                "process_start version=${BuildConfig.VERSION_NAME}/${BuildConfig.VERSION_CODE} build=${BuildConfig.BUILD_TYPE} " +
                     "device=${Build.MANUFACTURER}/${Build.MODEL} android=${Build.VERSION.RELEASE} " +
                     "api=${Build.VERSION.SDK_INT} abis=${Build.SUPPORTED_ABIS.joinToString()}",
             )

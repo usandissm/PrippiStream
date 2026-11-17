@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 s = runpy.run_path(str(Path(__file__).with_name('test_live_events.py')), run_name='reload_setup')
 b, a = s['bridge'], s['a']
-from platformcode import skyepg, liveepg
+from platformcode import skyepg, liveepg, live_catalog
 
 class ReloadTest(unittest.TestCase):
     def tearDown(self):
@@ -16,7 +16,8 @@ class ReloadTest(unittest.TestCase):
     def test_repeated_click_joins_existing_worker(self):
         b._LIVE_LOADING = False
         with patch.object(skyepg, 'invalidate_requests') as invalidate, patch.object(liveepg, 'reset'), \
-                patch.object(a, 'start_refresh') as events, patch.object(b.threading, 'Thread') as thread:
+                patch.object(a, 'start_refresh') as events, patch.object(live_catalog, 'start_refresh'), \
+                patch.object(b.threading, 'Thread') as thread:
             self.assertTrue(json.loads(b.reload_live_json())['started'])
             self.assertFalse(json.loads(b.reload_live_json())['started'])
             thread.return_value.start.assert_called_once()
@@ -25,7 +26,8 @@ class ReloadTest(unittest.TestCase):
 
     def test_failed_start_does_not_leave_live_permanently_loading(self):
         b._LIVE_LOADING = False
-        with patch.object(skyepg, 'invalidate_requests', side_effect=RuntimeError('test')):
+        with patch.object(skyepg, 'invalidate_requests', side_effect=RuntimeError('test')), \
+                patch.object(live_catalog, 'start_refresh'):
             with self.assertRaises(RuntimeError):
                 b.reload_live_json()
         self.assertFalse(b._LIVE_LOADING)

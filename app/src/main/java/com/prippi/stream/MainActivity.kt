@@ -4008,22 +4008,17 @@ private fun LivePage(
         Modifier.fillMaxSize(),
         state = columnState,
         contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        if (rows.isEmpty()) {
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CircularProgressIndicator(Modifier.size(28.dp))
-                    Text("Verifica dei canali SKY, Sport e TV in corso…")
-                }
-            }
+        if (!isTelevision) {
+            // Se EVENTI o TV arrivano prima di SKY, restare in cima deve
+            // mostrare anche le righe inserite sopra, senza spostare chi scorre.
+            item(key = "live-top") { Spacer(Modifier.height(1.dp)) }
         }
         itemsIndexed(rows, key = { _, row -> row.id }) { rowIndex, row ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier.padding(bottom = if (rowIndex < rows.lastIndex) 16.dp else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
                     row.title,
                     style = MaterialTheme.typography.titleLarge,

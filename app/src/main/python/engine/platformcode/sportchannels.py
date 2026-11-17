@@ -1394,16 +1394,19 @@ def build_items(row):
     channel_rows = list(get_channels(row))
     if row in ('sky', 'sport'):
         from platformcode import live_catalog, live_channel_name
-        import xbmcvfs
         native = live_catalog.apply(channel_rows) if row_ready(row) else []
         remote = live_catalog.online_rows(row)
+        aliases = {'skytg24': 'tg24', 'skymtv': 'mtv', 'daznmh': 'dazn', 'dazn_mh': 'dazn',
+                   'skysportnba': 'skysportbasket', 'skyacisporttv': 'acisporttv',
+                   'skycomedycentral': 'comedycentral', 'history': 'historychannel'}
         for ch in remote:
             key = live_channel_name.channel_key(ch['title'])
-            aliases = {'skytg24': 'tg24', 'skymtv': 'mtv', 'daznmh': 'dazn'}
-            for option in (aliases.get(key, key), ch['_catalog_id']):
-                asset = _poster(option)
-                if xbmcvfs.exists(asset):
-                    ch['logo'] = asset
+            identifier = ch['_catalog_id'].lower()
+            for option in dict.fromkeys((aliases.get(key, key),
+                                         aliases.get(identifier, identifier))):
+                if re.fullmatch(r'[a-z0-9_]+', option) and _poster_file(option):
+                    # The bridge converts this canonical URI to files/pydata.
+                    ch['logo'] = _poster(option)
                     break
             ch['title'] = live_channel_name.channel_name(ch['title']) or ch['title']
         channel_rows = ([ch for ch in remote if ch['kind'] != 'iptv_vm'] + native

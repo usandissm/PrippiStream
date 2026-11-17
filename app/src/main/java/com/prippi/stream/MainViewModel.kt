@@ -180,6 +180,7 @@ class MainViewModel(
         engineReady = true
         engineReadySignal.complete(Unit)
         startProfileLoop()
+        preloadLiveAtStartup()
         viewModelScope.launch {
             // Il registry/redirect SC va validato prima del primo caricamento
             // remoto della Home: cosi' anche i CW ricostruiti dal motore usano
@@ -200,17 +201,15 @@ class MainViewModel(
                     .onFailure { android.util.Log.e("Prippi", "Aggiornamento URL CW", it) }
             } ?: AppDiagnostics.event("sc_domain_refresh_timeout")
             if (!pendingUserAction) loadHome()
-            // Le righe Live vengono aggiornate dopo Home, con la pipeline
-            // gia' esistente e senza staccare il focus dell'utente.
-            preloadLiveAtStartup()
         }
     }
 
     private fun preloadLiveAtStartup() {
         if (liveRefreshJob?.isActive == true) return
         liveRefreshJob = viewModelScope.launch {
-            // Parte prima della Home e continua finche' tutte le quattro righe Live
-            // sono state raccolte. L'ingresso nella pagina non avvia altri probe.
+            engineReadySignal.await()
+            val fastUntil = android.os.SystemClock.elapsedRealtime() + 18_000L
+            // Il catalogo e la guida si aggiornano anche a Home aperta.
             while (true) {
                 while (uiPaused || state.page !in setOf(AppPage.HOME, AppPage.LIVE)) {
                     // Metadata, ricerca, browse e player sono azioni esplicite:
@@ -244,12 +243,12 @@ class MainViewModel(
                 val complete = rows.map { it.id }.containsAll(
                         listOf("live_sky", "live_sport", "live_tv"),
                     )
-                // Once all rows are ready, keep refreshing only guide metadata.
-                // The Python channel catalog remains cached, so this does not
-                // repeat availability probes or reserve IPTV slots.
-                delay(if (complete) 15_000L else 5_000L)
+                delay(when {
+                    android.os.SystemClock.elapsedRealtime() < fastUntil -> 850L
+                    complete -> 15_000L
+                    else -> 5_000L
+                })
             }
-            // Non blocca per sempre l'app se una sorgente esterna resta appesa.
         }
     }
 
@@ -264,12 +263,9 @@ class MainViewModel(
             try {
                 engineReadySignal.await()
                 withContext(Dispatchers.IO) { PythonBridge.reloadLive() }
-                val deadline = android.os.SystemClock.elapsedRealtime() + 180_000L
-                while (android.os.SystemClock.elapsedRealtime() < deadline) {
-                    val busy = withContext(Dispatchers.IO) { PythonBridge.liveRefreshStatus().optBoolean("refreshing") }
-                    if (!busy) break
-                    delay(1_500)
-                }
+                // Non teniamo il pannello bloccato in attesa dei probe nativi.
+                // Il ciclo in background pubblicherà le righe arrivate dopo.
+                delay(850)
                 val rows = withContext(Dispatchers.IO) { repository.liveRows() }
                 if (rows.isNotEmpty()) {
                     state = state.copy(liveRows = rows)

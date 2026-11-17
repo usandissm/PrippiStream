@@ -992,8 +992,8 @@ def _refresh_live_background():
 
     try:
         sportchannels.reset_state()
-        # Same fixed visual order as Kodi, without IPTV-only rows or fallbacks.
-        row_keys = ('sky', 'sport', 'tv')
+        # Native TV does not need to queue behind the SKY/SPORT probes.
+        row_keys = ('tv', 'sky', 'sport')
         if _APP_LOW_POWER:
             # Sulle box economiche tre parser/probe contemporanei contendono
             # CPU, rete e memoria proprio mentre la Home deve restare fluida.
@@ -1008,18 +1008,6 @@ def _refresh_live_background():
                 worker.start()
             for worker in workers:
                 worker.join()
-        try:
-            from platformcode import skyepg
-            live_items = []
-            for key in row_keys:
-                live_items += sportchannels.build_items(key) or []
-            epg_keys = []
-            for item in live_items:
-                epg_keys.extend((getattr(item, 'sport_par', ''),
-                                 getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
-            skyepg.prefetch([key for key in epg_keys if key])
-        except Exception as exc:
-            logger.error('[bridge] live EPG: %s' % exc)
     finally:
         with _LIVE_LOCK:
             _LIVE_LOADING = False
@@ -1030,8 +1018,13 @@ def live_rows():
     """Righe TV, SKY e Sport online, con priorità ai device low-power."""
     global _LIVE_LOADING
     init()
-    from platformcode import sportchannels
+    from platformcode import live_catalog, sportchannels
     from platformcode import skyepg
+    live_catalog.start_refresh()
+    with _LIVE_LOCK:
+        if not _LIVE_LOADING and (time.time() - _LIVE_REFRESHED_AT) >= sportchannels._CACHE_TTL:
+            _LIVE_LOADING = True
+            threading.Thread(target=_refresh_live_background, daemon=True).start()
     rows = []
     built_rows = [(key, sportchannels.build_items(key) or [])
                   for key in ('sky', 'sport')]
@@ -1047,20 +1040,14 @@ def live_rows():
         from platformcode import logger
         logger.error('[bridge] scheduled events: %s' % exc)
     built_rows.append(('tv', sportchannels.build_items('tv') or []))
-    epg_keys = []
-    for _key, items in built_rows:
-        if _key == 'events':
-            continue
-        for item in items:
-            epg_keys.extend((getattr(item, 'sport_par', ''),
-                             getattr(item, 'fulltitle', '') or getattr(item, 'title', '')))
     from platformcode import liveepg
+    guide_items = [item for key, items in built_rows if key != 'events' for item in items]
+    if guide_items:
+        # One small budget for the entire screen, never a wait per row.
+        # Pending guide data is added by the next live_rows snapshot.
+        guide_deadline = time.monotonic() + 0.8
+        liveepg.wait(guide_items, active=lambda: time.monotonic() < guide_deadline)
     for key, items in built_rows:
-        if key != 'events':
-            liveepg.start(items)
-    for index, (key, items) in enumerate(built_rows):
-        if key != 'events':
-            liveepg.wait(items)
         for item in items:
             item._app_live = True
             if key == 'events':
@@ -1086,10 +1073,6 @@ def live_rows():
                 'title': u'EVENTI' if key == 'events' else sportchannels.row_label(key),
                 'items': _items_to_list(items),
             })
-    with _LIVE_LOCK:
-        if not _LIVE_LOADING and (time.time() - _LIVE_REFRESHED_AT) >= sportchannels._CACHE_TTL:
-            _LIVE_LOADING = True
-            threading.Thread(target=_refresh_live_background, daemon=True).start()
     return rows
 
 
@@ -1106,6 +1089,8 @@ def reload_live_json():
     """One refresh worker only; preserve usable rows until replacements are ready."""
     global _LIVE_LOADING, _LIVE_REFRESHED_AT
     init()
+    from platformcode import live_catalog
+    live_catalog.start_refresh(force=True)
     with _LIVE_LOCK:
         started = not _LIVE_LOADING
         if started:

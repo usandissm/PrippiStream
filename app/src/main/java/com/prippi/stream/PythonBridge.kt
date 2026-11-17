@@ -8,6 +8,7 @@ import com.chaquo.python.android.AndroidPlatform
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Ponte verso il MOTORE Python (bridge.py) via Chaquopy.
@@ -25,6 +26,7 @@ object PythonBridge {
     @Synchronized
     fun start(context: Context) {
         if (initialized) return
+        provisionEmbeddedLiveAccess(context)
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(context))
         }
@@ -39,6 +41,46 @@ object PythonBridge {
         bridge.callAttr("init", runtimeDir.absolutePath, dataDir, null)
         bridge.callAttr("configure_sc_access", BuildConfig.SC_ACCESS_ENDPOINT, BuildConfig.SC_ACCESS_CLIENT_KEY)
         initialized = true
+    }
+
+    private fun provisionEmbeddedLiveAccess(context: Context) {
+        val embedded = listOf(BuildConfig.PRIVATE_LIVE_CATALOG, BuildConfig.PRIVATE_LIVE_PLAY)
+        val tokenPattern = Regex("[A-Za-z0-9_-]{43}")
+        val files = listOf("live-catalog.token", "live-play.token").map { File(context.filesDir, it) }
+        val saved = files.map { file -> runCatching { file.readText().trim() }.getOrDefault("") }
+        if (!embedded.all(tokenPattern::matches)) {
+            android.util.Log.i("Prippi", "Accesso Live: build pubblica, accesso salvato=${saved.all(tokenPattern::matches)}")
+            return
+        }
+        // Una nuova configurazione privata deve sostituire anche codici vecchi
+        // ma formalmente validi. Una configurazione manuale successiva resta
+        // valida finché non viene installata una diversa coppia incorporata.
+        val stamp = File(context.filesDir, ".live-bundled-revision")
+        val revision = MessageDigest.getInstance("SHA-256")
+            .digest(embedded.joinToString(":").toByteArray(Charsets.US_ASCII))
+            .joinToString("") { "%02x".format(it) }
+        if (runCatching { stamp.readText() }.getOrDefault("") == revision &&
+            saved.all(tokenPattern::matches)) {
+            android.util.Log.i("Prippi", "Accesso Live: build privata, configurazione presente")
+            return
+        }
+        try {
+            (files.zip(embedded).filterIndexed { index, (_, value) -> saved[index] != value } +
+                (stamp to revision)).forEach { (file, value) ->
+                val atomic = android.util.AtomicFile(file)
+                val stream = atomic.startWrite()
+                try {
+                    stream.write(value.toByteArray(Charsets.US_ASCII))
+                    atomic.finishWrite(stream)
+                } catch (error: java.io.IOException) {
+                    atomic.failWrite(stream)
+                    throw error
+                }
+            }
+            android.util.Log.i("Prippi", "Accesso Live: build privata, configurazione attivata")
+        } catch (_: java.io.IOException) {
+            android.util.Log.w("Prippi", "Configurazione Live incorporata non applicata")
+        }
     }
 
     /** Anticipa il cold start senza occupare il main thread dell'Activity. */

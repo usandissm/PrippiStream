@@ -1,6 +1,8 @@
 """Android bridge integration checks; no live services, player or real accounts."""
 import json
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
+from urllib.request import url2pathname
 import sys
 import tempfile
 import unittest
@@ -87,11 +89,30 @@ class LiveEventsTest(unittest.TestCase):
         event._app_event = True
         with patch.object(sport, 'build_items', side_effect=lambda key: [Item(title=key)]), \
                 patch.object(a, 'build_items', return_value=[event]), patch.object(a, 'start_refresh'), \
-                patch('platformcode.skyepg.prefetch'), patch('platformcode.skyepg.now_on', return_value=None):
+                patch('platformcode.live_catalog.start_refresh'), \
+                patch('platformcode.liveepg.wait') as guide, \
+                patch('platformcode.skyepg.now_on', return_value=None):
             bridge._LIVE_LOADING = True
             rows = bridge.live_rows()
         self.assertEqual(['live_sky', 'live_sport', 'live_events', 'live_tv'], [r['id'] for r in rows])
         self.assertEqual('EVENTI', rows[2]['title'])
+        guide.assert_called_once()
+        self.assertEqual(['sky', 'sport', 'tv'], [i.title for i in guide.call_args.args[0]])
+
+    def test_remote_row_without_native_probe_has_packaged_variant_logo(self):
+        remote = [dict(title='Sky Cinema Due +24 [FHD]', par='skycinemadue',
+                       _catalog_id='skycinemadue', kind='iptv_vm')]
+        with patch.object(sport, 'get_channels', return_value=[]), \
+                patch.object(sport, 'row_ready', return_value=False), \
+                patch('platformcode.live_catalog.online_rows', return_value=remote):
+            item, = sport.build_items('sky')
+        self.assertEqual('Sky Cinema Due +24', item.title)
+        poster = urlsplit(bridge._from_item(item)['thumbnail'])
+        self.assertEqual('file', poster.scheme)
+        # The PC shim may combine a file scheme with Windows drive letters.
+        path = Path(url2pathname(unquote(poster.netloc + poster.path)))
+        self.assertEqual('skycinemadueplus24.png', path.name)
+        self.assertTrue(path.is_file(), path)
 
     def test_offline_first_source_tries_next_with_headers(self):
         sources = [dict(url='https://example.invalid/off.m3u8', kind='hls'),
