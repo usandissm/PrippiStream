@@ -36,6 +36,7 @@ object LiveDeviceAccess {
             conn.instanceFollowRedirects = false
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
+            conn.setRequestProperty("User-Agent", "PrippiStream-Live/1.0")
             conn.setRequestProperty("Authorization", "Bearer $token")
             if (request) {
                 conn.requestMethod = "POST"
