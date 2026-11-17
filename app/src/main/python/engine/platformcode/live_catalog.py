@@ -30,24 +30,56 @@ def _refresh():
     retry_after = 60
     status = ('not_configured',)
     try:
-        token = (Path(config.get_data_path()) / 'live-catalog.token').read_text(encoding='ascii').strip()
-        if not re.fullmatch(r'[A-Za-z0-9_-]{43}', token):
+        data = Path(config.get_data_path())
+        def token_at(name):
+            try:
+                value = (data / name).read_text(encoding='ascii').strip()
+            except (FileNotFoundError, UnicodeError):
+                return ''
+            return value if re.fullmatch(r'[A-Za-z0-9_-]{43}', value) else ''
+
+        def fetch(token):
+            req = Request(URL, headers={'Authorization': 'Bearer ' + token, 'User-Agent': 'PrippiStream-Live/1.0'})
+            with build_opener(NoRedirect()).open(req, timeout=3) as response:
+                return json.loads(response.read(524289))
+
+        pending_name = 'live-device.pending.token'
+        active_name = 'live-device.token'
+        pending = token_at(pending_name)
+        active = token_at(active_name) or token_at('live-catalog.token')
+        accepted_pending = False
+        if pending:
+            retry_after = 8  # approval may arrive while the Live page is open
+            try:
+                payload = fetch(pending)
+                accepted_pending = True
+            except HTTPError as error:
+                if error.code != 401 or not active:
+                    raise
+                error.close()
+                payload = fetch(active)
+        elif active:
+            payload = fetch(active)
+        else:
             return
-        req = Request(URL, headers={'Authorization': 'Bearer ' + token, 'User-Agent': 'PrippiStream-Live/1.0'})
-        with build_opener(NoRedirect()).open(req, timeout=3) as r:
-            payload = json.loads(r.read(524289))
         rules = payload['rules']
         channels = payload.get('channels', [])
         if payload['version'] != 1 or not isinstance(rules, dict) or not isinstance(channels, list):
             status = ('unexpected_format',)
             return
         status = ('ok', len(channels))
+        if accepted_pending and token_at(pending_name) == pending:
+            (data / pending_name).replace(data / active_name)
+        retry_after = 8 if pending and not accepted_pending else 60
         with LOCK:
             STATE.update(rules=rules, channels=channels, received=time.monotonic())
     except HTTPError as error:
         status = ('http', error.code)
         if error.code not in (401, 403):
             retry_after = 8
+        else:
+            with LOCK:
+                STATE.update(channels=[], rules={}, received=0.0)
         error.close()
     except FileNotFoundError:
         pass

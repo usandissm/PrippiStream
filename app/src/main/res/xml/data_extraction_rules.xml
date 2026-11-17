@@ -3,6 +3,8 @@
     <cloud-backup>
         <exclude domain="file" path="live-catalog.token" />
         <exclude domain="file" path="live-play.token" />
+        <exclude domain="file" path="live-device.token" />
+        <exclude domain="file" path="live-device.pending.token" />
         <exclude domain="file" path="diagnostics/" />
         <exclude domain="file" path="diagnostic-outbox/" />
         <exclude domain="sharedpref" path="diagnostics_delivery.xml" />
@@ -10,6 +12,8 @@
     <device-transfer>
         <exclude domain="file" path="live-catalog.token" />
         <exclude domain="file" path="live-play.token" />
+        <exclude domain="file" path="live-device.token" />
+        <exclude domain="file" path="live-device.pending.token" />
         <exclude domain="file" path="diagnostics/" />
         <exclude domain="file" path="diagnostic-outbox/" />
         <exclude domain="sharedpref" path="diagnostics_delivery.xml" />

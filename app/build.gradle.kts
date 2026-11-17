@@ -72,8 +72,8 @@ android {
         applicationId = "com.prippi.stream"
         minSdk = 24
         targetSdk = 34
-        versionCode = 107
-        versionName = "0.9.52"
+        versionCode = 108
+        versionName = "0.9.53"
         buildConfigField("String", "PRIVATE_LIVE_CATALOG", "\"\"")
         buildConfigField("String", "PRIVATE_LIVE_PLAY", "\"\"")
         buildConfigField("String", "DIAGNOSTICS_RELAY_URL", "\"$diagnosticsRelayUrl\"")

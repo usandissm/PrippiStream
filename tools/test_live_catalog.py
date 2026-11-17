@@ -47,6 +47,25 @@ class LiveCatalogTest(unittest.TestCase):
         self.assertEqual('iptv_vm', item['kind'])
         self.assertEqual(channel['id'], item['par'])
 
+    def test_pending_device_keeps_existing_access_until_approval(self):
+        pending = self.data / 'live-device.pending.token'
+        active = self.data / 'live-device.token'
+        pending.write_text('B' * 43, encoding='ascii')
+        self.addCleanup(pending.unlink, missing_ok=True)
+        self.addCleanup(active.unlink, missing_ok=True)
+        self.token.write_text('A' * 43, encoding='ascii')
+        with patch.object(catalog, 'build_opener') as opener:
+            context = opener.return_value.open.return_value
+            context.__enter__.return_value.read.return_value = '{"version":1,"rules":{},"channels":[]}'
+            opener.return_value.open.side_effect = [HTTPError('', 401, '', {}, io.BytesIO()), context]
+            catalog._refresh()
+            self.assertTrue(pending.is_file())
+            self.assertFalse(active.exists())
+            opener.return_value.open.side_effect = None
+            catalog._refresh()
+        self.assertFalse(pending.exists())
+        self.assertEqual('B' * 43, slot.play_token())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -106,10 +106,17 @@ def assigned_grant(channel_id, rejected=(), release=None, timeout=11):
 def play_token():
     try:
         from platformcode import config
-        key = (Path(config.get_data_path()) / 'live-play.token').read_text(encoding='ascii').strip()
+        root = Path(config.get_data_path())
     except (ImportError, OSError, UnicodeError):
         return ''
-    return key if re.fullmatch(r'[A-Za-z0-9_-]{43}', key) else ''
+    for candidate in ('live-device.token', 'live-play.token'):
+        try:
+            key = (root / candidate).read_text(encoding='ascii').strip()
+        except (OSError, UnicodeError):
+            continue
+        if re.fullmatch(r'[A-Za-z0-9_-]{43}', key):
+            return key
+    return ''
 
 
 def _valid_grant(grant):

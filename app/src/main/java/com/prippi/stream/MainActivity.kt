@@ -3307,10 +3307,64 @@ private fun SettingsPage(
 @Composable
 private fun LiveAccessPanel() {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var device by remember { mutableStateOf(LiveDeviceAccess.Status("loading")) }
+    var requesting by remember { mutableStateOf(false) }
+    var accessError by remember { mutableStateOf(false) }
+    LaunchedEffect(context) {
+        while (true) {
+            if (!requesting) {
+                try {
+                    val next = withContext(Dispatchers.IO) { LiveDeviceAccess.check(context) }
+                    if (!requesting) {
+                        val becameActive = device.state == "pending" && next.state == "approved"
+                        device = next
+                        accessError = false
+                        if (becameActive) withContext(Dispatchers.IO) { PythonBridge.reloadLive() }
+                    }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    accessError = true
+                }
+            }
+            delay(5_000)
+        }
+    }
     Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Accesso Live", style = MaterialTheme.typography.titleMedium)
-            Text("Associa il dispositivo al catalogo privato con un codice di accesso.")
+            Text(when (device.state) {
+                "pending" -> "In attesa di approvazione dalla dashboard · Rif. ${device.hint}"
+                "approved" -> "Questo dispositivo è abilitato · Rif. ${device.hint}"
+                "revoked" -> "L’accesso di questo dispositivo è stato revocato."
+                "busy" -> "Troppe richieste in attesa. Riprova tra poco."
+                else -> "Richiedi l’accesso e approva il dispositivo dalla dashboard. Non servono codici."
+            })
+            if (accessError) Text("Servizio di associazione non raggiungibile. Riprova.")
+            if (device.state !in setOf("pending", "approved")) {
+                Button(enabled = !requesting, onClick = {
+                    requesting = true
+                    val replace = device.state == "revoked"
+                    scope.launch {
+                        try {
+                            device = withContext(Dispatchers.IO) {
+                                LiveDeviceAccess.request(context, replace)
+                            }
+                            accessError = false
+                            if (device.state in setOf("pending", "approved")) {
+                                withContext(Dispatchers.IO) { PythonBridge.reloadLive() }
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            accessError = true
+                        } finally {
+                            requesting = false
+                        }
+                    }
+                }) { Text(if (requesting) "Invio richiesta…" else "Richiedi accesso") }
+            }
             Button(onClick = {
                 val input = android.widget.EditText(context).apply {
                     isSingleLine = true
@@ -3333,6 +3387,8 @@ private fun LiveAccessPanel() {
                         } else if (runCatching {
                                 java.io.File(context.filesDir, "live-catalog.token").writeText(parts[0])
                                 java.io.File(context.filesDir, "live-play.token").writeText(parts[1])
+                                android.util.AtomicFile(java.io.File(context.filesDir, "live-device.pending.token")).delete()
+                                android.util.AtomicFile(java.io.File(context.filesDir, "live-device.token")).delete()
                             }.isSuccess) {
                             input.text.clear()
                             dialog.dismiss()
@@ -3344,7 +3400,7 @@ private fun LiveAccessPanel() {
                     }
                 }
                 dialog.show()
-            }) { Text("Configura accesso Live") }
+            }) { Text("Usa un codice esistente") }
         }
     }
 }
